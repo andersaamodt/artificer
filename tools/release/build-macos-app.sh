@@ -8,12 +8,13 @@ ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd -P)
 out_dir=${1-"$ROOT_DIR/dist"}
 version=$(artificer_version "$ROOT_DIR")
 app_name="Artificer.app"
+
+mkdir -p "$out_dir"
+out_dir=$(CDPATH= cd -- "$out_dir" && pwd -P)
 app_root="$out_dir/$app_name"
 resources_dir="$app_root/Contents/Resources/artificer-app"
 macos_dir="$app_root/Contents/MacOS"
 zip_path="$out_dir/artificer-$version-macos.zip"
-
-mkdir -p "$out_dir"
 rm -rf "$app_root"
 mkdir -p "$macos_dir" "$app_root/Contents/Resources"
 artificer_stage_runtime "$ROOT_DIR" "$resources_dir"

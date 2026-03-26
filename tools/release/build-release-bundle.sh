@@ -21,10 +21,11 @@ case "$arch_raw" in
     ;;
 esac
 slug="artificer-$version-linux-$arch_slug"
-stage_dir="$out_dir/$slug"
-archive="$out_dir/$slug.tar.gz"
 
 mkdir -p "$out_dir"
+out_dir=$(CDPATH= cd -- "$out_dir" && pwd -P)
+stage_dir="$out_dir/$slug"
+archive="$out_dir/$slug.tar.gz"
 artificer_stage_runtime "$ROOT_DIR" "$stage_dir"
 rm -f "$archive"
 (
