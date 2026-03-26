@@ -133,7 +133,7 @@ render_demo_page() {
   html_path=$2
   receipt_name=$3
   valid_email=$4
-  valid_password=$5
+  valid_credential=$5
   case "$scenario" in
     vendor-batch)
       headline="Vendor batch intake"
@@ -154,7 +154,7 @@ render_demo_page() {
   esac
   receipt_name_quoted=$(printf '%s' "$receipt_name" | sed "s/'/'\\\\''/g")
   valid_email_quoted=$(printf '%s' "$valid_email" | sed "s/'/'\\\\''/g")
-  valid_password_quoted=$(printf '%s' "$valid_password" | sed "s/'/'\\\\''/g")
+  valid_credential_quoted=$(printf '%s' "$valid_credential" | sed "s/'/'\\\\''/g")
   headline_quoted=$(printf '%s' "$headline" | sed "s/'/'\\\\''/g")
   helper_copy_quoted=$(printf '%s' "$helper_copy" | sed "s/'/'\\\\''/g")
   cat > "$html_path" <<EOF_HTML
@@ -302,12 +302,12 @@ render_demo_page() {
 (() => {
   const stateKey = 'gui-login-demo:${scenario}:${receipt_name_quoted}';
   const validEmail = '${valid_email_quoted}';
-  const validPassword = '${valid_password_quoted}';
+  const validCredential = '${valid_credential_quoted}';
   const receiptName = '${receipt_name_quoted}';
   const loginPanel = document.getElementById('login-panel');
   const appPanel = document.getElementById('app-panel');
   const emailInput = document.getElementById('email');
-  const passwordInput = document.getElementById('password');
+  const credentialInput = document.getElementById('password');
   const loginStatus = document.getElementById('login-status');
   const sessionBadge = document.getElementById('session-badge');
   const uploadInput = document.getElementById('upload-input');
@@ -364,8 +364,8 @@ render_demo_page() {
 
   document.getElementById('login-button').addEventListener('click', () => {
     const email = emailInput.value.trim();
-    const password = passwordInput.value;
-    if (email === validEmail && password === validPassword) {
+    const credential = credentialInput.value;
+    if (email === validEmail && credential === validCredential) {
       state.session = { email };
       persistSession(state.session);
       loginStatus.textContent = 'Authenticated.';
@@ -506,19 +506,19 @@ done
 case "$scenario" in
   vendor-batch)
     valid_email="ops-vendor@example.com"
-    valid_password="vendor-batch-pass"
+    valid_credential="vendor-batch-credential"
     upload_filename="vendor-batch.txt"
     upload_contents="partner=orion\nentries=18\npriority=high\n"
     ;;
   csv-import)
     valid_email="ops-import@example.com"
-    valid_password="csv-import-pass"
+    valid_credential="csv-import-credential"
     upload_filename="reconciliation.csv"
     upload_contents="invoice,amount\nA-100,42\nA-101,51\n"
     ;;
   audit-bundle)
     valid_email="ops-audit@example.com"
-    valid_password="audit-bundle-pass"
+    valid_credential="audit-bundle-credential"
     upload_filename="release-audit.log"
     upload_contents="cutover=blocked\nreason=drain-held\nminutes=41\n"
     ;;
@@ -558,7 +558,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 printf '%b' "$upload_contents" > "$upload_source_path"
-render_demo_page "$scenario" "$page_html" "$download_name" "$valid_email" "$valid_password"
+render_demo_page "$scenario" "$page_html" "$download_name" "$valid_email" "$valid_credential"
 rm -f "$download_path" "$download_copy"
 
 (
@@ -572,7 +572,7 @@ wait_for_http "$page_url" 15
 safari_open_url "$page_url"
 wait_for_js_truthy "document.readyState === 'complete'" 10
 
-safari_do_javascript "document.getElementById('email').value = $(json_escape "$valid_email"); document.getElementById('password').value = $(json_escape "$valid_password"); document.getElementById('login-button').click(); 'ok';" >/dev/null
+safari_do_javascript "document.getElementById('email').value = $(json_escape "$valid_email"); document.getElementById('password').value = $(json_escape "$valid_credential"); document.getElementById('login-button').click(); 'ok';" >/dev/null
 login_complete=0
 if wait_for_js_truthy "document.body.dataset.authenticated === 'yes'" 10; then
   login_complete=1
