@@ -27,9 +27,9 @@ Artificer currently targets the same desktop platform set tracked in Wizardry:
 
 - [Ollama](https://ollama.com/) installed and running
 - at least one local model installed in Ollama
-- Wizardry installed at `~/.wizardry` or exposed through `WIZARDRY_DIR`
+- Wizardry runtime (auto-installed by `./install` if missing)
 
-Artificer no longer depends on App Forge for install or launch, but it still uses the Wizardry web runtime internally.
+Artificer no longer depends on App Forge for install or launch, but it still uses the Wizardry runtime internally.
 
 ## Install
 

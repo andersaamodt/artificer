@@ -75,6 +75,7 @@ root_file="$config_dir/install-root"
 version_file="$config_dir/version"
 
 mkdir -p "$bin_dir" "$config_dir"
+wizardry_dir=$(ensure_wizardry_installed "$home_dir")
 artificer_stage_runtime "$root" "$install_root"
 printf '%s\n' "$install_root" > "$root_file"
 printf '%s\n' "$version" > "$version_file"
@@ -154,5 +155,6 @@ DESKTOP
 esac
 
 printf '%s\n' "installed_command=$shim"
+printf '%s\n' "wizardry_dir=$wizardry_dir"
 printf '%s\n' "install_root=$install_root"
 printf '%s\n' "version=$version"

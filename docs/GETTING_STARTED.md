@@ -5,7 +5,7 @@
 - macOS, Debian/Ubuntu, NixOS, or Arch
 - [Ollama](https://ollama.com/) installed and running
 - at least one local model installed in Ollama
-- Wizardry installed at `~/.wizardry` or exposed through `WIZARDRY_DIR`
+- Wizardry runtime (the installer downloads and installs it if missing)
 
 App Forge is not required.
 

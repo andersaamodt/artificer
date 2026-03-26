@@ -5,10 +5,22 @@ BASE_PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/opt/pkg/bin:/opt/pkg/sbin:/usr/
 PATH="$BASE_PATH${PATH:+:$PATH}"
 export PATH
 
+BACKEND_SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
+BACKEND_ROOT=$(CDPATH= cd -- "$BACKEND_SCRIPT_DIR/.." && pwd -P)
+release_common="$BACKEND_ROOT/tools/release/common.sh"
+if [ -f "$release_common" ]; then
+  # shellcheck disable=SC1090
+  . "$release_common"
+fi
+
 wiz="${WIZARDRY_DIR:-$HOME/.wizardry}"
 iw="$wiz/spells/.imps/sys/invoke-wizardry"
 if [ ! -f "$iw" ]; then
-  wiz="$HOME/.wizardry"
+  if command -v ensure_wizardry_installed >/dev/null 2>&1; then
+    wiz=$(ensure_wizardry_installed "$HOME" 2>/dev/null || printf '%s' "$HOME/.wizardry")
+  else
+    wiz="$HOME/.wizardry"
+  fi
   iw="$wiz/spells/.imps/sys/invoke-wizardry"
 fi
 [ -f "$iw" ] || {
