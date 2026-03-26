@@ -25,6 +25,8 @@ jobs:
           sh tools/build-artificer-app.sh
           sh tools/build-cgi-shards.sh
           sh tools/release/test-startup-bridge-timeouts.sh
+          sh tools/release/test-startup-boot-order.sh
+          sh tools/release/test-wizardry-runtime-fallback.sh
           git diff --exit-code
       - name: Build Linux bundle (${{ matrix.arch }})
         run: sh tools/release/build-release-bundle.sh dist
@@ -45,6 +47,8 @@ jobs:
           sh tools/build-artificer-app.sh
           sh tools/build-cgi-shards.sh
           sh tools/release/test-startup-bridge-timeouts.sh
+          sh tools/release/test-startup-boot-order.sh
+          sh tools/release/test-wizardry-runtime-fallback.sh
           git diff --exit-code
       - name: Build macOS artifacts
         run: sh tools/release/build-macos-app.sh dist

@@ -426,7 +426,6 @@
           // Non-fatal: continue startup even if migration probe fails.
         }
         setStatus('Preparing Artificer…', false);
-        await ensureSiteIfNeeded();
         try {
           await bridgeExec(backendCommand('ensure-usable-port'));
         } catch (_) {
@@ -451,10 +450,24 @@
         }
 
         setStatus('Starting Artificer…', false);
-        await startWithFallbackPort();
+        try {
+          await startWithFallbackPort();
+        } catch (_startErr) {
+          setStatus('Preparing Artificer…', false);
+          await ensureSiteIfNeeded();
+          try {
+            await bridgeExec(backendCommand('ensure-usable-port'));
+          } catch (_) {
+            // Non-fatal.
+          }
+          setStatus('Starting Artificer…', false);
+          await startWithFallbackPort();
+        }
 
         var port = await detectReadyPort();
         if (!port) {
+          setStatus('Preparing Artificer…', false);
+          await ensureSiteIfNeeded();
           port = await resolvePort();
         } else {
           try {

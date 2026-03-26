@@ -8,7 +8,6 @@ export PATH
 BACKEND_SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
 BACKEND_ROOT=$(CDPATH= cd -- "$BACKEND_SCRIPT_DIR/.." && pwd -P)
 . "$BACKEND_SCRIPT_DIR/lib/wizardry_runtime.sh"
-wizardry_bootstrap_or_install "$BACKEND_ROOT" "$HOME" || exit 127
 
 ACTION=${1-}
 APP_DIR=${2-}
@@ -21,8 +20,14 @@ ARTIFICER_STATE_ROOT=${ARTIFICER_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/stat
 
 resolve_apps_root() {
   apps_root=${WIZARDRY_APPS_ROOT:-}
-  [ -n "$apps_root" ] || apps_root="$wiz"
+  if [ -z "$apps_root" ]; then
+    apps_root=${WIZARDRY_DIR:-$HOME/.wizardry}
+  fi
   printf '%s\n' "$apps_root"
+}
+
+ensure_wizardry_runtime() {
+  wizardry_bootstrap_or_install "$BACKEND_ROOT" "$HOME" || exit 127
 }
 
 resolve_web_cmd() {
@@ -32,6 +37,20 @@ resolve_web_cmd() {
     web_cmd="web-wizardry"
   fi
   printf '%s\n' "$web_cmd"
+}
+
+set_site_port_value() {
+  new_port=${1-}
+  case "$new_port" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ -f "$CFG" ] || return 1
+  tmp="$CFG.tmp.$$"
+  if ! awk -F= -v p="$new_port" 'BEGIN{done=0} /^port=/{print "port=" p; done=1; next} {print} END{if(!done) print "port=" p}' "$CFG" > "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  mv "$tmp" "$CFG"
 }
 
 probe_port() {
@@ -53,6 +72,7 @@ cmd_ensure_data_root() {
 }
 
 cmd_ensure_site() {
+  ensure_wizardry_runtime
   [ -n "$APP_DIR" ] || {
     printf 'unable to resolve app directory\n' >&2
     exit 1
@@ -161,6 +181,7 @@ cmd_ensure_site() {
 }
 
 cmd_start_serve() {
+  ensure_wizardry_runtime
   web_cmd=$(resolve_web_cmd)
   ready_port=$(cmd_detect_ready_port)
   if [ -n "$ready_port" ]; then
@@ -209,7 +230,7 @@ cmd_ensure_usable_port() {
     p=8081
     while [ "$p" -le 8120 ]; do
       if ! lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; then
-        change-site-port artificer "$p" >/dev/null 2>&1 && printf '%s' "$p" && exit 0
+        set_site_port_value "$p" && printf '%s' "$p" && exit 0
       fi
       p=$((p+1))
     done
@@ -277,13 +298,7 @@ cmd_detect_ready_port() {
 
 cmd_set_port() {
   new_port=${ARG3-}
-  case "$new_port" in
-    ''|*[!0-9]*) exit 1 ;;
-  esac
-  [ -f "$CFG" ] || exit 1
-  tmp="$CFG.tmp.$$"
-  awk -F= -v p="$new_port" 'BEGIN{done=0} /^port=/{print "port=" p; done=1; next} {print} END{if(!done) print "port=" p}' "$CFG" > "$tmp"
-  mv "$tmp" "$CFG"
+  set_site_port_value "$new_port" || exit 1
 }
 
 case "$ACTION" in
