@@ -314,9 +314,23 @@
       }
     }
 
+    function bridgeExecTimeoutMs(argv) {
+      var action = String((argv && argv[2]) || '');
+      switch (action) {
+        case 'ensure-site':
+          return 120000;
+        case 'start-serve':
+        case 'ensure-data-root':
+        case 'ensure-usable-port':
+          return 45000;
+        default:
+          return 15000;
+      }
+    }
+
     async function bridgeExec(argv) {
       await waitForBridge(4000);
-      var timeoutMs = 15000;
+      var timeoutMs = bridgeExecTimeoutMs(argv);
       var timeoutId = null;
       var res;
       try {
