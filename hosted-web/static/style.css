@@ -5298,12 +5298,17 @@ button {
 input,
 textarea,
 select {
-  width: 100%;
   border: 1px solid var(--input-border);
   border-radius: 8px;
   background: var(--input-bg);
   color: var(--input-text);
   padding: 7px 9px;
+}
+
+.stack input:not([type="checkbox"]):not([type="radio"]),
+.stack select,
+.stack textarea {
+  width: 100%;
 }
 
 input[type="checkbox"],
@@ -5313,6 +5318,7 @@ input[type="radio"] {
 }
 
 textarea {
+  width: 100%;
   resize: vertical;
 }
 

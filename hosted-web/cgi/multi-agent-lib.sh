@@ -1,4 +1,5 @@
 #!/bin/sh
+set -eu
 
 ma_target_type_is_valid() {
   case "$1" in

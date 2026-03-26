@@ -29,9 +29,7 @@ Frontend bundle:
 ```sh
 sh tools/build-artificer-app.sh
 sh tools/build-cgi-shards.sh
-sh tools/release/test-startup-bridge-timeouts.sh
-sh tools/release/test-startup-boot-order.sh
-sh tools/release/test-wizardry-runtime-fallback.sh
+sh tools/release/run-release-tests.sh
 ```
 
 ## GUI Changes
