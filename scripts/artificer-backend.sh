@@ -17,6 +17,7 @@ ARG3=${3-}
 ROOT="${WEB_WIZARDRY_ROOT:-$HOME/sites}"
 SITE="$ROOT/artificer"
 CFG="$SITE/site.conf"
+ARTIFICER_STATE_ROOT=${ARTIFICER_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/artificer}
 
 resolve_apps_root() {
   apps_root=${WIZARDRY_APPS_ROOT:-}
@@ -209,8 +210,8 @@ cmd_start_serve() {
     "$web_cmd" stop artificer >/dev/null 2>&1 || true
   fi
 
-  serve_log="$SITE/.artificer-serve.log"
-  mkdir -p "$SITE"
+  serve_log="$ARTIFICER_STATE_ROOT/logs/backend-serve.log"
+  mkdir -p "$SITE" "$(dirname "$serve_log")"
   nohup "$web_cmd" serve artificer >"$serve_log" 2>&1 &
 
   i=0

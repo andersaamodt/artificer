@@ -24,6 +24,12 @@ Runtime helper:
 sh -n scripts/artificer-backend.sh
 ```
 
+Frontend bundle:
+
+```sh
+sh tools/build-artificer-app.sh
+```
+
 ## GUI Changes
 
 Use Safari automation for GUI changes and verify layout and task flow manually enough to catch real regressions.

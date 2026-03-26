@@ -216,11 +216,8 @@
     assay_edit_root=""
     if [ -n "$assay_task_id" ]; then
       assay_run_profile=1
-      if [ "$run_mode" = "programming" ]; then
-        assay_edit_root=""
-      else
-        assay_edit_root=".assay-runs/$assay_task_id"
-      fi
+      # Keep assay runs from creating workspace-root artifact directories.
+      assay_edit_root=""
     fi
     prompt_lower_for_budget=$(printf '%s' "$user_prompt" | tr '[:upper:]' '[:lower:]')
     if [ "$assay_run_profile" -ne 1 ]; then
@@ -886,4 +883,3 @@ EOF
     if [ "$append_user_message" = "1" ]; then
       append_message "$conv_dir" "user" "$user_message_text"
     fi
-
