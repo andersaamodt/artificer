@@ -217,7 +217,7 @@ api-hardening	programming	standard	Introduce strict input validation for one hig
 migration-safe	assistant	standard	Design an idempotent migration plan for a realistic schema change, including rollback, observability, and release sequencing safeguards.
 perf-regression	report	standard	Analyze a probable performance regression path and propose measurable optimization and benchmark guardrails without behavior drift.
 security-audit	security-audit	standard	Audit this project for one concrete security weakness class, implement a fix, and add tests that fail before and pass after.
-refactor-boundaries	assistant	standard	Refactor strategy: split one tangled area into clear module boundaries with minimal behavior change and parity validation checkpoints.
+refactor-boundaries	assistant	standard	Refactor strategy: split one tangled area into clear module boundaries with minimal behavior change and behavior-consistency validation checkpoints.
 failure-recovery	programming	standard	Add robust failure recovery for one external dependency path with retries, fallback behavior, and observable failure diagnostics.
 spec-to-code	assistant	standard	Write a short implementation contract first, then produce a high-confidence implementation and verification plan for end-to-end delivery.
 report-trace	report	standard	Evaluate one recent run for conversation clarity and trace readability. Propose concrete improvements to step framing and summary quality.

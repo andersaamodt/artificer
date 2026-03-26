@@ -6,7 +6,7 @@ performance-budget-defense	report	standard	Produce a measurable optimization pla
 security-depth-remediation	security-audit	standard	Identify one high-impact security weakness class, implement a robust mitigation, and verify it with concrete before/after evidence.
 chaos-recovery-drill	assistant	standard	Design and run a failure-injection drill for one dependency path, then harden retry/backoff/circuit behavior and validate recovery.
 spec-ambiguity-resolution	assistant	long	Resolve an intentionally ambiguous spec by stating assumptions, choosing a coherent implementation direction, and proving requirement coverage.
-large-refactor-containment	programming	standard	Contain a broad refactor into reversible increments, preserve behavior parity, and provide a validation matrix for each increment.
+large-refactor-containment	programming	standard	Contain a broad refactor into reversible increments, preserve behavior consistency, and provide a validation matrix for each increment.
 trace-quality-audit	report	standard	Audit run-trace quality for readability and signal density, then propose and apply improvements to reduce noise and improve fold summaries.
 teaching-mastery-loop	teacher	standard	Teach a difficult subsystem with misconceptions, checks for understanding, and a mini mastery loop that includes retrieval prompts.
 attack-surface-chain	pentest	standard	Run a safe attack-surface chain simulation (recon -> exploit hypothesis -> mitigation), then implement and verify the highest-value defensive fix.
