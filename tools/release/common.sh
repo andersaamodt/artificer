@@ -50,7 +50,6 @@ artificer_stage_runtime() {
          "$dest/hosted-web/.playwright-browsers" \
          "$dest/hosted-web/.tmp-gui-probe-sites" \
          "$dest/hosted-web/.venv-gui-playwright" \
-         "$dest/.assay-runs" \
          "$dest/.git" \
          "$dest/packaging" \
          "$dest/.github"

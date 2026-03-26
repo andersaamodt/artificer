@@ -20,6 +20,11 @@ jobs:
           - arm64
     steps:
       - uses: actions/checkout@v4
+      - name: Rebuild generated runtime files
+        run: |
+          sh tools/build-artificer-app.sh
+          sh tools/build-cgi-shards.sh
+          git diff --exit-code
       - name: Build Linux bundle (${{ matrix.arch }})
         run: sh tools/release/build-release-bundle.sh dist
         env:
@@ -34,6 +39,11 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Rebuild generated runtime files
+        run: |
+          sh tools/build-artificer-app.sh
+          sh tools/build-cgi-shards.sh
+          git diff --exit-code
       - name: Build macOS artifacts
         run: sh tools/release/build-macos-app.sh dist
       - name: Upload macOS artifact

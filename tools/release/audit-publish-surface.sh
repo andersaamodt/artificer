@@ -41,7 +41,7 @@ printf '%s\n' "$public_files" \
   | xargs grep -nE '/Users/[^/[:space:]]+|/home/[^/[:space:]]+' \
   || true
 
-printf '\n%s\n' '== internal legacy naming =='
+printf '\n%s\n' '== internal naming audit =='
 printf '%s\n' "$gui_files" \
   | sed '/^$/d' \
   | sed "s#^#$repo_root/#" \

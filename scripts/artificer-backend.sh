@@ -21,15 +21,6 @@ ARTIFICER_STATE_ROOT=${ARTIFICER_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/stat
 
 resolve_apps_root() {
   apps_root=${WIZARDRY_APPS_ROOT:-}
-  if [ -z "$apps_root" ] && [ -n "$APP_DIR" ] && [ -f "$APP_DIR/.forge-source.lock" ]; then
-    src_repo=$(sed -n 's/^repo=//p' "$APP_DIR/.forge-source.lock" 2>/dev/null | head -n 1)
-    if [ -n "$src_repo" ]; then
-      src_parent=$(cd "$(dirname "$src_repo")" 2>/dev/null && pwd || true)
-      if [ -n "$src_parent" ] && [ -x "$src_parent/wizardry-apps/spells/web/web-wizardry" ]; then
-        apps_root="$src_parent/wizardry-apps"
-      fi
-    fi
-  fi
   [ -n "$apps_root" ] || apps_root="$wiz"
   printf '%s\n' "$apps_root"
 }

@@ -28,6 +28,7 @@ Frontend bundle:
 
 ```sh
 sh tools/build-artificer-app.sh
+sh tools/build-cgi-shards.sh
 ```
 
 ## GUI Changes
