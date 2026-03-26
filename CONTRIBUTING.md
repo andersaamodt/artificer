@@ -3,7 +3,7 @@
 ## Development Priorities
 
 1. Keep the public runtime contract stable: `artificer`, `install`, release bundles, and GitHub Actions.
-2. Treat `hosted-web/` parity and release gates as merge blockers for meaningful behavior changes.
+2. Treat `hosted-web/` quality and release gates as merge blockers for meaningful behavior changes.
 3. Prefer small, reviewable commits.
 
 ## Local Checks

@@ -40,4 +40,4 @@ Important runtime state lives outside the repo:
 
 ## Developer Tooling
 
-The parity gates, probes, assay fixtures, and release wrappers live under `hosted-web/`. They are part of development and release validation, not the normal user install path.
+The quality gates, probes, assay fixtures, and release wrappers live under `hosted-web/`. They are part of development and release validation, not the normal user install path.

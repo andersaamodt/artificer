@@ -22,13 +22,13 @@ This audit covers the GitHub-facing publish surface:
 - added version, changelog, license, and release notes
 - added standalone background automations scheduler controls and daemon actions
 
-## Remaining Non-Public References
+## Remaining Internal References
 
-The repo still contains workstation-specific absolute paths and legacy Forge-era naming in developer-only surfaces, mainly under `hosted-web/` parity and assay documents.
+The repo still contains workstation-specific absolute paths and legacy Forge-era naming in developer-only surfaces, mainly under `hosted-web/` assay and quality documents.
 
 Current known categories:
 
-- developer parity trackers with absolute clickable file paths
+- internal quality trackers with absolute clickable file paths
 - internal CSS and DOM names that still use `forge-shell`
 - internal runtime coupling to Wizardry web helpers such as `web-wizardry`
 

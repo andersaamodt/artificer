@@ -17,4 +17,4 @@ Supporting background:
 - [GLOSSARY.md](GLOSSARY.md)
 - [REPO_OVERVIEW.md](REPO_OVERVIEW.md)
 
-The internal assay and parity documents still live under `hosted-web/`. They are developer tooling, not the end-user install surface.
+The internal assay and quality-gate materials live under `hosted-web/`. They are developer tooling, not the end-user install surface.
