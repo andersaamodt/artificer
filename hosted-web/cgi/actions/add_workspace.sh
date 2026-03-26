@@ -8,7 +8,17 @@
       exit 0
     fi
 
-    case "$raw_path" in
+    expanded_path=$raw_path
+    case "$expanded_path" in
+      "~")
+        expanded_path=$HOME
+        ;;
+      "~/"*)
+        expanded_path=$HOME/${expanded_path#~/}
+        ;;
+    esac
+
+    case "$expanded_path" in
       /*) ;;
       *)
         emit_error "path must be absolute"
@@ -16,12 +26,12 @@
         ;;
     esac
 
-    if [ ! -d "$raw_path" ]; then
+    if [ ! -d "$expanded_path" ]; then
       emit_error "path does not exist or is not a directory"
       exit 0
     fi
 
-    canonical_path=$(cd "$raw_path" && pwd -P)
+    canonical_path=$(cd "$expanded_path" && pwd -P)
     workspace_name=$raw_name
     if [ -z "$workspace_name" ]; then
       workspace_name=$(basename "$canonical_path")

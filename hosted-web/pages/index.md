@@ -344,8 +344,8 @@ pagetitle: "Artificer"
 <label for="workspace-name">Label (optional)</label>
 <input id="workspace-name" name="workspace-name" placeholder="my project" />
 <div class="modal-actions">
-<button id="workspace-add-submit" class="ctx-workspace" type="submit">Add Project</button>
 <button id="workspace-cancel-btn" class="ghost" type="button">Cancel</button>
+<button id="workspace-add-submit" class="ctx-workspace" type="submit">Add Project</button>
 </div>
 </form>
 </div>
