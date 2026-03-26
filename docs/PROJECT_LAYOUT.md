@@ -18,6 +18,8 @@ The served app itself lives here:
 - [hosted-web/pages/index.md](../hosted-web/pages/index.md)
 - [hosted-web/static/artificer-app.js](../hosted-web/static/artificer-app.js)
 - [hosted-web/cgi/artificer-api](../hosted-web/cgi/artificer-api)
+- [hosted-web/cgi/actions](../hosted-web/cgi/actions)
+- [hosted-web/cgi/lib](../hosted-web/cgi/lib)
 
 ## Internal Runtime Helper
 
