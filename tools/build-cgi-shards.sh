@@ -16,7 +16,7 @@ build_concat() {
   tmp_file=$(mktemp "${TMPDIR:-/tmp}/artificer-cgi-build.XXXXXX")
   trap 'rm -f "$tmp_file"' EXIT INT TERM
 
-  for part in "$src_dir"/*.sh; do
+  for part in "$src_dir"/*.part; do
     [ -f "$part" ] || continue
     cat "$part" >> "$tmp_file"
   done
