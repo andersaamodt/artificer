@@ -23,23 +23,8 @@ if ! grep -q 'available=$(merge_available_model_entries "$installed_enriched" "$
   exit 1
 fi
 
-if ! grep -q 'description="Installed local model"' "$runtime_file"; then
-  printf '%s\n' "installed model fallback description missing from runtime catalog enrichment" >&2
-  exit 1
-fi
-
-if ! grep -q 'installedDescription = "Installed local model";' "$render_file"; then
-  printf '%s\n' "installed model fallback description missing from UI rendering" >&2
-  exit 1
-fi
-
 if ! grep -q 'installedSizeLabel = "Size unavailable";' "$render_file"; then
   printf '%s\n' "installed model fallback size label missing from UI rendering" >&2
-  exit 1
-fi
-
-if ! grep -q 'description = "Available local model";' "$render_file"; then
-  printf '%s\n' "available model fallback description missing from UI rendering" >&2
   exit 1
 fi
 
@@ -53,4 +38,4 @@ if ! grep -q "<span class='catalog-size catalog-size-right'>" "$render_file"; th
   exit 1
 fi
 
-printf '%s\n' "ok installed model catalog entries include resilient description and size labels"
+printf '%s\n' "ok model catalog keeps optional descriptions while always rendering a size label"

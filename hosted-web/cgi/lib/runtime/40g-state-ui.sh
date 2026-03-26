@@ -1611,8 +1611,6 @@ build_installed_catalog_entries() {
 
     metadata_entry=$(model_catalog_lookup_entry "$ollama_metadata" "$model_name")
     metadata_size=$(printf '%s' "$metadata_entry" | awk -F'|' '{print $2}')
-    metadata_parameter_size=$(printf '%s' "$metadata_entry" | awk -F'|' '{print $3}')
-    metadata_family=$(printf '%s' "$metadata_entry" | awk -F'|' '{print $4}')
 
     description=$(trim "$existing_description")
     size_gb=$(trim "$existing_size")
@@ -1628,20 +1626,6 @@ build_installed_catalog_entries() {
         size_gb=""
         ;;
     esac
-
-    if [ -z "$description" ]; then
-      metadata_parameter_size=$(trim "$metadata_parameter_size")
-      metadata_family=$(trim "$metadata_family")
-      if [ -n "$metadata_parameter_size" ] && [ -n "$metadata_family" ]; then
-        description="$metadata_parameter_size $metadata_family model"
-      elif [ -n "$metadata_parameter_size" ]; then
-        description="$metadata_parameter_size local model"
-      elif [ -n "$metadata_family" ]; then
-        description="$metadata_family local model"
-      else
-        description="Installed local model"
-      fi
-    fi
 
     printf '%s|%s|%s|%s\n' "$model_name" "$description" "$size_gb" "$context_k"
   done <<EOF

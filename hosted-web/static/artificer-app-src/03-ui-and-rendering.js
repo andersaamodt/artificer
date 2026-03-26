@@ -2208,9 +2208,6 @@
         var activeClass = model === activeModel ? " active" : "";
         var installedEntry = catalogEntryForModel(model);
         var installedDescription = trim(installedEntry && installedEntry.description ? installedEntry.description : "");
-        if (!installedDescription) {
-          installedDescription = "Installed local model";
-        }
         var installedSizeLabel = formatCatalogSizeLabel(installedEntry && installedEntry.size_gb ? installedEntry.size_gb : "");
         if (!installedSizeLabel) {
           installedSizeLabel = "Size unavailable";
@@ -2247,9 +2244,6 @@
         }
         var modelParts = parseModelDisplay(modelName);
         var description = trim(entry.description || "");
-        if (!description) {
-          description = "Available local model";
-        }
         var sizeLabel = formatCatalogSizeLabel(entry.size_gb);
         if (!sizeLabel) {
           sizeLabel = "Size unavailable";
@@ -2272,7 +2266,9 @@
           html += "<span class='model-meta-inline'>" + escHtml(modelParts.meta) + "</span>";
         }
         html += "</span>";
-        html += "<span class='catalog-description'>" + escHtml(description) + "</span>";
+        if (description) {
+          html += "<span class='catalog-description'>" + escHtml(description) + "</span>";
+        }
         html += "</div>";
         html += "<div class='catalog-actions'>";
         html += "<button type='button' class='catalog-install-btn" + (installDisabled ? " disabled" : "") + "' data-action='install-model' data-model-name='" + escAttr(modelName) + "'" + (installDisabled ? " disabled" : "") + ">" + escHtml(installLabel) + "</button>";
