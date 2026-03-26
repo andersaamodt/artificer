@@ -253,26 +253,19 @@
       }, 0);
     });
 
-    on(el.sidebarSectionAutomationsBtn, "click", function (event) {
+    on(el.sidebarNavAutomationsItem, "click", function (event) {
       event.preventDefault();
       saveSidebarSection("automations");
       renderUi();
     });
 
-    on(el.sidebarSectionThreadsBtn, "click", function (event) {
-      event.preventDefault();
-      saveSidebarSection("threads");
-      renderUi();
-    });
-
-    on(el.addAutomationBtn, "click", function (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (!state.workspaces.length) {
-        showError(new Error("Add a project before creating automations."));
+    on(el.sidebarNavAutomationsItem, "keydown", function (event) {
+      if (!event || (event.key !== "Enter" && event.key !== " ")) {
         return;
       }
-      openAutomationModal("create", "");
+      event.preventDefault();
+      saveSidebarSection("automations");
+      renderUi();
     });
 
     on(el.organizeBtn, "click", function (event) {
@@ -2315,6 +2308,13 @@
     }
 
     on(el.chatLog, "click", function (event) {
+      var automationAction = event.target.closest(
+        "[data-action='open-threads'], [data-action='automation-new'], [data-action='select-automation'], [data-action^='automation-']"
+      );
+      if (automationAction) {
+        handleWorkspaceTreeClick(event);
+        return;
+      }
       var triageAction = event.target.closest("[data-action^='triage-']");
       if (triageAction) {
         handleWorkspaceTreeClick(event);
@@ -2367,6 +2367,15 @@
     });
 
     on(el.chatLog, "keydown", function (event) {
+      var key = event && event.key;
+      if ((key === "Enter" || key === " ") && event.target && event.target.closest) {
+        var automationRow = event.target.closest(".automation-row[role='button']");
+        if (automationRow) {
+          event.preventDefault();
+          automationRow.click();
+          return;
+        }
+      }
       if ((event && event.key) !== "Enter") {
         return;
       }
@@ -2383,6 +2392,14 @@
       if (submitBtn) {
         submitBtn.click();
       }
+    });
+
+    on(el.chatLog, "change", function (event) {
+      var automationToggle = event.target && event.target.closest ? event.target.closest("[data-action='automation-toggle-enabled']") : null;
+      if (!automationToggle) {
+        return;
+      }
+      handleWorkspaceTreeChange(event);
     });
 
     if (el.chatLog) {

@@ -21,14 +21,16 @@ pagetitle: "Artificer"
 <button type="button" data-organize-show="running"><span>Running</span><span class="check" aria-hidden="true">&check;</span></button>
 </div>
 <div class="workspace-drag-strip" aria-hidden="true"></div>
-<div id="sidebar-section-switch" class="sidebar-section-switch" role="tablist" aria-label="Sidebar sections">
-<button id="sidebar-section-automations-btn" class="sidebar-section-btn" type="button" role="tab" aria-selected="false" data-sidebar-section="automations">Automations</button>
-<button id="sidebar-section-threads-btn" class="sidebar-section-btn" type="button" role="tab" aria-selected="true" data-sidebar-section="threads">Threads</button>
+<div id="sidebar-nav-list" class="sidebar-nav-list" role="listbox" aria-label="Sidebar views">
+<div id="sidebar-nav-automations-item" class="sidebar-nav-item" role="option" tabindex="0" aria-selected="false" title="Open automations">
+<span class="sidebar-nav-item-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8.2" r="5.2"></circle><path d="M8 5.6v2.8l1.8 1"></path></svg></span>
+<span class="sidebar-nav-item-label">Automations</span>
+<span id="sidebar-nav-automations-count" class="sidebar-nav-item-count">0</span>
+</div>
 </div>
 <div class="workspace-tree-section-head workspace-tree-main-head">
 <span id="workspace-tree-title">Threads</span>
 <div class="workspace-head-actions">
-<button id="add-automation-btn" class="icon-btn hidden" type="button" aria-label="New automation" title="New automation"><span aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8.2" r="5.2"/><path d="M8 5.6v2.9l1.8 1"/><path d="M12.3 2.6v2.3"/><path d="M11.1 3.8h2.4"/></svg></span></button>
 <button id="add-workspace-btn" class="icon-btn" type="button" aria-label="New project" title="New project"><span aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.7 5.2h4l1.3 1.6h7.3v6.2H1.7z"/><path d="M11.8 2.8v2.4"/><path d="M10.6 4h2.4"/></svg></span></button>
 <button id="organize-btn" class="icon-btn" type="button" aria-label="Organize projects" title="Organize threads"><span aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 4h11"/><path d="M3.8 8h8.4"/><path d="M5.1 12h5.8"/></svg></span></button>
 </div>

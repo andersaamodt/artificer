@@ -1174,6 +1174,10 @@
   }
 
   function renderChatHeader() {
+    if (state.sidebarSection === "automations") {
+      el.chatTitle.textContent = "Automations";
+      return;
+    }
     if (state.activeTriage) {
       el.chatTitle.textContent = "Triage";
       return;
@@ -1204,6 +1208,9 @@
   }
 
   function shouldRenderBlankRightPane() {
+    if (state.sidebarSection === "automations") {
+      return true;
+    }
     if (state.activeTriage) {
       return false;
     }
@@ -2178,6 +2185,83 @@
     var shouldAutoScroll = keyChanged || state.chatAutoScroll;
     snapshotRunThinkingPreviewScroll();
 
+    if (state.sidebarSection === "automations") {
+      var automationViewHtml = "<section class='automations-main-view'>";
+      automationViewHtml += "<div class='automations-main-head'>";
+      automationViewHtml += "<h3>Automations</h3>";
+      automationViewHtml += "<div class='automations-main-actions'>";
+      automationViewHtml += "<button type='button' data-action='open-threads'>Threads</button>";
+      automationViewHtml += "<button type='button' data-action='automation-new'" + (state.workspaces.length ? "" : " disabled") + ">New automation</button>";
+      automationViewHtml += "</div>";
+      automationViewHtml += "</div>";
+      if (!state.automations || !Array.isArray(state.automations.items) || !state.automations.items.length) {
+        automationViewHtml += "<p class='automation-empty automations-main-empty'>No automations yet. Create one to schedule recurring work.</p>";
+      } else {
+        for (var a = 0; a < state.automations.items.length; a += 1) {
+          var automation = state.automations.items[a] || {};
+          var automationId = String(automation.id || "");
+          if (!automationId) {
+            continue;
+          }
+          var isActiveAutomation = String(state.activeAutomationId || "") === automationId;
+          var scheduleText = trim(String(automation.schedule_text || ""));
+          if (!scheduleText) {
+            scheduleText = trim(String(automation.schedule_kind || "")) + " " + trim(String(automation.schedule_value || ""));
+          }
+          var targetPieces = [];
+          if (trim(String(automation.workspace_name || ""))) {
+            targetPieces.push(String(automation.workspace_name || ""));
+          } else if (trim(String(automation.workspace_id || ""))) {
+            targetPieces.push(String(automation.workspace_id || ""));
+          }
+          if (trim(String(automation.conversation_title || ""))) {
+            targetPieces.push(String(automation.conversation_title || ""));
+          } else if (trim(String(automation.conversation_id || ""))) {
+            targetPieces.push(String(automation.conversation_id || ""));
+          }
+          var targetLabel = targetPieces.join(" · ");
+          if (!targetLabel) {
+            targetLabel = "No thread selected";
+          }
+          var statusClass = automationStatusClass(automation);
+          var statusLabel = automationStatusLabel(automation);
+          var nextRunLabel = automationNextRunLabel(automation);
+          var lastRunLabel = automationLastRunLabel(automation);
+
+          automationViewHtml += "<section class='automation-row" + (isActiveAutomation ? " active" : "") + "' role='button' tabindex='0' data-action='select-automation' data-automation-id='" + escAttr(automationId) + "'>";
+          automationViewHtml += "<div class='automation-row-head'>";
+          automationViewHtml += "<span class='automation-title'>" + escHtml(automation.name || "Automation") + "</span>";
+          automationViewHtml += "<span class='automation-state-pill " + escAttr(statusClass) + "'>" + escHtml(statusLabel) + "</span>";
+          automationViewHtml += "</div>";
+          automationViewHtml += "<div class='automation-meta'>";
+          automationViewHtml += "<span><strong>Schedule:</strong> " + escHtml(scheduleText || "unspecified") + "</span>";
+          automationViewHtml += "<span><strong>Next:</strong> " + escHtml(nextRunLabel) + "</span>";
+          automationViewHtml += "<span><strong>Last:</strong> " + escHtml(lastRunLabel) + "</span>";
+          automationViewHtml += "</div>";
+          automationViewHtml += "<div class='automation-target' title='" + escAttr(targetLabel) + "'>" + escHtml(targetLabel) + "</div>";
+          automationViewHtml += "<div class='automation-row-actions'>";
+          automationViewHtml += "<label class='automation-enable-row' title='Enable or pause automation' data-action='automation-toggle-label' data-automation-id='" + escAttr(automationId) + "'><input type='checkbox' data-action='automation-toggle-enabled' data-automation-id='" + escAttr(automationId) + "'" + (String(automation.enabled || "0") === "1" ? " checked" : "") + " /> Enabled</label>";
+          automationViewHtml += "<button type='button' data-action='automation-run-now' data-automation-id='" + escAttr(automationId) + "'>Run now</button>";
+          automationViewHtml += "<button type='button' data-action='automation-edit' data-automation-id='" + escAttr(automationId) + "'>Edit</button>";
+          automationViewHtml += "<button type='button' class='ghost danger' data-action='automation-delete' data-automation-id='" + escAttr(automationId) + "'>Delete</button>";
+          automationViewHtml += "</div>";
+          if (trim(String(automation.last_error || ""))) {
+            automationViewHtml += "<p class='automation-error' title='" + escAttr(String(automation.last_error || "")) + "'>" + escHtml(String(automation.last_error || "")) + "</p>";
+          }
+          automationViewHtml += "</section>";
+        }
+      }
+      automationViewHtml += "</section>";
+      if (state.chatMarkupCache !== automationViewHtml) {
+        el.chatLog.innerHTML = automationViewHtml;
+        state.chatMarkupCache = automationViewHtml;
+      }
+      state.chatAutoScroll = true;
+      state.chatLastKey = conversationKey;
+      updateChatJumpButton();
+      return;
+    }
+
     if (state.activeTriage) {
       var triageCards = Array.isArray(state.triage && state.triage.cards) ? state.triage.cards : [];
       var triageViewHtml = "<section class='triage-main-view'><h3>Triage</h3>";
@@ -2965,28 +3049,21 @@
 
   function renderSidebarSectionChrome() {
     var automationsMode = state.sidebarSection === "automations";
-    if (el.sidebarSectionAutomationsBtn) {
-      el.sidebarSectionAutomationsBtn.classList.toggle("active", automationsMode);
-      el.sidebarSectionAutomationsBtn.setAttribute("aria-selected", automationsMode ? "true" : "false");
+    if (el.sidebarNavAutomationsItem) {
+      el.sidebarNavAutomationsItem.classList.toggle("active", automationsMode);
+      el.sidebarNavAutomationsItem.setAttribute("aria-selected", automationsMode ? "true" : "false");
     }
-    if (el.sidebarSectionThreadsBtn) {
-      el.sidebarSectionThreadsBtn.classList.toggle("active", !automationsMode);
-      el.sidebarSectionThreadsBtn.setAttribute("aria-selected", automationsMode ? "false" : "true");
+    if (el.sidebarNavAutomationsCount) {
+      var automationCount = 0;
+      if (state.automations && Array.isArray(state.automations.items)) {
+        automationCount = state.automations.items.length;
+      } else {
+        automationCount = Number(state.automations && state.automations.count || 0) || 0;
+      }
+      el.sidebarNavAutomationsCount.textContent = String(automationCount);
     }
     if (el.workspaceTreeTitle) {
-      el.workspaceTreeTitle.textContent = automationsMode ? "Automations" : "Threads";
-    }
-    if (el.workspaceTreeTitle && el.workspaceTreeTitle.parentElement) {
-      el.workspaceTreeTitle.parentElement.classList.toggle("automations-head", automationsMode);
-    }
-    if (el.organizeBtn) {
-      el.organizeBtn.classList.toggle("hidden", automationsMode);
-    }
-    if (el.addWorkspaceBtn) {
-      el.addWorkspaceBtn.classList.toggle("hidden", automationsMode);
-    }
-    if (el.addAutomationBtn) {
-      el.addAutomationBtn.classList.toggle("hidden", !automationsMode);
+      el.workspaceTreeTitle.textContent = "Threads";
     }
   }
 

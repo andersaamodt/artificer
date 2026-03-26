@@ -1860,6 +1860,16 @@
     var conversationId = target.getAttribute("data-conversation-id");
     var proposalId = target.getAttribute("data-proposal-id");
     var automationId = target.getAttribute("data-automation-id");
+    var threadNavigationAction = (
+      action === "toggle-workspace" ||
+      action === "new-conversation" ||
+      action === "select-workspace" ||
+      action === "select-conversation" ||
+      action === "select-draft"
+    );
+    if (state.sidebarSection === "automations" && threadNavigationAction) {
+      saveSidebarSection("threads");
+    }
 
     if (action === "workspace-drag-handle" || action === "conversation-drag-handle") {
       event.preventDefault();
@@ -1873,10 +1883,30 @@
       return;
     }
 
+    if (action === "open-threads") {
+      event.preventDefault();
+      saveSidebarSection("threads");
+      renderUi();
+      return;
+    }
+
+    if (action === "automation-new") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!state.workspaces.length) {
+        showError(new Error("Add a project before creating automations."));
+        return;
+      }
+      saveSidebarSection("automations");
+      openAutomationModal("create", "");
+      return;
+    }
+
     if (action === "select-automation") {
       if (!automationId) {
         return;
       }
+      saveSidebarSection("automations");
       state.activeAutomationId = String(automationId || "");
       renderUi();
       return;
