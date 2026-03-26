@@ -1210,6 +1210,7 @@
     modelsPane: document.getElementById("models-pane"),
     modelsPaneResizer: document.getElementById("models-pane-resizer"),
     modelsBox: document.getElementById("models-box"),
+    modelsBoxHead: document.getElementById("models-box-head"),
     modelsBoxList: document.getElementById("models-box-list"),
 
     openMainBtn: document.getElementById("open-main-btn"),
@@ -23464,6 +23465,14 @@
       }, { spinner: false }).catch(function () {
         return null;
       });
+    });
+
+    on(el.modelsBoxHead, "click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (el.modelsPane && !el.modelsPane.classList.contains("hidden")) {
+        closeAllMenus();
+      }
     });
 
     on(el.themePickerBtn, "click", function (event) {

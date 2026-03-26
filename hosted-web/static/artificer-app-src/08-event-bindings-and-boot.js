@@ -342,6 +342,14 @@
       });
     });
 
+    on(el.modelsBoxHead, "click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (el.modelsPane && !el.modelsPane.classList.contains("hidden")) {
+        closeAllMenus();
+      }
+    });
+
     on(el.themePickerBtn, "click", function (event) {
       event.preventDefault();
       event.stopPropagation();

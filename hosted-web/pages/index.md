@@ -39,7 +39,7 @@ pagetitle: "Artificer"
 <div id="models-pane" class="models-pane hidden">
 <div id="models-pane-resizer" class="models-pane-resizer" aria-hidden="true"></div>
 <div class="models-box" id="models-box" role="dialog" aria-label="Available models">
-<div class="models-box-head"><span class="models-title">Ollama Models</span></div>
+<div id="models-box-head" class="models-box-head"><span class="models-title">Ollama Models</span></div>
 <div id="models-box-list" class="models-box-list"></div>
 </div>
 </div>
