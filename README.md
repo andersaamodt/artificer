@@ -95,22 +95,14 @@ The Linux bundles are portable artifacts for Debian, Ubuntu, NixOS, and Arch on 
 
 ## Documentation
 
-Human-facing documentation:
+Human-facing docs, by intent:
 
-- [docs/README.md](docs/README.md): documentation index and reading order
-- [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md): install and first-run setup
-- [docs/USER_GUIDE.md](docs/USER_GUIDE.md): day-to-day usage workflow
-- [docs/SETTINGS_AND_MODELS.md](docs/SETTINGS_AND_MODELS.md): runtime knobs, model behavior, and automations
-- [docs/HOW_ARTIFICER_LLMS_WORK.md](docs/HOW_ARTIFICER_LLMS_WORK.md): system-level model behavior explanation
-- [docs/INTELLIGENCE_MENTORING_EXPLAINED.md](docs/INTELLIGENCE_MENTORING_EXPLAINED.md): intelligence iteration approach
-- [docs/GLOSSARY.md](docs/GLOSSARY.md): terminology reference
-- [docs/REPO_OVERVIEW.md](docs/REPO_OVERVIEW.md): high-level repository map
-- [docs/PROJECT_LAYOUT.md](docs/PROJECT_LAYOUT.md): public and internal layout details
-- [docs/PUBLISHING_AUDIT.md](docs/PUBLISHING_AUDIT.md): publish-surface audit notes
-- [docs/release-notes/v0.1.0.md](docs/release-notes/v0.1.0.md): current release notes
-- [CHANGELOG.md](CHANGELOG.md): release history
-- [CONTRIBUTING.md](CONTRIBUTING.md): contributor workflow and checks
-- [hosted-web/README.md](hosted-web/README.md): internals map for developers
+- Start here: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md), [docs/USER_GUIDE.md](docs/USER_GUIDE.md), [docs/SETTINGS_AND_MODELS.md](docs/SETTINGS_AND_MODELS.md)
+- Intelligence and reasoning: [docs/HOW_ARTIFICER_LLMS_WORK.md](docs/HOW_ARTIFICER_LLMS_WORK.md), [docs/INTELLIGENCE_MENTORING_EXPLAINED.md](docs/INTELLIGENCE_MENTORING_EXPLAINED.md)
+- Reference: [docs/GLOSSARY.md](docs/GLOSSARY.md), [docs/REPO_OVERVIEW.md](docs/REPO_OVERVIEW.md), [docs/PROJECT_LAYOUT.md](docs/PROJECT_LAYOUT.md)
+- Release and contribution: [docs/release-notes/v0.1.0.md](docs/release-notes/v0.1.0.md), [docs/PUBLISHING_AUDIT.md](docs/PUBLISHING_AUDIT.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md)
+- Full index: [docs/README.md](docs/README.md)
+- Internals map: [hosted-web/README.md](hosted-web/README.md)
 
 AI-facing documentation lives under [.github/](.github/) (workflows and automation-facing repo configuration).
 

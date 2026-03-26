@@ -2,19 +2,28 @@
 
 This folder covers the public user and contributor surfaces for Artificer.
 
-Read in this order:
+If you are new:
 
 1. [GETTING_STARTED.md](GETTING_STARTED.md)
 2. [USER_GUIDE.md](USER_GUIDE.md)
 3. [SETTINGS_AND_MODELS.md](SETTINGS_AND_MODELS.md)
-4. [PROJECT_LAYOUT.md](PROJECT_LAYOUT.md)
-5. [PUBLISHING_AUDIT.md](PUBLISHING_AUDIT.md)
 
-Supporting background:
+If you want the intelligence deep-dive:
 
 - [HOW_ARTIFICER_LLMS_WORK.md](HOW_ARTIFICER_LLMS_WORK.md)
 - [INTELLIGENCE_MENTORING_EXPLAINED.md](INTELLIGENCE_MENTORING_EXPLAINED.md)
+
+If you want reference and structure:
+
 - [GLOSSARY.md](GLOSSARY.md)
 - [REPO_OVERVIEW.md](REPO_OVERVIEW.md)
+- [PROJECT_LAYOUT.md](PROJECT_LAYOUT.md)
 
-The internal assay and quality-gate materials live under `hosted-web/`. They are developer tooling, not the end-user install surface.
+If you are preparing release or contributing:
+
+- [PUBLISHING_AUDIT.md](PUBLISHING_AUDIT.md)
+- [release-notes/v0.1.0.md](release-notes/v0.1.0.md)
+- [../CHANGELOG.md](../CHANGELOG.md)
+- [../CONTRIBUTING.md](../CONTRIBUTING.md)
+
+Internal assay and quality-gate materials live under `hosted-web/` and are developer tooling rather than end-user install docs.
