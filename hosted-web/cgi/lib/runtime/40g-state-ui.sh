@@ -1526,6 +1526,129 @@ merge_available_model_entries() {
   '
 }
 
+model_catalog_lookup_entry() {
+  entries=$1
+  target_name=$2
+  printf '%s\n' "$entries" | awk -F'|' -v target="$target_name" '
+    {
+      name = $1
+      gsub(/^[[:space:]]+/, "", name)
+      gsub(/[[:space:]]+$/, "", name)
+      if (name == target) {
+        print $0
+        exit
+      }
+    }
+  '
+}
+
+ollama_installed_metadata_entries() {
+  if ! command -v curl >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! command -v perl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  host_candidates=$(ollama_host_candidates)
+  while IFS= read -r host; do
+    [ -n "$host" ] || continue
+    tags_json=$(curl -fsS --connect-timeout 3 --max-time 6 "$host/api/tags" 2>/dev/null || true)
+    [ -n "$(trim "$tags_json")" ] || continue
+
+    parsed=$(
+      printf '%s' "$tags_json" | perl -MJSON::PP -e '
+        use strict;
+        use warnings;
+        local $/;
+        my $raw = <STDIN>;
+        my $data = eval { decode_json($raw) };
+        exit 1 if $@ || ref($data) ne "HASH";
+        my $models = $data->{models};
+        exit 1 if ref($models) ne "ARRAY";
+        for my $item (@{$models}) {
+          next if ref($item) ne "HASH";
+          my $name = $item->{name};
+          next if !defined($name) || $name eq "";
+          my $size_bytes = $item->{size};
+          my $size_gb = "";
+          if (defined($size_bytes) && $size_bytes =~ /^[0-9]+$/ && $size_bytes > 0) {
+            $size_gb = sprintf("%.1f", $size_bytes / (1024 * 1024 * 1024));
+          }
+          my $details = $item->{details};
+          my $parameter_size = "";
+          my $family = "";
+          if (ref($details) eq "HASH") {
+            $parameter_size = defined($details->{parameter_size}) ? $details->{parameter_size} : "";
+            $family = defined($details->{family}) ? $details->{family} : "";
+          }
+          print "$name|$size_gb|$parameter_size|$family\n";
+        }
+      ' 2>/dev/null || true
+    )
+    if [ -n "$(trim "$parsed")" ]; then
+      printf '%s\n' "$parsed" | awk '!seen[$0]++'
+      return 0
+    fi
+  done <<EOF
+$host_candidates
+EOF
+}
+
+build_installed_catalog_entries() {
+  installed_models=$1
+  available_entries=$2
+  ollama_metadata=$3
+
+  while IFS= read -r model_name; do
+    model_name=$(trim "$model_name")
+    [ -n "$model_name" ] || continue
+
+    existing_entry=$(model_catalog_lookup_entry "$available_entries" "$model_name")
+    existing_description=$(printf '%s' "$existing_entry" | awk -F'|' '{print $2}')
+    existing_size=$(printf '%s' "$existing_entry" | awk -F'|' '{print $3}')
+    existing_context=$(printf '%s' "$existing_entry" | awk -F'|' '{print $4}')
+
+    metadata_entry=$(model_catalog_lookup_entry "$ollama_metadata" "$model_name")
+    metadata_size=$(printf '%s' "$metadata_entry" | awk -F'|' '{print $2}')
+    metadata_parameter_size=$(printf '%s' "$metadata_entry" | awk -F'|' '{print $3}')
+    metadata_family=$(printf '%s' "$metadata_entry" | awk -F'|' '{print $4}')
+
+    description=$(trim "$existing_description")
+    size_gb=$(trim "$existing_size")
+    context_k=$(trim "$existing_context")
+
+    case "$size_gb" in
+      ""|*[!0-9.]*)
+        size_gb=$(trim "$metadata_size")
+        ;;
+    esac
+    case "$size_gb" in
+      ""|*[!0-9.]*)
+        size_gb=""
+        ;;
+    esac
+
+    if [ -z "$description" ]; then
+      metadata_parameter_size=$(trim "$metadata_parameter_size")
+      metadata_family=$(trim "$metadata_family")
+      if [ -n "$metadata_parameter_size" ] && [ -n "$metadata_family" ]; then
+        description="$metadata_parameter_size $metadata_family model"
+      elif [ -n "$metadata_parameter_size" ]; then
+        description="$metadata_parameter_size local model"
+      elif [ -n "$metadata_family" ]; then
+        description="$metadata_family local model"
+      else
+        description="Installed local model"
+      fi
+    fi
+
+    printf '%s|%s|%s|%s\n' "$model_name" "$description" "$size_gb" "$context_k"
+  done <<EOF
+$installed_models
+EOF
+}
+
 emit_model_catalog() {
   installed=$(run_ai_dev_script list-installed-llms 2>/dev/null || true)
   available=$(run_ai_dev_script list-available-llms 2>/dev/null || true)
@@ -1535,6 +1658,10 @@ emit_model_catalog() {
   if [ -z "$(trim "$installed")" ]; then
     installed=$(list_models_raw || true)
   fi
+
+  installed_metadata=$(ollama_installed_metadata_entries || true)
+  installed_enriched=$(build_installed_catalog_entries "$installed" "$available" "$installed_metadata")
+  available=$(merge_available_model_entries "$installed_enriched" "$available")
 
   printf '{"success":true,"installed":['
   first=1
@@ -1704,4 +1831,3 @@ emit_app_icons() {
     "$(json_escape "$finder_icon")" \
     "$(json_escape "$textmate_icon")"
 }
-

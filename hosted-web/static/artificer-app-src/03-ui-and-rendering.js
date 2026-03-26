@@ -2208,7 +2208,13 @@
         var activeClass = model === activeModel ? " active" : "";
         var installedEntry = catalogEntryForModel(model);
         var installedDescription = trim(installedEntry && installedEntry.description ? installedEntry.description : "");
+        if (!installedDescription) {
+          installedDescription = "Installed local model";
+        }
         var installedSizeLabel = formatCatalogSizeLabel(installedEntry && installedEntry.size_gb ? installedEntry.size_gb : "");
+        if (!installedSizeLabel) {
+          installedSizeLabel = "Size unavailable";
+        }
         html += "<div class='catalog-item catalog-item-installed" + activeClass + "'>";
         html += "<button type='button' class='catalog-model-select' data-model-name='" + escAttr(model) + "' title='Use this model'>";
         html += "<span class='model-heading'><span class='model-primary'>" + escHtml(parts.primary) + "</span>";
@@ -2222,9 +2228,7 @@
         html += "</button>";
         html += "<div class='catalog-actions'>";
         html += "<button type='button' class='catalog-install-btn catalog-uninstall-btn' data-action='uninstall-model' data-model-name='" + escAttr(model) + "'>Uninstall</button>";
-        if (installedSizeLabel) {
-          html += "<span class='catalog-size catalog-size-right'>" + escHtml(installedSizeLabel) + "</span>";
-        }
+        html += "<span class='catalog-size catalog-size-right'>" + escHtml(installedSizeLabel) + "</span>";
         html += "</div>";
         html += "</div>";
       }
