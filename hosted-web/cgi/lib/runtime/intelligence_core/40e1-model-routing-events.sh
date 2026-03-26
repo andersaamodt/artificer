@@ -1918,12 +1918,10 @@ normalize_workspace_paths_in_command() {
   command_text=$1
   workspace_root=$2
 
-  printf '%s\n' "$command_text" | WORKSPACE_ROOT="$workspace_root" ARTIFICER_ASSAY_RUNS_DIR="$ARTIFICER_ASSAY_RUNS_DIR" ARTIFICER_ASSAY_REPORTS_DIR="$ARTIFICER_ASSAY_REPORTS_DIR" perl -pe '
+  printf '%s\n' "$command_text" | WORKSPACE_ROOT="$workspace_root" ARTIFICER_ASSAY_REPORTS_DIR="$ARTIFICER_ASSAY_REPORTS_DIR" perl -pe '
     my $ws = $ENV{"WORKSPACE_ROOT"} // "";
-    my $assay_runs = $ENV{"ARTIFICER_ASSAY_RUNS_DIR"} // "";
     my $assay_reports = $ENV{"ARTIFICER_ASSAY_REPORTS_DIR"} // "";
     $ws =~ s{/\z}{};
-    $assay_runs =~ s{/\z}{};
     $assay_reports =~ s{/\z}{};
     my @aliases = (
       "/path/to/workspace",
@@ -1941,14 +1939,6 @@ normalize_workspace_paths_in_command() {
     for my $alias (@aliases) {
       s{(^|\s)\Q$alias\E/(?=\S)}{$1./}g;
       s{(^|\s)\Q$alias\E(?=\s|$)}{$1.}g;
-    }
-    if ($assay_runs ne "") {
-      s{(^|\s)(?:\./)?\.assay-runs/(?=\S)}{$1$assay_runs/}g;
-      s{(^|\s)(?:\./)?\.assay-runs(?=\s|$)}{$1$assay_runs}g;
-      s{(^|\s)/assay-runs/(?=\S)}{$1$assay_runs/}g;
-      s{(^|\s)/assay-runs(?=\s|$)}{$1$assay_runs}g;
-      s{(^|\s)assay-runs/(?=\S)}{$1$assay_runs/}g;
-      s{(^|\s)assay-runs(?=\s|$)}{$1$assay_runs}g;
     }
     if ($assay_reports ne "") {
       s{(^|\s)(?:\./)?hosted-web/\.assay-reports/(?=\S)}{$1$assay_reports/}g;
@@ -2262,4 +2252,3 @@ EOF
   printf '%s' "$last_output"
   return "$last_rc"
 }
-

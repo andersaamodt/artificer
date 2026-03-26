@@ -3265,7 +3265,7 @@ sanitize_design_completion_outcome() {
     return 0
   fi
 
-  if printf '%s' "$outcome_lower" | grep -Eq 'workspace|\.assay-runs/' && printf '%s' "$outcome_lower" | grep -Eq 'list|listing|inspect|inspection|scan|started|starting|transition'; then
+  if printf '%s' "$outcome_lower" | grep -Eq 'workspace' && printf '%s' "$outcome_lower" | grep -Eq 'list|listing|inspect|inspection|scan|started|starting|transition'; then
     reasoning_outcome_stub_for_prompt "$prompt_text"
     return 0
   fi
@@ -3880,4 +3880,3 @@ assay_normalize_assistant_output() {
   normalized_output=$(assay_apply_reasoning_contracts "$normalized_output" "$prompt_text" "$adversarial_required" "$cross_domain_required" "$recovery_required" "$decision_required" "$assumption_revision_required")
   assay_ensure_runtime_evidence "$normalized_output" "$runtime_line"
 }
-

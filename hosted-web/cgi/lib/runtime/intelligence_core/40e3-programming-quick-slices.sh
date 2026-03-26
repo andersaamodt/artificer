@@ -137,7 +137,7 @@ programming_quick_narrow_slice_focus_commands() {
     fi
     [ -f "$workspace_path/$rel_path" ] || continue
     case "$rel_path" in
-      .git/*|.assay-runs/*)
+      .git/*)
         continue
         ;;
     esac
@@ -1835,4 +1835,3 @@ EOF
 
   rm -f "$task_titles_file"
 }
-

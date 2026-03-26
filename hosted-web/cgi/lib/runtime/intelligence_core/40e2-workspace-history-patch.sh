@@ -1470,95 +1470,6 @@ resolve_relative_path_case_insensitive() {
   printf '%s' "$resolved_path"
 }
 
-path_mtime_epoch_any() {
-  path_value=$1
-  if [ ! -e "$path_value" ]; then
-    printf '%s' "0"
-    return 0
-  fi
-  if stat -f %m "$path_value" >/dev/null 2>&1; then
-    stat -f %m "$path_value" 2>/dev/null || printf '%s' "0"
-    return 0
-  fi
-  if stat -c %Y "$path_value" >/dev/null 2>&1; then
-    stat -c %Y "$path_value" 2>/dev/null || printf '%s' "0"
-    return 0
-  fi
-  printf '%s' "0"
-}
-
-resolve_assay_task_relative_path_alias() {
-  workspace_root=$1
-  rel_path=$2
-
-  if ! is_safe_relative_path "$rel_path"; then
-    return 1
-  fi
-  if [ ! -d "$workspace_root/.assay-runs" ]; then
-    return 1
-  fi
-  case "$rel_path" in
-    .assay-runs/*)
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-  if [ -e "$workspace_root/$rel_path" ]; then
-    return 1
-  fi
-
-  path_without_prefix=${rel_path#".assay-runs/"}
-  if [ "$path_without_prefix" = "$rel_path" ]; then
-    return 1
-  fi
-
-  first_segment=${path_without_prefix%%/*}
-  [ -n "$first_segment" ] || return 1
-  if [ "$first_segment" = "$path_without_prefix" ]; then
-    remaining_suffix=""
-  else
-    remaining_suffix=${path_without_prefix#*/}
-  fi
-
-  # If the first segment exists under .assay-runs, it is likely a run label,
-  # not a task-id alias, so do not rewrite.
-  if [ -d "$workspace_root/.assay-runs/$first_segment" ]; then
-    return 1
-  fi
-
-  newest_task_dir=""
-  newest_epoch=0
-  while IFS= read -r candidate_dir || [ -n "$candidate_dir" ]; do
-    [ -d "$candidate_dir" ] || continue
-    candidate_epoch=$(path_mtime_epoch_any "$candidate_dir")
-    case "$candidate_epoch" in
-      ""|*[!0-9]*)
-        candidate_epoch=0
-        ;;
-    esac
-    if [ -z "$newest_task_dir" ] || [ "$candidate_epoch" -ge "$newest_epoch" ]; then
-      newest_task_dir=$candidate_dir
-      newest_epoch=$candidate_epoch
-    fi
-  done <<EOF
-$(find "$workspace_root/.assay-runs" -mindepth 2 -maxdepth 2 -type d -name "$first_segment" 2>/dev/null)
-EOF
-
-  [ -n "$newest_task_dir" ] || return 1
-  rewritten_rel=${newest_task_dir#"$workspace_root"/}
-  if [ "$rewritten_rel" = "$newest_task_dir" ] || [ -z "$rewritten_rel" ]; then
-    return 1
-  fi
-  if [ -n "$remaining_suffix" ]; then
-    rewritten_rel="$rewritten_rel/$remaining_suffix"
-  fi
-  if ! is_safe_relative_path "$rewritten_rel"; then
-    return 1
-  fi
-  printf '%s' "$rewritten_rel"
-}
-
 autocorrect_readonly_file_command_path() {
   workspace_root=$1
   raw_command=$2
@@ -1598,18 +1509,6 @@ autocorrect_readonly_file_command_path() {
   fi
   if [ -e "$workspace_root/$last_token" ]; then
     printf '%s' "$raw_command"
-    return 0
-  fi
-
-  resolved_task_alias=$(resolve_assay_task_relative_path_alias "$workspace_root" "$last_token" || true)
-  if [ -n "$resolved_task_alias" ] && [ "$resolved_task_alias" != "$last_token" ]; then
-    rewritten_command=$(printf '%s\n' "$command_trimmed" | awk -v repl="$resolved_task_alias" '
-      {
-        $NF = repl
-        print
-      }
-    ')
-    printf '%s' "$rewritten_command"
     return 0
   fi
 
@@ -1692,20 +1591,6 @@ autocorrect_readonly_search_command_path() {
     return 0
   fi
 
-  resolved_task_alias=$(resolve_assay_task_relative_path_alias "$workspace_root" "$last_token" || true)
-  if [ -n "$resolved_task_alias" ] && [ "$resolved_task_alias" != "$last_token" ]; then
-    rewritten_command=$(printf '%s\n' "$command_trimmed" | awk -v repl="$resolved_task_alias" '
-      {
-        $NF = repl
-        print
-      }
-    ')
-    if allowed_command "$rewritten_command"; then
-      printf '%s' "$rewritten_command"
-      return 0
-    fi
-  fi
-
   resolved_last_token=$(resolve_relative_path_case_insensitive "$workspace_root" "$last_token" || true)
   replacement_token=$resolved_last_token
   if [ -z "$replacement_token" ]; then
@@ -1782,10 +1667,7 @@ autocorrect_readonly_find_command_path() {
     return 0
   fi
 
-  replacement=$(resolve_assay_task_relative_path_alias "$workspace_root" "$first_arg" || true)
-  if [ -z "$replacement" ]; then
-    replacement=$(resolve_relative_path_case_insensitive "$workspace_root" "$first_arg" || true)
-  fi
+  replacement=$(resolve_relative_path_case_insensitive "$workspace_root" "$first_arg" || true)
   if [ -z "$replacement" ] || [ "$replacement" = "$first_arg" ]; then
     printf '%s' "$raw_command"
     return 0
@@ -2027,4 +1909,3 @@ EOF
     : > "$agent_dir/.changed-paths"
   fi
 }
-

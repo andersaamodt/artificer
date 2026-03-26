@@ -58,36 +58,7 @@ probe_port() {
 cmd_ensure_data_root() {
   data="$ROOT/.sitedata"
   target="$data/artificer/artificer"
-  target_ws="$target/workspaces"
-  [ -d "$target" ] || mkdir -p "$target"
-
-  needs_migrate=1
-  if [ -d "$target_ws" ] && find "$target_ws" -mindepth 1 -maxdepth 1 -type d | read x; then
-    needs_migrate=0
-  fi
-  if [ "$needs_migrate" -ne 1 ]; then
-    exit 0
-  fi
-
-  src_best=""
-  src_count=0
-  for sid in default daimon; do
-    src="$data/$sid/artificer"
-    ws="$src/workspaces"
-    [ -d "$ws" ] || continue
-    count=$(find "$ws" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
-    case "$count" in
-      ''|*[!0-9]*) count=0 ;;
-    esac
-    if [ "$count" -gt "$src_count" ]; then
-      src_count="$count"
-      src_best="$src"
-    fi
-  done
-
-  if [ -n "$src_best" ] && [ "$src_count" -gt 0 ]; then
-    cp -R "$src_best/." "$target/"
-  fi
+  mkdir -p "$target/workspaces"
 }
 
 cmd_ensure_site() {
