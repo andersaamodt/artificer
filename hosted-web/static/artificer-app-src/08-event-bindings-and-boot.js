@@ -3286,6 +3286,11 @@
     })
     .catch(function (error) {
       state.initialLoadComplete = true;
+      // Keep model data self-healing even when initial state bootstrap fails.
+      startModelAutoRefreshLoop();
+      refreshModelData({ force: true, silent: false }).catch(function () {
+        return null;
+      });
       startAutomationsTickLoop();
       startRunEventHealLoop();
       startPendingOutgoingReconcileLoop();
