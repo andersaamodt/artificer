@@ -1,0 +1,2 @@
+task_id	prompt
+boundary-pack-holdout	Diagnose the bounded two-boundary local cutover in this workspace. Use the provided boundary helpers, make the smallest safe shared cutover-state fix so the core boundary cuts over first, the edge boundary cuts over second, rerun the bounded verification helper, keep rollback intact, and do not widen beyond this one boundary pack. End with sections: Outcome, Verification Evidence, Risks, Next Improvement.

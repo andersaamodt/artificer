@@ -1,0 +1,2 @@
+id	prompt
+mixed-rollback-judgment	Repair the bounded mixed local state by approving and executing only the safe rollback path. Use the provided `./bin/status.sh`, `./bin/rollback.sh`, `./bin/health.sh`, and `./bin/verify.sh` helpers, restore the stable release/package/worker baseline, rerun health and verify, and stop after the rollback. End with sections: Outcome, Verification Evidence, Risks, Next Improvement.

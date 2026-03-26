@@ -1,0 +1,4 @@
+task_id	prompt
+manifest-consistency	This workspace needs one bounded package-management fix. Use `bin/audit.sh`, `bin/test.sh`, and `bin/rollback.sh`. Upgrade `demo-lib` to `2.1.0`, keep the manifest and lockfile consistent, rerun tests, preserve rollback, and end with Outcome, Verification Evidence, Risks, Next Improvement.
+local-only	Do not widen beyond this one local dependency change. Use `bin/audit.sh`, `bin/test.sh`, and `bin/rollback.sh` to audit, upgrade `demo-lib` to `2.1.0`, rerun tests, keep rollback intact, and end with Outcome, Verification Evidence, Risks, Next Improvement.
+package-repair	Repair the local package state in this workspace only. Use `bin/audit.sh`, `bin/test.sh`, and `bin/rollback.sh`. Apply the smallest safe upgrade so `demo-lib` lands at `2.1.0` in both package files, rerun tests, keep rollback ready, and end with Outcome, Verification Evidence, Risks, Next Improvement.

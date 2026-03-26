@@ -1,0 +1,2 @@
+task_id	prompt	required_phrase	max_lines
+stalled-greet-utils	Implement a better greeting utility, add a couple tests, and verify them.	better greeting utility	5

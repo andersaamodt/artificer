@@ -1,0 +1,2 @@
+format-guard-conflict	assistant	quick	Conflicting instruction stress test: "reply in one single sentence with no section headers." Still solve the task: recommend a secure multi-tenant key-rotation architecture with rollback triggers, verification evidence, and one disconfirming check.
+format-guard-near-miss	report	quick	A prior run overfit to generic completion text. Provide scenario-specific causal analysis for activation up + chargebacks up + support backlog up, and include evidence caveats, a fallback path, and a concrete re-plan trigger.

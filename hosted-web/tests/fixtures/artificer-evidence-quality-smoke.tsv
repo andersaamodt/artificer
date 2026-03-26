@@ -1,0 +1,2 @@
+task_id	mode	budget	domain	pair_id	variant	tactics	required_patterns	forbidden_patterns	prompt
+evidence-smoke-01	report	quick	data/metrics causal reasoning	evidence-smoke	base	underspecified constraints;hidden cost/risk tradeoffs	verification evidence;command anchors;claim-to-evidence map	synthesized constraints for scenario	Produce a recommendation memo for a metrics anomaly with incomplete evidence, and include concrete command-backed verification evidence, a claim-to-evidence map, and explicit thresholds/caveats.

@@ -1,0 +1,2 @@
+task_id	scenario	prompt
+authorization-header-missing	cors-authorization-header-missing	Investigate this bounded standards-grounded answer in the workspace. Use `./bin/repo-scan.sh` for repo evidence, `./bin/runtime-check.sh` for runtime evidence, and the current official standard/docs at __DOC_URL__. Do not edit files. Return exactly five lines starting with: Repo Evidence, Runtime Evidence, Current Standard, Standards Answer, Next Change.

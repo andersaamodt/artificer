@@ -1,0 +1,3 @@
+task_id	model	max_lines	prompt
+missing-model-cli	missing-smoke-model-zz	4	Please implement a small CLI utility in this workspace.
+missing-model-cardchk	missing-smoke-model-zz	4	Please create file RUN_CARDCHK_1771753760_9070.txt and put the current Unix timestamp in it.

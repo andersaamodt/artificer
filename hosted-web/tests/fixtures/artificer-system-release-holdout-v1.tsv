@@ -1,0 +1,2 @@
+task_id	prompt
+release-pack-holdout	The workspace already has the provided shared release-pack helpers. Inspect the two boundaries, approve the bounded release pack, perform the ordered cutover, publish the release pack, verify the published release, and keep rollback ready.

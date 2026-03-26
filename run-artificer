@@ -1,0 +1,72 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
+APP_ROOT=$SCRIPT_DIR
+
+usage() {
+  cat <<'USAGE'
+Usage: artificer [launch|url|ensure-site]
+
+Commands:
+  launch       Ensure the site is ready, start the local server, print the URL, and open the browser.
+  url          Ensure the site is ready, start the local server if needed, and print the URL.
+  ensure-site  Prepare the served site without opening the browser.
+USAGE
+}
+
+open_url() {
+  url=$1
+  if command -v open >/dev/null 2>&1; then
+    open "$url" >/dev/null 2>&1 || true
+    return 0
+  fi
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url" >/dev/null 2>&1 &
+    return 0
+  fi
+  return 1
+}
+
+require_backend() {
+  backend=$APP_ROOT/scripts/artificer-backend.sh
+  [ -x "$backend" ] || {
+    printf '%s\n' "artificer: missing backend script at $backend" >&2
+    exit 1
+  }
+}
+
+ensure_site() {
+  require_backend
+  "$APP_ROOT/scripts/artificer-backend.sh" ensure-data-root "$APP_ROOT" >/dev/null
+  "$APP_ROOT/scripts/artificer-backend.sh" ensure-site "$APP_ROOT" >/dev/null
+}
+
+site_url() {
+  require_backend
+  ensure_site
+  port=$("$APP_ROOT/scripts/artificer-backend.sh" start-serve "$APP_ROOT")
+  printf 'http://127.0.0.1:%s/pages/index.html\n' "$port"
+}
+
+cmd=${1-launch}
+case "$cmd" in
+  launch)
+    url=$(site_url)
+    printf '%s\n' "$url"
+    open_url "$url" || true
+    ;;
+  url)
+    site_url
+    ;;
+  ensure-site)
+    ensure_site
+    ;;
+  --help|-h|help)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,4 @@
+task_id	prompt
+single-host	This workspace represents one remote host only. Use `./bin/ssh.sh status`, `./bin/ssh.sh journal`, `./bin/ssh.sh restart`, `./bin/ssh.sh health`, and `./bin/rollback.sh`. Do the smallest safe remote service repair, rerun health, preserve rollback, and end with Outcome, Verification Evidence, Risks, Next Improvement.
+remote-service	Repair the single remote service in this workspace without widening to fleet work. Use the SSH helper to inspect, restart, and verify; keep rollback intact; and end with Outcome, Verification Evidence, Risks, Next Improvement.
+ssh-only	Do the bounded SSH-based host recovery only. Use `./bin/ssh.sh status`, `./bin/ssh.sh journal`, `./bin/ssh.sh restart`, `./bin/ssh.sh health`, and `./bin/rollback.sh`. Keep rollback ready, make the smallest safe fix, and end with Outcome, Verification Evidence, Risks, Next Improvement.

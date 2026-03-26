@@ -1,0 +1,2 @@
+task_id	prompt
+paired-services	Repair the bounded mixed local mutation across the paired API and worker services only. Use `bin/status-api.sh`, `bin/status-worker.sh`, `bin/rollback-api.sh`, `bin/rollback-worker.sh`, `bin/health.sh`, and `bin/verify.sh`; make the smallest safe shared rollback-state fix so both local rollback helpers can run, execute them, rerun health and verify, and stop there. End with Outcome, Verification Evidence, Risks, Next Improvement.

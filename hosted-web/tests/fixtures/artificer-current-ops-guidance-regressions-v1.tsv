@@ -1,0 +1,3 @@
+task_id	scenario	prompt
+slow-start-startup-probe	slow-start-api	Investigate this bounded current ops guidance question in the workspace. Use `./bin/state-check.sh` for local state and the current official guidance at __DOC_URL__. Do not edit files. Return exactly five lines: Local State, Current Guidance, Operational Decision, Root Cause, Next Change. The answer must name the deployment file and the startupProbe decision.
+dependency-overload-readiness	dependency-overload-api	Run `./bin/state-check.sh`, then combine the local state with the current official guidance at __DOC_URL__. No file edits. Return exactly five lines: Local State, Current Guidance, Operational Decision, Root Cause, Next Change. The answer must name readinessProbe and the service-endpoint behavior.

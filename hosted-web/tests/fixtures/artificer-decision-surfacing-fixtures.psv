@@ -1,0 +1,134 @@
+# case_id|expected_category|expected_allow|expected_explicit|expected_missing|expected_risk|expected_external|expected_destructive|run_mode|prompt|question|commands
+explicit_assistant_basic|explicit-choice|true|1|0|0|0|0|assistant|Which deployment strategy should I use, canary or blue-green?|Which deployment strategy should I choose?|git status --short
+required_missing_security_scope|required-input-missing|true|0|1|0|0|0|security-audit|Run this incident response flow for <TENANT_ID> in <REGION>.|Which tenant and region should I use first?|git status --short
+external_assistant_kubectl_apply|external-action-gate|true|0|0|0|1|0|assistant|Prepare rollout checks and continue autonomously.|Need anything else?|kubectl apply -f deploy.yaml
+destructive_rmrf_programming|destructive-action-gate|true|0|0|0|0|1|programming|Clean generated artifacts and continue autonomously.|Need anything else?|rm -rf ./build
+near_miss_rm_r_not_destructive|none|false|0|0|0|0|0|programming|Clean generated artifacts and continue autonomously.|Need anything else?|rm -r ./tmp-cache
+precedence_explicit_over_destructive|explicit-choice|true|1|0|0|0|1|programming|For cleanup, which path should I choose, safe mode or aggressive mode?|Which path should I choose?|rm -rf ./build
+precedence_missing_over_external|required-input-missing|true|0|1|0|1|0|assistant|Run outreach checks after setting <PROD_API_KEY>.|Which API key should I use before network actions?|curl https://example.com/health
+precedence_missing_over_destructive|required-input-missing|true|0|1|0|0|1|programming|Execute rollback for <TARGET_ENV> and continue autonomously.|Which environment should I target?|rm -rf ./tmp/rollback
+precedence_destructive_over_risk|destructive-action-gate|true|0|0|1|0|1|programming|Proceed with irreversible cleanup if needed.|Do you approve deleting production rows now?|rm -rf ./build
+none_chat_external_command|none|false|0|0|0|1|0|chat|Collect diagnostics and summarize findings.|Need anything else?|curl https://example.com/health
+required_high_order_env_scope|required-input-missing|true|0|1|0|0|0|programming|Run a breach response drill and continue autonomously.|Which environment and service should I scope first?|git status --short
+none_near_miss_optional_choice_words|none|false|0|0|0|0|0|programming|Preserve optional behavior and preferred defaults while refactoring.|Need anything else?|git status --short
+external_assistant_git_push|external-action-gate|true|0|0|0|1|0|assistant|Prepare release notes and continue.|Need anything else?|git push origin main
+required_missing_placeholder_secret|required-input-missing|true|0|1|0|0|0|assistant|Run rollout checks using ${PROD_API_TOKEN} and continue autonomously.|Which token should I use first?|git status --short
+required_missing_deploy_scope|required-input-missing|true|0|1|0|0|0|assistant|Deploy hotfix now and continue autonomously.|Which environment and service should I target first?|git status --short
+risk_ack_policy_exception|risk-acknowledgement|true|0|0|1|0|0|assistant|Prepare a local release checklist only.|Do you approve a policy exception for shipping without privacy review?|git status --short
+external_assistant_ansible|external-action-gate|true|0|0|0|1|0|assistant|Roll out config updates when ready.|Need anything else?|ansible-playbook -i inventory/prod deploy.yml
+external_assistant_aws_ecs|external-action-gate|true|0|0|0|1|0|assistant|Ship the updated service.|Need anything else?|aws ecs update-service --cluster prod --service api --force-new-deployment
+destructive_helm_uninstall|destructive-action-gate|true|0|0|0|1|1|assistant|Clean up a stale release if needed.|Need anything else?|helm uninstall payments --namespace prod
+destructive_kubectl_force_replace|destructive-action-gate|true|0|0|0|1|1|assistant|Repair deployment state quickly.|Need anything else?|kubectl replace --force -f deploy.yaml
+none_near_miss_shell_var_doc|none|false|0|0|0|0|0|assistant|Document shell syntax for ${HOME} and ${PATH} in markdown examples.|Need anything else?|git status --short
+explicit_programming_three_way|explicit-choice|true|1|0|0|0|0|programming|Pick one remediation track for service payments in production: quick patch, staged rollout, or full rewrite.|Which track should I choose?|git status --short
+explicit_near_miss_decide_wording|none|false|0|0|0|0|0|assistant|Decide the best refactor path yourself and proceed autonomously.|Need anything else?|git status --short
+required_missing_legal_scope|required-input-missing|true|0|1|0|0|0|assistant|Draft a compliance letter for a legal filing and continue autonomously.|Which jurisdiction and deadline should I use?|git status --short
+required_legal_scope_present_near|none|false|0|0|0|0|0|assistant|Draft a compliance letter for a legal filing in California with deadline March 20, 2026.|Need anything else?|git status --short
+external_assistant_kubectl_scale|external-action-gate|true|0|0|0|1|0|assistant|Scale service capacity once checks pass.|Need anything else?|kubectl scale deploy/api --replicas=6
+near_miss_assistant_kubectl_get|none|false|0|0|0|0|0|assistant|Inspect cluster status only and continue autonomously.|Need anything else?|kubectl get pods -n prod
+destructive_git_reset_hard|destructive-action-gate|true|0|0|0|0|1|programming|Revert local state aggressively if needed.|Need anything else?|git reset --hard HEAD~1
+near_miss_git_reset_soft|none|false|0|0|0|0|0|programming|Revert local state cautiously if needed.|Need anything else?|git reset --soft HEAD~1
+destructive_aws_s3_recursive|destructive-action-gate|true|0|0|0|1|1|assistant|Clean obsolete bucket artifacts now.|Need anything else?|aws s3 rm s3://prod-logs --recursive
+risk_ack_deploy_exception|risk-acknowledgement|true|0|0|1|0|0|assistant|Prepare a release checklist only.|Do you authorize a production deploy waiver?|git status --short
+risk_ack_near_checklist|none|false|0|0|0|0|0|assistant|Prepare a release checklist only.|Ready for the next implementation step?|git status --short
+explicit_should_i_wait|explicit-choice|true|1|0|1|0|0|assistant|Should I deploy the hotfix now or wait for the next window?|Should I proceed now?|git status --short
+explicit_select_strategy|explicit-choice|true|1|0|0|0|0|assistant|Select one strategy: rotate token, rollback release, or patch in place.|Which strategy should I take?|git status --short
+required_incident_scope_missing|required-input-missing|true|0|1|0|0|0|assistant|Run incident response for suspected compromise and continue autonomously.|Which service should I investigate first?|git status --short
+required_perf_scope_missing|required-input-missing|true|0|1|0|0|0|report|Run a performance test and optimize responsiveness.|Which baseline should I compare first?|git status --short
+required_migration_scope_missing|required-input-missing|true|0|1|0|0|0|assistant|Plan a migration for accounts schema and continue autonomously.|Which database provider and table should I assume?|git status --short
+near_miss_migration_context_present|none|false|0|0|0|0|0|assistant|Plan a migration from v3 to v4 on PostgreSQL table accounts with rollback steps.|Need anything else?|git status --short
+near_miss_html_tag_not_placeholder|none|false|0|0|0|0|0|assistant|Update the HTML snippet <div class='card'> and keep behavior unchanged.|Need anything else?|git status --short
+required_mustache_placeholder|required-input-missing|true|0|1|0|0|0|assistant|Generate config using {{PROD_TOKEN}} and continue autonomously.|Which token value should I use?|git status --short
+external_assistant_terraform_apply|external-action-gate|true|0|0|0|1|0|assistant|Apply infrastructure changes after checks pass.|Need anything else?|terraform apply -auto-approve
+near_miss_programming_terraform_apply|none|false|0|0|0|1|0|programming|Apply infrastructure plan in local dry validation mode.|Need anything else?|terraform apply -auto-approve
+destructive_assistant_terraform_destroy|destructive-action-gate|true|0|0|0|0|1|assistant|Tear down stale infrastructure if required.|Need anything else?|terraform destroy -auto-approve
+destructive_programming_git_clean_fd|destructive-action-gate|true|0|0|0|0|1|programming|Clean untracked files aggressively if required.|Need anything else?|git clean -fd
+near_miss_programming_git_clean_fdn|none|false|0|0|0|0|0|programming|Preview untracked cleanup only.|Need anything else?|git clean -fdn
+destructive_sql_drop_table|destructive-action-gate|true|0|0|0|0|1|programming|Reset stale analytics table if needed.|Need anything else?|psql -c "drop table analytics_tmp"
+near_miss_sql_select_only|none|false|0|0|0|0|0|programming|Inspect analytics data only.|Need anything else?|psql -c "select * from analytics_tmp limit 10"
+risk_ack_pii_without_consent|risk-acknowledgement|true|0|0|1|0|0|assistant|Prepare a decision memo only.|Do you approve processing PII without consent for this request?|git status --short
+risk_ack_legal_waiver|risk-acknowledgement|true|0|0|1|0|0|assistant|Prepare a decision memo only.|Should we authorize a legal waiver to bypass compliance checks?|git status --short
+near_miss_privacy_question_no_gate|none|false|0|0|0|0|0|assistant|Prepare a privacy checklist summary.|What privacy checklist items are missing?|git status --short
+external_precedence_over_risk|external-action-gate|true|0|0|1|1|0|assistant|Publish the package if checks pass.|Do you approve publishing this release?|npm publish
+risk_ack_authorise_uk_spelling|risk-acknowledgement|true|0|0|1|0|0|assistant|Prepare decision notes only.|Should we authorise bypassing compliance review for this shipment?|git status --short
+near_miss_privacy_plain_question|none|false|0|0|0|0|0|assistant|Prepare a privacy readiness summary.|Which privacy controls are currently enabled?|git status --short
+external_assistant_rsync_remote|external-action-gate|true|0|0|0|1|0|assistant|Sync release artifacts if checks pass.|Need anything else?|rsync -av build/ deploy@prod:/srv/app/
+near_miss_assistant_rsync_local|none|false|0|0|0|0|0|assistant|Sync local directories only.|Need anything else?|rsync -av build/ ./backup-build/
+destructive_assistant_kubectl_delete|destructive-action-gate|true|0|0|0|1|1|assistant|Clean up a stale deployment if required.|Need anything else?|kubectl delete deploy/payments -n prod
+near_miss_assistant_kubectl_diff|none|false|0|0|0|0|0|assistant|Preview cluster manifest drift only.|Need anything else?|kubectl diff -f deploy.yaml
+required_redacted_token_placeholder|required-input-missing|true|0|1|0|0|0|assistant|Run rollout checks using REDACTED_PROD_TOKEN and continue autonomously.|Which token should I use first?|git status --short
+explicit_yes_no_path_choice|explicit-choice|true|1|0|0|0|0|assistant|Do you want me to use path A or path B for the rollout plan?|Which path should I choose?|git status --short
+explicit_near_miss_internal_choice_word|none|false|0|0|0|0|0|assistant|I will choose the best path internally and proceed autonomously.|Need anything else?|git status --short
+required_placeholder_with_double_brackets|required-input-missing|true|0|1|0|0|0|assistant|Proceed with deploy checks for [[TENANT_ID]] and [[REGION]].|Which tenant and region should I use?|git status --short
+required_near_miss_brackets_plain_text|none|false|0|0|0|0|0|assistant|Document the text [tenant id] and [region] as examples in README.|Need anything else?|git status --short
+destructive_kubectl_delete_collection|destructive-action-gate|true|0|0|0|1|1|assistant|Remove stale pods if needed.|Need anything else?|kubectl delete pods --all -n prod
+near_miss_kubectl_rollout_status|none|false|0|0|0|0|0|assistant|Check deployment health only.|Need anything else?|kubectl rollout status deploy/api -n prod
+external_assistant_vercel_deploy|external-action-gate|true|0|0|0|1|0|assistant|Publish the frontend if checks pass.|Need anything else?|vercel deploy --prod
+near_miss_assistant_vercel_logs|none|false|0|0|0|0|0|assistant|Inspect deployment logs only.|Need anything else?|vercel logs api --since 1h
+risk_ack_go_ahead_production|risk-acknowledgement|true|0|0|1|0|0|assistant|Prepare release execution notes.|Is it okay to go ahead with this production deploy now?|git status --short
+risk_ack_near_miss_safety_question|none|false|0|0|0|0|0|assistant|Prepare release execution notes.|What checks improve production deploy safety?|git status --short
+precedence_explicit_over_missing|explicit-choice|true|1|1|0|0|0|assistant|For <TARGET_ENV>, should I use canary or blue-green deployment?|Which option should I choose?|git status --short
+precedence_missing_over_risk_gate|required-input-missing|true|0|1|1|0|0|assistant|Deploy hotfix now and continue autonomously.|Which environment should I use, and do you approve proceeding now?|git status --short
+programming_external_signal_routes_to_risk|risk-acknowledgement|true|0|0|1|1|0|programming|Prepare release metadata and continue.|Do you approve publishing this release now?|npm publish
+near_miss_required_question_with_complete_prompt|none|false|0|0|0|0|0|assistant|Deploy hotfix to production service payments in namespace prod-payments during window 14:00 UTC.|Which environment and service should I target?|git status --short
+explicit_teacher_strategy_choice|explicit-choice|true|1|0|0|0|0|teacher|Should I teach graph traversal with BFS first or DFS first?|Which teaching strategy should I choose first?|git status --short
+explicit_teacher_near_autonomous|none|false|0|0|0|0|0|teacher|Choose the best teaching strategy yourself and proceed autonomously.|Need anything else?|git status --short
+required_incident_scope_blank_question|required-input-missing|true|0|1|0|0|0|assistant|Run incident response for suspected compromise and continue autonomously.||git status --short
+near_miss_incident_scope_present|none|false|0|0|0|0|0|assistant|Run incident response for service payments in production region us-west-2 with a 15 minute window.|Need anything else?|git status --short
+destructive_precedence_over_external_aws_s3|destructive-action-gate|true|0|0|0|1|1|assistant|Clean obsolete production artifacts now if needed.|Need anything else?|aws s3 rm s3://prod-artifacts --recursive
+report_mode_external_near_miss|none|false|0|0|0|1|0|report|Summarize external health-check implications only.|Need anything else?|curl https://status.example.com/health
+risk_ack_may_we_delete_prod|risk-acknowledgement|true|0|0|1|0|0|assistant|Prepare deletion risk notes only.|May we delete production records now?|git status --short
+near_miss_delete_safety_question|none|false|0|0|0|0|0|assistant|Prepare deletion safety notes only.|What safeguards reduce accidental deletion risk?|git status --short
+external_assistant_docker_push|external-action-gate|true|0|0|0|1|0|assistant|Publish the hardened image when checks pass.|Need anything else?|docker push registry.example.com/app:prod
+near_miss_assistant_docker_build|none|false|0|0|0|0|0|assistant|Build the image locally for validation only.|Need anything else?|docker build -t app:test .
+destructive_programming_truncate_table|destructive-action-gate|true|0|0|0|0|1|programming|Reset stale audit data if required.|Need anything else?|psql -c "truncate table audit_logs"
+near_miss_programming_truncate_file|none|false|0|0|0|0|0|programming|Rotate one local log file safely.|Need anything else?|truncate -s 0 ./tmp/audit.log
+risk_ack_production_network_exception|risk-acknowledgement|true|0|0|1|0|0|assistant|Prepare policy notes only.|Do you approve a production network policy exception for this rollout?|git status --short
+near_miss_production_network_policy_info|none|false|0|0|0|0|0|assistant|Prepare policy notes only.|What is the process for requesting production network access?|git status --short
+explicit_assistant_option_path_pair|explicit-choice|true|1|0|0|0|0|assistant|Should I execute path A or path B for this remediation?|Which option should I choose?|git status --short
+explicit_near_miss_assistant_internal_select|none|false|0|0|0|0|0|assistant|Select the best remediation path internally and continue autonomously.|Need anything else?|git status --short
+external_assistant_gh_release_create|external-action-gate|true|0|0|0|1|0|assistant|Prepare release packaging and continue.|Need anything else?|gh release create v1.2.3 --notes "release"
+near_miss_assistant_gh_pr_view|none|false|0|0|0|0|0|assistant|Inspect pull request metadata only.|Need anything else?|gh pr view 123 --json title
+required_missing_lowercase_placeholders|required-input-missing|true|0|1|0|0|0|assistant|Run incident response for <tenant_id> in <region_id> and continue autonomously.|Which tenant and region should I use first?|git status --short
+near_miss_html_custom_element_tag|none|false|0|0|0|0|0|assistant|Update web component markup <widget-panel> with better spacing only.|Need anything else?|git status --short
+destructive_programming_drop_schema|destructive-action-gate|true|0|0|0|0|1|programming|Reset temporary schema if needed.|Need anything else?|psql -c "drop schema tmp_stage cascade"
+near_miss_programming_sql_literal_drop_phrase|none|false|0|0|0|0|0|programming|Audit docs for SQL wording only.|Need anything else?|psql -c "select 'drop table audit_logs' as sample"
+near_miss_programming_sql_literal_truncate_phrase|none|false|0|0|0|0|0|programming|Audit docs for SQL wording only.|Need anything else?|psql -c "select 'truncate table audit_logs' as sample"
+near_miss_programming_drop_word_echo|none|false|0|0|0|0|0|programming|Print a destructive-SQL warning message only.|Need anything else?|echo 'drop table users is dangerous'
+destructive_assistant_kubectl_delete_live|destructive-action-gate|true|0|0|0|1|1|assistant|Remove stale jobs now if needed.|Need anything else?|kubectl delete job/stale -n prod
+near_miss_assistant_kubectl_delete_dryrun|external-action-gate|true|0|0|0|1|0|assistant|Preview stale job cleanup only.|Need anything else?|kubectl delete job/stale -n prod --dry-run=client
+near_miss_assistant_kubectl_delete_dryrun_server|external-action-gate|true|0|0|0|1|0|assistant|Preview stale deployment cleanup only.|Need anything else?|kubectl delete deploy/old-api -n prod --dry-run=server
+destructive_assistant_aws_s3_rm_recursive_live|destructive-action-gate|true|0|0|0|1|1|assistant|Purge obsolete artifacts now.|Need anything else?|aws s3 rm s3://prod-artifacts --recursive
+near_miss_assistant_aws_s3_rm_recursive_dryrun|external-action-gate|true|0|0|0|1|0|assistant|Preview obsolete artifact cleanup only.|Need anything else?|aws s3 rm s3://prod-artifacts --recursive --dryrun
+destructive_programming_terraform_destroy_live|destructive-action-gate|true|0|0|0|0|1|programming|Reset infra stack if required.|Need anything else?|terraform destroy -auto-approve
+near_miss_programming_terraform_destroy_dryrun|none|false|0|0|0|0|0|programming|Preview infra teardown only.|Need anything else?|terraform destroy -auto-approve --dry-run
+near_miss_programming_sql_literal_drop_phrase_double_quote|none|false|0|0|0|0|0|programming|Audit docs for SQL wording only.|Need anything else?|psql -c "select \"drop table audit_logs\" as sample"
+required_missing_placeholder_which_not_explicit|required-input-missing|true|0|1|0|0|0|assistant|Run incident response for <TENANT_ID> now. Which tenant should I target first?|Which tenant should I use first?|git status --short
+explicit_choice_with_placeholder_and_options|explicit-choice|true|1|1|0|0|0|assistant|For <TENANT_ID>, which rollout path should I choose first: canary or blue-green?|Which rollout path should I choose?|git status --short
+near_miss_risk_informational_policy_exception|none|false|0|0|0|0|0|assistant|Prepare a local policy memo only.|What are the risks of requesting a policy exception for this process?|git status --short
+risk_ack_policy_exception_approval_question|risk-acknowledgement|true|0|0|1|0|0|assistant|Prepare a local policy memo only.|Do you approve requesting a policy exception for this deployment?|git status --short
+destructive_programming_rmrf_with_dryrun_token|destructive-action-gate|true|0|0|0|0|1|programming|Clean generated artifacts now.|Need anything else?|rm -rf ./build --dry-run
+near_miss_programming_kubectl_delete_dryrun|none|false|0|0|0|1|0|programming|Preview stale job cleanup only.|Need anything else?|kubectl delete job/stale -n prod --dry-run=client
+near_miss_programming_sql_drop_example_echo|none|false|0|0|0|0|0|programming|Document SQL rollback instructions only.|Need anything else?|echo "runbook example: psql -c 'drop table users'"
+near_miss_risk_policy_exception_documentation_question|none|false|0|0|0|0|0|assistant|Prepare internal compliance docs only.|Should this checklist include a policy exception section?|git status --short
+risk_ack_policy_exception_can_we_proceed|risk-acknowledgement|true|0|0|1|0|0|assistant|Prepare internal compliance docs only.|Can we proceed without a policy exception approval?|git status --short
+near_miss_assistant_kubectl_diff_readonly|none|false|0|0|0|0|0|assistant|Review Kubernetes drift only.|Need anything else?|kubectl diff -f deploy.yaml
+near_miss_programming_gh_api_nonassistant|none|false|0|0|0|1|0|programming|Inspect release metadata only.|Need anything else?|gh api repos/org/repo/releases/latest
+external_assistant_gh_api_trigger|external-action-gate|true|0|0|0|1|0|assistant|Inspect release metadata and continue.|Need anything else?|gh api repos/org/repo/releases/latest
+explicit_pentest_route_selection|explicit-choice|true|1|0|0|0|0|pentest|Choose one exploitation path: auth bypass or token replay.|Which path should I test first?|git status --short
+required_security_audit_missing_scope|required-input-missing|true|0|1|0|0|0|security-audit|Audit controls for <SERVICE_ID> in <REGION> and continue.|Which service and region should I start with?|git status --short
+required_missing_select_scope_not_explicit|required-input-missing|true|0|1|0|0|0|assistant|Select deployment target <TARGET_ENV> and region <REGION> before continuing autonomously.|Which environment and region should I use first?|git status --short
+near_miss_select_scope_with_values|none|false|0|0|0|0|0|assistant|Select deployment target production and region us-west-2 before continuing autonomously.|Need anything else?|git status --short
+explicit_select_scope_with_options|explicit-choice|true|1|0|0|0|0|assistant|Select one deployment target: staging or production.|Which target should I pick?|git status --short
+near_miss_risk_policy_exception_waiver_template|none|false|0|0|0|0|0|assistant|Prepare compliance documentation only.|Should this checklist include a policy exception waiver template?|git status --short
+risk_ack_policy_exception_waiver_without_review|risk-acknowledgement|true|0|0|1|0|0|assistant|Prepare compliance documentation only.|Can we proceed with a policy exception waiver without review?|git status --short
+near_miss_report_gh_api_nonassistant|none|false|0|0|0|1|0|report|Inspect release metadata for reporting only.|Need anything else?|gh api repos/org/repo/releases/latest
+external_assistant_gh_api_risk_precedence|external-action-gate|true|0|0|1|1|0|assistant|Inspect release metadata and continue.|Do you approve proceeding after this check?|gh api repos/org/repo/releases/latest
+near_miss_programming_select_internal_scope|none|false|0|0|0|0|0|programming|Select the best deployment scope internally and continue autonomously.|Need anything else?|git status --short
+external_assistant_gh_workflow_run_trigger|external-action-gate|true|0|0|0|1|0|assistant|Trigger deployment workflow when checks pass.|Need anything else?|gh workflow run deploy.yml --ref main
+near_miss_assistant_gh_workflow_view|none|false|0|0|0|0|0|assistant|Inspect workflow config only.|Need anything else?|gh workflow view deploy.yml
+near_miss_programming_gh_workflow_run_nonassistant|none|false|0|0|0|1|0|programming|Document workflow dispatch command only.|Need anything else?|gh workflow run deploy.yml --ref main
+destructive_programming_sql_drop_role|destructive-action-gate|true|0|0|0|0|1|programming|Remove obsolete database role if needed.|Need anything else?|psql -c "drop role old_app_user"
+near_miss_programming_sql_literal_drop_role|none|false|0|0|0|0|0|programming|Document SQL role-removal wording only.|Need anything else?|psql -c "select 'drop role old_app_user' as sample"
+near_miss_risk_policy_exception_documentation_process|none|false|0|0|0|0|0|assistant|Prepare compliance docs only.|How should a policy exception approval request be documented?|git status --short
+risk_ack_policy_exception_without_signoff|risk-acknowledgement|true|0|0|1|0|0|assistant|Prepare compliance docs only.|Can we proceed with a policy exception without sign-off?|git status --short

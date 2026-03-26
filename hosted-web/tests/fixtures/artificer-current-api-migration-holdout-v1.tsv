@@ -1,0 +1,2 @@
+task_id	scenario	prompt
+from-orm-current-guard	from-orm-migration	Run `./bin/repo-scan.sh`, then ground the answer in the current official migration guide at __DOC_URL__. Do not edit files. Return exactly five lines starting with Repo Evidence, Current Source, Migration Change, Root Cause, Next Change. The answer must name the old ORM-loading API and the current `from_attributes=True` requirement.

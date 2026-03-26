@@ -1,0 +1,3 @@
+task_id	mode	budget	prompt
+context-miss-01	assistant	quick	Investigate a login outage in this workspace. Prior notes claim the critical code is in src/ghost/handler.ts and config/prod/secrets.yml, but those paths may be wrong. Use command evidence, avoid path-assumption thrash, and produce a diagnosis with fallback.
+context-miss-02	report	quick	Prepare a remediation memo for flaky release checks. You may see references to scripts/deploy/prod-check.sh and ops/pipelines/main.yaml that might not exist. Recover with discovery-first commands and provide verified next actions.

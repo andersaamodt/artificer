@@ -1,0 +1,2 @@
+task_id	scenario	prompt
+session-cache-handoff	session-cache-handoff	Run `./bin/primary-check.sh` first for the bounded initial tool path. If it fails, recover by handing off to `./bin/fallback-check.sh` and the current guidance at __DOC_URL__. Do not edit files. Return exactly five lines starting with Primary Tool Failure, Fallback Evidence, Web Evidence, Root Cause, Next Action.

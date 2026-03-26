@@ -1,0 +1,3 @@
+task_id	scenario	prompt
+chart-bars	regional-backlog-bars	Inspect the attached dashboard chart screenshot. Use only visible chart or table evidence. Respond in exactly four lines starting with `Finding:`, `Evidence:`, `Risk:`, and `Next Check:`. Identify the main anomaly or most important takeaway, cite the visual cue that proves it, explain the operational risk, and name one concrete next check.
+chart-table	activation-funnel-table	Inspect the attached dashboard chart screenshot. Use only visible chart or table evidence. Respond in exactly four lines starting with `Finding:`, `Evidence:`, `Risk:`, and `Next Check:`. Identify the main anomaly or most important takeaway, cite the visual cue that proves it, explain the operational risk, and name one concrete next check.

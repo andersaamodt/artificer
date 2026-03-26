@@ -1,0 +1,4 @@
+task_id	prompt
+single-worker	This workspace contains one bounded worker only. Use `./bin/ps.sh`, `./bin/stop.sh`, `./bin/start.sh`, `./bin/health.sh`, and `./bin/rollback.sh`. Make the smallest safe worker fix, rerun health, keep rollback intact, and end with Outcome, Verification Evidence, Risks, Next Improvement.
+stuck-worker	Repair the bounded stuck worker without widening to broader supervisor work. Use the worker helpers to inspect, stop, start, verify, and preserve rollback; end with Outcome, Verification Evidence, Risks, Next Improvement.
+background-process	Do the bounded background-process recovery only. Use `./bin/ps.sh`, `./bin/stop.sh`, `./bin/start.sh`, `./bin/health.sh`, and `./bin/rollback.sh`. Keep rollback ready, make the smallest safe worker fix, and end with Outcome, Verification Evidence, Risks, Next Improvement.

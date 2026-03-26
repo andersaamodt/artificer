@@ -1,0 +1,3 @@
+task_id	browser	profile	required_checks
+safari-core	safari	core	
+safari-intelligence	safari	intelligence	
