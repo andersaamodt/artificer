@@ -154,15 +154,16 @@ cmd_ensure_site() {
     fi
   done
 
-  # Keep CGI runtime scripts in sync even when a full site rebuild is skipped.
+  # Keep CGI runtime tree in sync even when a full site rebuild is skipped.
   if [ -d "$hosted/cgi" ]; then
     mkdir -p "$SITE/cgi"
-    for cgi_name in artificer-api mode-runtime-lib.sh multi-agent-lib.sh; do
-      if [ -f "$hosted/cgi/$cgi_name" ]; then
-        cp "$hosted/cgi/$cgi_name" "$SITE/cgi/$cgi_name"
-        chmod +x "$SITE/cgi/$cgi_name" 2>/dev/null || true
-      fi
-    done
+    find "$SITE/cgi" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+    cp -R "$hosted/cgi/." "$SITE/cgi/"
+    find "$SITE/cgi" -type f \( -name '*.sh' -o -name 'artificer-api' \) -exec chmod +x {} + 2>/dev/null || true
+    if [ ! -L "$SITE/cgi-bin" ]; then
+      rm -rf "$SITE/cgi-bin"
+      ln -s cgi "$SITE/cgi-bin"
+    fi
   fi
 
   needs_build=0

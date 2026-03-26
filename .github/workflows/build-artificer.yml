@@ -28,6 +28,8 @@ jobs:
           sh tools/release/test-startup-boot-order.sh
           sh tools/release/test-wizardry-runtime-fallback.sh
           sh tools/release/test-automations-pane-layout.sh
+          sh tools/release/test-site-cgi-runtime-sync.sh
+          sh tools/release/test-local-paths-script-site-isolation.sh
           git diff --exit-code
       - name: Build Linux bundle (${{ matrix.arch }})
         run: sh tools/release/build-release-bundle.sh dist
@@ -51,6 +53,8 @@ jobs:
           sh tools/release/test-startup-boot-order.sh
           sh tools/release/test-wizardry-runtime-fallback.sh
           sh tools/release/test-automations-pane-layout.sh
+          sh tools/release/test-site-cgi-runtime-sync.sh
+          sh tools/release/test-local-paths-script-site-isolation.sh
           git diff --exit-code
       - name: Build macOS artifacts
         run: sh tools/release/build-macos-app.sh dist

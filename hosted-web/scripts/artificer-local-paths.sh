@@ -10,6 +10,8 @@ ARTIFICER_GUI_PLAYWRIGHT_BROWSERS_DIR=${ARTIFICER_GUI_PLAYWRIGHT_BROWSERS_DIR:-$
 ARTIFICER_GUI_PLAYWRIGHT_VENV_DIR=${ARTIFICER_GUI_PLAYWRIGHT_VENV_DIR:-$ARTIFICER_CACHE_ROOT/venv-gui-playwright}
 ARTIFICER_GUI_TMP_SITES_DIR=${ARTIFICER_GUI_TMP_SITES_DIR:-$ARTIFICER_CACHE_ROOT/tmp-gui-probe-sites}
 ARTIFICER_DOC_EXPORTS_DIR=${ARTIFICER_DOC_EXPORTS_DIR:-$ARTIFICER_STATE_ROOT/doc-exports}
+ARTIFICER_SCRIPT_SITES_ROOT=${ARTIFICER_SCRIPT_SITES_ROOT:-$ARTIFICER_STATE_ROOT/sites}
+ARTIFICER_SCRIPT_SITE_NAME=${ARTIFICER_SCRIPT_SITE_NAME:-artificer-assay}
 
 artificer_local_path_is_inside_repo() {
   candidate_path=$1
@@ -36,6 +38,7 @@ artificer_local_normalize_artifact_paths() {
   default_playwright_venv="$ARTIFICER_CACHE_ROOT/venv-gui-playwright"
   default_tmp_sites="$ARTIFICER_CACHE_ROOT/tmp-gui-probe-sites"
   default_doc_exports="$ARTIFICER_STATE_ROOT/doc-exports"
+  default_script_sites_root="$ARTIFICER_STATE_ROOT/sites"
 
   if artificer_local_path_is_inside_repo "$ARTIFICER_ASSAY_REPORTS_DIR"; then
     ARTIFICER_ASSAY_REPORTS_DIR="$default_assay_reports"
@@ -55,10 +58,21 @@ artificer_local_normalize_artifact_paths() {
   if artificer_local_path_is_inside_repo "$ARTIFICER_DOC_EXPORTS_DIR"; then
     ARTIFICER_DOC_EXPORTS_DIR="$default_doc_exports"
   fi
+  if artificer_local_path_is_inside_repo "$ARTIFICER_SCRIPT_SITES_ROOT"; then
+    ARTIFICER_SCRIPT_SITES_ROOT="$default_script_sites_root"
+  fi
 }
 
 artificer_ensure_local_dirs() {
   artificer_local_normalize_artifact_paths
+  if [ -z "${WIZARDRY_SITES_DIR:-}" ]; then
+    WIZARDRY_SITES_DIR="$ARTIFICER_SCRIPT_SITES_ROOT"
+  fi
+  if [ -z "${WIZARDRY_SITE_NAME:-}" ]; then
+    WIZARDRY_SITE_NAME="$ARTIFICER_SCRIPT_SITE_NAME"
+  fi
+  export WIZARDRY_SITES_DIR WIZARDRY_SITE_NAME
+
   mkdir -p \
     "$ARTIFICER_STATE_ROOT" \
     "$ARTIFICER_CACHE_ROOT" \
@@ -67,5 +81,6 @@ artificer_ensure_local_dirs() {
     "$ARTIFICER_GUI_PLAYWRIGHT_BROWSERS_DIR" \
     "$ARTIFICER_GUI_PLAYWRIGHT_VENV_DIR" \
     "$ARTIFICER_GUI_TMP_SITES_DIR" \
-    "$ARTIFICER_DOC_EXPORTS_DIR"
+    "$ARTIFICER_DOC_EXPORTS_DIR" \
+    "$ARTIFICER_SCRIPT_SITES_ROOT"
 }
