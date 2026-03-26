@@ -7,32 +7,8 @@ export PATH
 
 BACKEND_SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
 BACKEND_ROOT=$(CDPATH= cd -- "$BACKEND_SCRIPT_DIR/.." && pwd -P)
-release_common="$BACKEND_ROOT/tools/release/common.sh"
-if [ -f "$release_common" ]; then
-  # shellcheck disable=SC1090
-  . "$release_common"
-fi
-
-wiz="${WIZARDRY_DIR:-$HOME/.wizardry}"
-iw="$wiz/spells/.imps/sys/invoke-wizardry"
-if [ ! -f "$iw" ]; then
-  if command -v ensure_wizardry_installed >/dev/null 2>&1; then
-    wiz=$(ensure_wizardry_installed "$HOME" 2>/dev/null || printf '%s' "$HOME/.wizardry")
-  else
-    wiz="$HOME/.wizardry"
-  fi
-  iw="$wiz/spells/.imps/sys/invoke-wizardry"
-fi
-[ -f "$iw" ] || {
-  printf 'wizardry runtime missing (%s)\n' "$iw" >&2
-  exit 127
-}
-WIZARDRY_DIR="$wiz"
-export WIZARDRY_DIR
-. "$iw" >/dev/null 2>&1 || {
-  printf 'wizardry runtime initialization failed\n' >&2
-  exit 127
-}
+. "$BACKEND_SCRIPT_DIR/lib/wizardry_runtime.sh"
+wizardry_bootstrap_or_install "$BACKEND_ROOT" "$HOME" || exit 127
 
 ACTION=${1-}
 APP_DIR=${2-}

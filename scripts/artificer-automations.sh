@@ -5,47 +5,17 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
 APP_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)
 API_SCRIPT="$APP_ROOT/hosted-web/cgi/artificer-api"
 
+# Shared shell helpers.
+. "$SCRIPT_DIR/lib/http_form.sh"
+. "$SCRIPT_DIR/lib/kv.sh"
+. "$SCRIPT_DIR/lib/lockdir.sh"
+
 STATE_ROOT=${ARTIFICER_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/artificer}
 LOCK_DIR="$STATE_ROOT/automation-worker.lock"
 DAEMON_LABEL="com.artificer.automations"
 SYSTEMD_TIMER="artificer-automations.timer"
 SYSTEMD_SERVICE="artificer-automations.service"
 CRON_MARKER="ARTIFICER_AUTOMATIONS"
-
-json_only() {
-  awk 'BEGIN{p=0} /^\{/ {p=1} p {print}'
-}
-
-urlenc() {
-  python3 - "$1" <<'PY'
-import sys
-import urllib.parse
-value = sys.argv[1] if len(sys.argv) > 1 else ""
-print(urllib.parse.quote(value, safe=""))
-PY
-}
-
-form_body() {
-  out=""
-  while [ "$#" -ge 2 ]; do
-    key=$1
-    val=$2
-    shift 2
-    pair="$(urlenc "$key")=$(urlenc "$val")"
-    if [ -n "$out" ]; then
-      out="$out&$pair"
-    else
-      out="$pair"
-    fi
-  done
-  printf '%s' "$out"
-}
-
-kv_get() {
-  key=$1
-  text=${2-}
-  printf '%s\n' "$text" | awk -F'=' -v k="$key" '$1==k {sub($1"=", "", $0); print; exit}'
-}
 
 log_file_path() {
   printf '%s' "$STATE_ROOT/automation-daemon.log"
@@ -70,33 +40,11 @@ EOF
 }
 
 acquire_lock() {
-  mkdir -p "$STATE_ROOT"
-  if mkdir "$LOCK_DIR" 2>/dev/null; then
-    printf '%s\n' "$$" > "$LOCK_DIR/pid"
-    return 0
-  fi
-
-  prior_pid=$(sed -n '1p' "$LOCK_DIR/pid" 2>/dev/null || true)
-  case "$prior_pid" in
-    ''|*[!0-9]*)
-      prior_pid=""
-      ;;
-  esac
-
-  if [ -n "$prior_pid" ] && kill -0 "$prior_pid" 2>/dev/null; then
-    return 1
-  fi
-
-  rm -rf "$LOCK_DIR" 2>/dev/null || true
-  if mkdir "$LOCK_DIR" 2>/dev/null; then
-    printf '%s\n' "$$" > "$LOCK_DIR/pid"
-    return 0
-  fi
-  return 1
+  lockdir_acquire "$LOCK_DIR" "$$"
 }
 
 release_lock() {
-  rm -rf "$LOCK_DIR" 2>/dev/null || true
+  lockdir_release "$LOCK_DIR"
 }
 
 queue_targets_from_state_json() {
