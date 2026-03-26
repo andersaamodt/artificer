@@ -38,6 +38,16 @@ if ! grep -q 'installedSizeLabel = "Size unavailable";' "$render_file"; then
   exit 1
 fi
 
+if ! grep -q 'description = "Available local model";' "$render_file"; then
+  printf '%s\n' "available model fallback description missing from UI rendering" >&2
+  exit 1
+fi
+
+if ! grep -q 'sizeLabel = "Size unavailable";' "$render_file"; then
+  printf '%s\n' "available model fallback size label missing from UI rendering" >&2
+  exit 1
+fi
+
 if ! grep -q "<span class='catalog-size catalog-size-right'>" "$render_file"; then
   printf '%s\n' "installed model size badge markup missing from UI rendering" >&2
   exit 1

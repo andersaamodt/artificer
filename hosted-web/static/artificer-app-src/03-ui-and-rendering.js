@@ -2247,7 +2247,13 @@
         }
         var modelParts = parseModelDisplay(modelName);
         var description = trim(entry.description || "");
+        if (!description) {
+          description = "Available local model";
+        }
         var sizeLabel = formatCatalogSizeLabel(entry.size_gb);
+        if (!sizeLabel) {
+          sizeLabel = "Size unavailable";
+        }
         var isInstalled = isModelInstalled(modelName);
         var installJob = currentModelInstallFor(modelName);
         var isInstalling = !!(installJob && String(installJob.status || "") === "running");
@@ -2266,15 +2272,11 @@
           html += "<span class='model-meta-inline'>" + escHtml(modelParts.meta) + "</span>";
         }
         html += "</span>";
-        if (description) {
-          html += "<span class='catalog-description'>" + escHtml(description) + "</span>";
-        }
+        html += "<span class='catalog-description'>" + escHtml(description) + "</span>";
         html += "</div>";
         html += "<div class='catalog-actions'>";
         html += "<button type='button' class='catalog-install-btn" + (installDisabled ? " disabled" : "") + "' data-action='install-model' data-model-name='" + escAttr(modelName) + "'" + (installDisabled ? " disabled" : "") + ">" + escHtml(installLabel) + "</button>";
-        if (sizeLabel) {
-          html += "<span class='catalog-size catalog-size-right'>" + escHtml(sizeLabel) + "</span>";
-        }
+        html += "<span class='catalog-size catalog-size-right'>" + escHtml(sizeLabel) + "</span>";
         html += "</div>";
         html += "</div>";
       }
