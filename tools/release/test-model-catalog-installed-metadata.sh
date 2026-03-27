@@ -4,8 +4,8 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 runtime_file="$repo_root/hosted-web/cgi/lib/runtime/40g-state-ui.sh"
-render_file="$repo_root/hosted-web/static/artificer-app-src/03-ui-and-rendering.js"
-events_file="$repo_root/hosted-web/static/artificer-app-src/08-event-bindings-and-boot.js"
+render_file="$repo_root/hosted-web/static/artificer-app-modules/03-ui-and-rendering.js"
+events_file="$repo_root/hosted-web/static/artificer-app-modules/08-event-bindings-and-boot.js"
 index_file="$repo_root/hosted-web/pages/index.md"
 
 for file_path in "$runtime_file" "$render_file" "$events_file" "$index_file"; do

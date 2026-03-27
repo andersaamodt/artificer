@@ -5,9 +5,9 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 
 index_file="$repo_root/hosted-web/pages/index.md"
-render_file="$repo_root/hosted-web/static/artificer-app-src/04-dictation-wave.js"
-tree_file="$repo_root/hosted-web/static/artificer-app-src/03-ui-and-rendering.js"
-events_file="$repo_root/hosted-web/static/artificer-app-src/08-event-bindings-and-boot.js"
+render_file="$repo_root/hosted-web/static/artificer-app-modules/04-dictation-wave.js"
+tree_file="$repo_root/hosted-web/static/artificer-app-modules/03-ui-and-rendering.js"
+events_file="$repo_root/hosted-web/static/artificer-app-modules/08-event-bindings-and-boot.js"
 style_file="$repo_root/hosted-web/static/style.css"
 
 for file_path in "$index_file" "$render_file" "$tree_file" "$events_file" "$style_file"; do

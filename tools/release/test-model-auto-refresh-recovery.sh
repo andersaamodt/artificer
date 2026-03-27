@@ -3,7 +3,7 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
-app_src="$repo_root/hosted-web/static/artificer-app-src/08-event-bindings-and-boot.js"
+app_src="$repo_root/hosted-web/static/artificer-app-modules/08-event-bindings-and-boot.js"
 
 if [ ! -f "$app_src" ]; then
   printf '%s\n' "missing boot source at $app_src" >&2

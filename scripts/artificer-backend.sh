@@ -154,7 +154,7 @@ cmd_ensure_site() {
     fi
   done
 
-  bundle_src_dir="$SITE/site/static/artificer-app-src"
+  bundle_src_dir="$SITE/site/static/artificer-app-modules"
   bundle_out="$SITE/site/static/artificer-app.js"
   needs_frontend_bundle=0
   [ -f "$bundle_out" ] || needs_frontend_bundle=1
@@ -163,13 +163,13 @@ cmd_ensure_site() {
   fi
   if [ "$needs_frontend_bundle" -eq 1 ]; then
     tmp_bundle=$(mktemp "${TMPDIR:-/tmp}/artificer-app-bundle.XXXXXX")
-    for part in "$bundle_src_dir"/*.js; do
-      [ -f "$part" ] || continue
-      cat "$part" >> "$tmp_bundle"
+    for module_file in "$bundle_src_dir"/*.js; do
+      [ -f "$module_file" ] || continue
+      cat "$module_file" >> "$tmp_bundle"
     done
     if [ ! -s "$tmp_bundle" ]; then
       rm -f "$tmp_bundle"
-      printf '%s\n' "frontend source parts missing at $bundle_src_dir" >&2
+      printf '%s\n' "frontend source modules missing at $bundle_src_dir" >&2
       exit 1
     fi
     mv "$tmp_bundle" "$bundle_out"

@@ -43,7 +43,7 @@ printf '%s\n' "$public_files" \
 printf '\n%s\n' '== internal naming audit =='
 {
   printf '%s\n' "$gui_files"
-  find "$repo_root/hosted-web/static/artificer-app-src" -type f -name '*.js' 2>/dev/null | sed "s#^$repo_root/##"
+  find "$repo_root/hosted-web/static/artificer-app-modules" -type f -name '*.js' 2>/dev/null | sed "s#^$repo_root/##"
 } \
   | sed '/^$/d' \
   | sed "s#^#$repo_root/#" \

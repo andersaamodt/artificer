@@ -24,11 +24,10 @@ Runtime helper:
 sh -n scripts/artificer-backend.sh
 ```
 
-Frontend bundle:
+Frontend modules and bundle:
 
 ```sh
 sh tools/build-artificer-app.sh
-sh tools/build-cgi-shards.sh
 sh tools/release/run-release-tests.sh
 ```
 

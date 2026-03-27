@@ -6,8 +6,6 @@ repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 
 generated_paths='
 hosted-web/static/artificer-app.js
-hosted-web/cgi/actions/run_parts/run-part-004.sh
-hosted-web/cgi/lib/reasoning/30c-reasoning-contracts.sh
 '
 
 for rel_path in $generated_paths; do
@@ -26,27 +24,36 @@ reasoning_programming="$repo_root/hosted-web/cgi/lib/30-reasoning-programming.sh
 index_md="$repo_root/hosted-web/pages/index.md"
 index_html="$repo_root/hosted-web/pages/index.html"
 backend_file="$repo_root/scripts/artificer-backend.sh"
+run_module="$repo_root/hosted-web/cgi/actions/run_parts/run-part-004.sh"
+reasoning_module="$repo_root/hosted-web/cgi/lib/reasoning/30c-reasoning-contracts.sh"
 
-if ! grep -q 'run-part-004-src/' "$run_action"; then
-  printf '%s\n' "run action does not load run-part-004 source shards" >&2
+for canonical_file in "$run_module" "$reasoning_module"; do
+  if [ ! -f "$canonical_file" ]; then
+    printf '%s\n' "missing canonical runtime module: $canonical_file" >&2
+    exit 1
+  fi
+done
+
+if ! grep -q 'run-part-004.sh' "$run_action"; then
+  printf '%s\n' "run action does not load canonical run-part-004 module" >&2
   exit 1
 fi
-if grep -q 'run-part-004.sh' "$run_action"; then
-  printf '%s\n' "run action still references generated run-part-004.sh" >&2
+if grep -q 'run-part-004-src/' "$run_action"; then
+  printf '%s\n' "run action still references deprecated run-part-004 source fragments" >&2
   exit 1
 fi
 
-if ! grep -q '30c-reasoning-contracts-src/' "$reasoning_programming"; then
-  printf '%s\n' "reasoning programming runtime does not load 30c source shards" >&2
+if ! grep -q '30c-reasoning-contracts.sh' "$reasoning_programming"; then
+  printf '%s\n' "reasoning runtime does not load canonical 30c reasoning contracts module" >&2
   exit 1
 fi
-if grep -q '30c-reasoning-contracts.sh' "$reasoning_programming"; then
-  printf '%s\n' "reasoning programming runtime still references generated 30c-reasoning-contracts.sh" >&2
+if grep -q '30c-reasoning-contracts-src/' "$reasoning_programming"; then
+  printf '%s\n' "reasoning runtime still references deprecated 30c source fragments" >&2
   exit 1
 fi
 
-if ! grep -q '/static/artificer-app-src/' "$index_md"; then
-  printf '%s\n' "index.md does not load frontend source shards" >&2
+if ! grep -q '/static/artificer-app-modules/' "$index_md"; then
+  printf '%s\n' "index.md does not load frontend source modules" >&2
   exit 1
 fi
 if ! grep -q 'loadBundleFallback' "$index_md"; then
@@ -54,8 +61,8 @@ if ! grep -q 'loadBundleFallback' "$index_md"; then
   exit 1
 fi
 
-if ! grep -q '/static/artificer-app-src/' "$index_html"; then
-  printf '%s\n' "index.html does not load frontend source shards" >&2
+if ! grep -q '/static/artificer-app-modules/' "$index_html"; then
+  printf '%s\n' "index.html does not load frontend source modules" >&2
   exit 1
 fi
 if ! grep -q 'loadBundleFallback' "$index_html"; then
@@ -63,8 +70,8 @@ if ! grep -q 'loadBundleFallback' "$index_html"; then
   exit 1
 fi
 
-if ! grep -q 'bundle_src_dir=.*artificer-app-src' "$backend_file"; then
-  printf '%s\n' "backend ensure-site flow does not build runtime bundle from source shards" >&2
+if ! grep -q 'bundle_src_dir=.*artificer-app-modules' "$backend_file"; then
+  printf '%s\n' "backend ensure-site flow does not build runtime bundle from source modules" >&2
   exit 1
 fi
 if ! grep -q 'bundle_out=.*artificer-app.js' "$backend_file"; then
@@ -72,4 +79,4 @@ if ! grep -q 'bundle_out=.*artificer-app.js' "$backend_file"; then
   exit 1
 fi
 
-printf '%s\n' "ok generated artifact policy: source shards are canonical and generated outputs are untracked"
+printf '%s\n' "ok generated artifact policy: canonical source modules are tracked and frontend bundle output is untracked"
