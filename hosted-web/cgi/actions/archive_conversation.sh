@@ -13,14 +13,12 @@
 
     ws_dir=$(workspace_dir_for "$workspace_id")
     if [ ! -d "$ws_dir" ]; then
-      rm -f "$queue_explicit_skills_override_file" "$request_explicit_skills_file" "$prompt_explicit_skills_file" "$explicit_skills_file"
       emit_error "workspace not found"
       exit 0
     fi
 
     conv_dir=$(conversation_dir_for "$workspace_id" "$conversation_id")
     if [ ! -d "$conv_dir" ]; then
-      rm -f "$queue_explicit_skills_override_file" "$request_explicit_skills_file" "$prompt_explicit_skills_file" "$explicit_skills_file"
       emit_error "conversation not found"
       exit 0
     fi
