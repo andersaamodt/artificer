@@ -669,15 +669,19 @@
           var delta = String(response.delta || "");
           var taskStatus = normalizeRunTaskStatusSnapshot(response.task_status);
           streamOffset = Number(response.offset || streamOffset || 0);
-          if (delta && pendingEvent) {
+          if (delta) {
             sawUpdate = true;
+          }
+          if (delta && pendingEvent) {
             pendingEvent.stream_text = String(pendingEvent.stream_text || "") + delta;
             pendingEvent.last_activity_at = new Date().toISOString();
             persistRunEventsSoon();
             scheduleStreamRender();
           }
-          if (taskStatus && pendingEvent) {
+          if (taskStatus) {
             sawUpdate = true;
+          }
+          if (taskStatus && pendingEvent) {
             pendingEvent.task_status = taskStatus;
             pendingEvent.last_activity_at = new Date().toISOString();
             persistRunEventsSoon();
