@@ -608,7 +608,11 @@
     var streamOffset = 0;
     var streamPollActive = true;
     var streamPollBusy = false;
+    var streamPollPromise = null;
     var streamRenderTimer = null;
+    var streamDrainPromise = null;
+    var streamPollIntervalMs = 350;
+    var streamPollTimeoutMs = 12000;
     var streamTimerKey = workspaceId + "::" + conversationId;
 
     if (runStreamPollTimers[streamTimerKey]) {
@@ -616,15 +620,19 @@
       delete runStreamPollTimers[streamTimerKey];
     }
 
-    function stopStreamPoll() {
+    function requestStreamPollStop() {
       streamPollActive = false;
-      if (streamRenderTimer) {
-        clearTimeout(streamRenderTimer);
-        streamRenderTimer = null;
-      }
       if (runStreamPollTimers[streamTimerKey]) {
         clearInterval(runStreamPollTimers[streamTimerKey]);
         delete runStreamPollTimers[streamTimerKey];
+      }
+    }
+
+    function stopStreamPoll() {
+      requestStreamPollStop();
+      if (streamRenderTimer) {
+        clearTimeout(streamRenderTimer);
+        streamRenderTimer = null;
       }
     }
 
@@ -638,46 +646,81 @@
       }, 120);
     }
 
-    function pollStreamOnce() {
-      if (!streamPollActive || streamPollBusy) {
-        return;
+    function pollStreamOnce(options) {
+      var force = !!(options && options.force);
+      if ((!streamPollActive && !force) || streamPollBusy) {
+        if (streamPollPromise && typeof streamPollPromise.then === "function") {
+          return streamPollPromise;
+        }
+        return Promise.resolve(false);
       }
       streamPollBusy = true;
-      apiGet("run_stream_poll", {
+      var sawUpdate = false;
+      streamPollPromise = apiGet("run_stream_poll", {
         workspace_id: workspaceId,
         conversation_id: conversationId,
         stream_session: streamSession,
         offset: String(streamOffset)
-      }, { timeoutMs: 12000 })
+      }, { timeoutMs: streamPollTimeoutMs })
         .then(function (response) {
           if (!response || !response.success) {
-            return;
+            return false;
           }
           var delta = String(response.delta || "");
           var taskStatus = normalizeRunTaskStatusSnapshot(response.task_status);
           streamOffset = Number(response.offset || streamOffset || 0);
           if (delta && pendingEvent) {
+            sawUpdate = true;
             pendingEvent.stream_text = String(pendingEvent.stream_text || "") + delta;
             pendingEvent.last_activity_at = new Date().toISOString();
             persistRunEventsSoon();
             scheduleStreamRender();
           }
           if (taskStatus && pendingEvent) {
+            sawUpdate = true;
             pendingEvent.task_status = taskStatus;
             pendingEvent.last_activity_at = new Date().toISOString();
             persistRunEventsSoon();
             scheduleStreamRender();
           }
+          return sawUpdate;
         })
         .catch(function () {
-          return null;
+          return false;
         })
         .finally(function () {
           streamPollBusy = false;
+          streamPollPromise = null;
         });
+      return streamPollPromise;
     }
 
-    runStreamPollTimers[streamTimerKey] = setInterval(pollStreamOnce, 1200);
+    function drainStreamAndStop() {
+      if (streamDrainPromise && typeof streamDrainPromise.then === "function") {
+        return streamDrainPromise;
+      }
+      requestStreamPollStop();
+      streamDrainPromise = Promise.resolve()
+        .then(function () {
+          return pollStreamOnce({ force: true });
+        })
+        .then(function (firstChanged) {
+          if (firstChanged) {
+            return pollStreamOnce({ force: true });
+          }
+          return false;
+        })
+        .catch(function () {
+          return false;
+        })
+        .finally(function () {
+          stopStreamPoll();
+          streamDrainPromise = null;
+        });
+      return streamDrainPromise;
+    }
+
+    runStreamPollTimers[streamTimerKey] = setInterval(pollStreamOnce, streamPollIntervalMs);
     pollStreamOnce();
 
     return apiPost("run", {
@@ -705,7 +748,6 @@
       run_message_anchor: String(Math.max(0, Math.floor(Number(runAnchor || 0))))
     })
       .then(function (response) {
-        stopStreamPoll();
         if (!response.success) {
           throw new Error(response.error || "Run failed");
         }
@@ -893,7 +935,6 @@
           });
       })
       .catch(function (err) {
-        stopStreamPoll();
         setAwaitingApprovalState(workspaceId, conversationId, false);
         var errorMessage = trim(String(err && err.message ? err.message : err || ""));
         if (pendingEvent) {
@@ -926,43 +967,49 @@
         throw err;
       })
       .finally(function () {
-        stopStreamPoll();
-        var currentStatus = pendingEvent ? String(pendingEvent.status || "") : "";
-        var needsAssistantDeliveryWatch = (
-          currentStatus === "done" &&
-          !conversationHasAssistantAfterAnchor(workspaceId, conversationId, runAnchor)
-        );
-        if (assistantDeliveryCleared) {
-          if (pendingEvent && Number(pendingEvent.awaiting_assistant || 0) > 0) {
-            pendingEvent.awaiting_assistant = 0;
-            persistRunEventsSoon();
-          }
-          renderUi();
-          return;
-        }
-        if (needsAssistantDeliveryWatch) {
-          if (pendingEvent && Number(pendingEvent.awaiting_assistant || 0) < 1) {
-            pendingEvent.awaiting_assistant = 1;
-            persistRunEventsSoon();
-          }
-          startAssistantDeliveryWatch(
-            workspaceId,
-            conversationId,
-            runAnchor,
-            pendingEvent && pendingEvent.id ? String(pendingEvent.id) : "",
-            assistantDeliveryFallbackAttempts
-          );
-          renderUi();
-          return;
-        }
-        if (pendingEvent && Number(pendingEvent.awaiting_assistant || 0) > 0) {
-          pendingEvent.awaiting_assistant = 0;
-          persistRunEventsSoon();
-        }
-        if (clearAssistantDeliveryPending(workspaceId, conversationId)) {
-          assistantDeliveryCleared = true;
-          renderUi();
-        }
+        return drainStreamAndStop()
+          .catch(function () {
+            return null;
+          })
+          .then(function () {
+            var currentStatus = pendingEvent ? String(pendingEvent.status || "") : "";
+            var needsAssistantDeliveryWatch = (
+              currentStatus === "done" &&
+              !conversationHasAssistantAfterAnchor(workspaceId, conversationId, runAnchor)
+            );
+            if (assistantDeliveryCleared) {
+              if (pendingEvent && Number(pendingEvent.awaiting_assistant || 0) > 0) {
+                pendingEvent.awaiting_assistant = 0;
+                persistRunEventsSoon();
+              }
+              renderUi();
+              return;
+            }
+            if (needsAssistantDeliveryWatch) {
+              if (pendingEvent && Number(pendingEvent.awaiting_assistant || 0) < 1) {
+                pendingEvent.awaiting_assistant = 1;
+                persistRunEventsSoon();
+              }
+              startAssistantDeliveryWatch(
+                workspaceId,
+                conversationId,
+                runAnchor,
+                pendingEvent && pendingEvent.id ? String(pendingEvent.id) : "",
+                assistantDeliveryFallbackAttempts
+              );
+              renderUi();
+              return;
+            }
+            if (pendingEvent && Number(pendingEvent.awaiting_assistant || 0) > 0) {
+              pendingEvent.awaiting_assistant = 0;
+              persistRunEventsSoon();
+            }
+            if (clearAssistantDeliveryPending(workspaceId, conversationId)) {
+              assistantDeliveryCleared = true;
+              renderUi();
+            }
+            return null;
+          });
       });
   }
 
