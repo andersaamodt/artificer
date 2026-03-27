@@ -17,9 +17,9 @@ Done criteria:
 
 ## 2) Frontend Modularity
 
-- [ ] Break large frontend module files into smaller concern-oriented files.
-- [ ] Keep deterministic build order and preserve runtime behavior.
-- [ ] Ensure each new file has a clear boundary (boot, storage, render, API sync, automations, settings, events).
+- [x] Break large frontend module files into smaller concern-oriented files.
+- [x] Keep deterministic build order and preserve runtime behavior.
+- [x] Ensure each new file has a clear boundary (boot, storage, render, API sync, automations, settings, events).
 
 Done criteria:
 
