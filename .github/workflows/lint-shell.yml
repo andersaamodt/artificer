@@ -1,0 +1,31 @@
+name: Shell Lint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  shell-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install checkbashisms
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y devscripts
+      - name: Run shell lint (syntax + checkbashisms)
+        run: sh tools/release/lint-shell.sh
+      - name: Run shell safety checks
+        run: sh tools/release/test-executable-shell-strict-mode.sh

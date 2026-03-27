@@ -50,9 +50,9 @@ Done criteria:
 
 ## 5) CI Lint Rigor
 
-- [ ] Add dedicated shell lint workflow(s) for `checkbashisms` and shell safety checks.
-- [ ] Keep build workflow focused on build + release tests.
-- [ ] Ensure lint failures block regressions.
+- [x] Add dedicated shell lint workflow(s) for `checkbashisms` and shell safety checks.
+- [x] Keep build workflow focused on build + release tests.
+- [x] Ensure lint failures block regressions.
 
 Done criteria:
 
