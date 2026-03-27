@@ -5,8 +5,9 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 action_file="$repo_root/hosted-web/cgi/actions/add_workspace.sh"
 index_file="$repo_root/hosted-web/pages/index.md"
+browse_file="$repo_root/hosted-web/static/artificer-app-modules/07b-settings-and-actions-tail.js"
 
-for file_path in "$action_file" "$index_file"; do
+for file_path in "$action_file" "$index_file" "$browse_file"; do
   if [ ! -f "$file_path" ]; then
     printf '%s\n' "missing required file: $file_path" >&2
     exit 1
@@ -46,6 +47,16 @@ if [ -z "$cancel_line" ] || [ -z "$add_line" ]; then
 fi
 if [ "$cancel_line" -ge "$add_line" ]; then
   printf '%s\n' "workspace modal action order should be Cancel then Add Project" >&2
+  exit 1
+fi
+
+if ! grep -q 'apiGet("pick_workspace", {}, { timeoutMs: 900000 })' "$browse_file"; then
+  printf '%s\n' "workspace browse picker should use an extended timeout for native folder selection" >&2
+  exit 1
+fi
+
+if ! grep -q 'picked.path || picked.workspace_path || picked.selected_path' "$browse_file"; then
+  printf '%s\n' "workspace browse picker should accept canonical and alias path keys from picker response" >&2
   exit 1
 fi
 

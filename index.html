@@ -230,7 +230,6 @@
     }
     var hostBootReadySent = false;
     var bootFailed = false;
-    var bootRevealTimer = null;
 
     function statusEl() {
       return document.getElementById('status');
@@ -292,10 +291,6 @@
 
     function onAppFrameReady() {
       bootFailed = false;
-      if (bootRevealTimer) {
-        clearTimeout(bootRevealTimer);
-        bootRevealTimer = null;
-      }
       setStatus('Artificer ready.', false);
       revealBootUi();
     }
@@ -486,10 +481,6 @@
         iframe.src = url;
       } catch (error) {
         bootFailed = true;
-        if (bootRevealTimer) {
-          clearTimeout(bootRevealTimer);
-          bootRevealTimer = null;
-        }
         iframe.src = 'about:blank';
         setStatus('Error: ' + String(error && error.message ? error.message : error), true);
         document.documentElement.classList.remove('artificer-booting');
@@ -504,11 +495,6 @@
     }
 
     window.addEventListener('DOMContentLoaded', function () {
-      bootRevealTimer = setTimeout(function () {
-        if (!bootFailed) {
-          setStatus('Still preparing local runtime…', false);
-        }
-      }, 12000);
       setTimeout(boot, 20);
     });
   </script>

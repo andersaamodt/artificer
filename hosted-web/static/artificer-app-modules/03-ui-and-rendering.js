@@ -1785,9 +1785,6 @@
 
         html += "<section class='" + groupClass + "' data-workspace-id='" + escHtml(workspaceId) + "'>";
         html += "<div class='workspace-row' " + (allowManualReorder ? "draggable='true' data-drag-type='workspace' " : "") + "data-action='select-workspace' data-workspace-id='" + escHtml(workspaceId) + "'>";
-        if (allowManualReorder) {
-          html += "<button type='button' class='workspace-drag-handle' data-action='workspace-drag-handle' data-workspace-id='" + escHtml(workspaceId) + "' aria-label='Drag to reorder project' title='Drag to reorder project'>&#8942;&#8942;</button>";
-        }
         html += folderIcon;
         html += "<button type='button' class='workspace-caret' data-action='toggle-workspace' data-workspace-id='" + escHtml(workspaceId) + "' aria-label='Toggle' title='Expand or collapse project'><span aria-hidden='true'>&rsaquo;</span></button>";
         var bgResidentsCount = Number(workspace.multi_agent_background_residents || 0);
@@ -1845,10 +1842,7 @@
             indicatorClass += " pending";
           }
 
-          html += "<div class='conversation-row" + activeConv + "' " + (allowManualReorder ? "draggable='true' data-drag-type='conversation' " : "") + "role='button' tabindex='0' title='Open thread' data-action='select-conversation' data-workspace-id='" + escHtml(workspaceId) + "' data-conversation-id='" + escHtml(conversation.id) + "'>";
-          if (allowManualReorder) {
-            html += "<button type='button' class='conversation-drag-handle' data-action='conversation-drag-handle' data-workspace-id='" + escHtml(workspaceId) + "' data-conversation-id='" + escHtml(conversation.id) + "' aria-label='Drag to reorder thread' title='Drag to reorder thread'>&#8942;&#8942;</button>";
-          }
+          html += "<div class='conversation-row" + activeConv + "' role='button' tabindex='0' title='Open thread' data-action='select-conversation' data-workspace-id='" + escHtml(workspaceId) + "' data-conversation-id='" + escHtml(conversation.id) + "'>";
           html += "<span class='" + indicatorClass + "' aria-hidden='true'></span>";
           var statusMarkup = conversationStatusPillMarkup(workspaceId, conversation, queueRunning);
           var threadTooltip = threadFolderPathTooltip(workspaceId);

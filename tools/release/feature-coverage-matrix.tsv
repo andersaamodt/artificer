@@ -1,0 +1,26 @@
+# feature_id	behavior_contract	tests
+feature_coverage_matrix	Feature coverage matrix references every release behavioral test script.	test-feature-coverage-matrix.sh
+startup_bridge_timeouts	Desktop startup bridge actions use explicit timeout policy.	test-startup-bridge-timeouts.sh
+startup_boot_order	Desktop startup prefers ready-port detect/start before ensure-site fallback.	test-startup-boot-order.sh
+splash_status_contract	Splash keeps a stable preparing message until ready or error.	test-splash-status-contract.sh
+workspace_add_modal_and_tilde	Add Project supports ~/ expansion and modal action order.	test-add-workspace-tilde-and-modal-actions.sh
+workspace_browse_path_population	Browse and directory picker populate folder path and placeholder.	test-workspace-browse-path-population.sh
+workspace_drag_surface	Project rows drag from row surface (not drag-handle controls).	test-workspace-drag-surface-behavior.sh
+automations_layout	Automations appears as left-nav section with right-pane workflow.	test-automations-pane-layout.sh
+model_catalog_metadata	Model rows preserve description optionality and always include size metadata.	test-model-catalog-installed-metadata.sh
+model_auto_refresh_recovery	Model list refresh loop recovers after failed fetch cycles.	test-model-auto-refresh-recovery.sh
+ui_state_durable_backend	Desktop preferences persist via backend UI state API.	test-ui-state-durable-backend.sh
+frontend_module_bundle_order	Runtime module fragments remain bounded and deterministically bundled.	test-frontend-module-fragment-order.sh
+form_control_width_policy	Short form controls avoid global full-width anti-patterns.	test-form-controls-no-global-fullwidth.sh
+site_cgi_runtime_sync	Site runtime ensure-site sync keeps cgi runtime tree and links consistent.	test-site-cgi-runtime-sync.sh
+cgi_action_surface_contract	Public CGI action surface remains allowlisted and bounded.	test-cgi-action-surface-contract.sh
+backend_modular_loaders	Large backend runtimes load from modular shard directories.	test-backend-modular-loaders.sh
+wizardry_runtime_fallback	Runtime bootstrap falls back to home wizardry install safely.	test-wizardry-runtime-fallback.sh
+core_runtime_perl_fallback	Core runtime optional perl helpers have safe fallbacks.	test-core-runtime-perl-fallback.sh
+local_paths_script_isolation	Local paths and assay script site roots remain isolated from repo tree.	test-local-paths-script-site-isolation.sh
+generated_artifacts_policy	Generated artifacts are either ignored or regenerated from canonical sources.	test-generated-artifacts-policy.sh
+publish_surface_defaults	Public publish surface avoids local/private defaults.	test-publish-surface-neutral-defaults.sh
+third_party_notices_integrity	Third-party notices remain present and consistent.	test-third-party-notices.sh
+shell_strict_mode	Executable shell entrypoints enforce strict mode and safe PATH policy.	test-executable-shell-strict-mode.sh
+ci_shell_lint_workflow	CI includes shell lint workflow for release scripts.	test-ci-shell-lint-workflow.sh
+ci_release_suite_hook	CI runs full release test suite hook.	test-ci-workflow-runs-release-test-suite.sh

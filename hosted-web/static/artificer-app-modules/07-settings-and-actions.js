@@ -1871,12 +1871,6 @@
       saveSidebarSection("threads");
     }
 
-    if (action === "workspace-drag-handle" || action === "conversation-drag-handle") {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-
     if (action === "automation-toggle-label") {
       event.preventDefault();
       event.stopPropagation();

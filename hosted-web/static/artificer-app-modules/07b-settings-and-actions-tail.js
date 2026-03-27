@@ -471,17 +471,20 @@
       return;
     }
     event.stopPropagation();
-    var handle = event.target.closest("[data-action='workspace-drag-handle'], [data-action='conversation-drag-handle']");
-    if (!handle) {
-      event.preventDefault();
-      return;
-    }
     var row = event.target.closest(".workspace-row[data-drag-type='workspace'][data-workspace-id], .conversation-row[data-drag-type='conversation'][data-workspace-id][data-conversation-id]");
     if (!row) {
       event.preventDefault();
       return;
     }
     var dragType = String(row.getAttribute("data-drag-type") || "");
+    if (dragType !== "workspace") {
+      event.preventDefault();
+      return;
+    }
+    if (event.target.closest("button, a, input, select, textarea, label, [role='button']")) {
+      event.preventDefault();
+      return;
+    }
     var workspaceId = trim(String(row.getAttribute("data-workspace-id") || ""));
     var conversationId = trim(String(row.getAttribute("data-conversation-id") || ""));
     if (!workspaceId || (dragType === "conversation" && !conversationId)) {
@@ -671,7 +674,7 @@
     var browseStartedAt = Date.now();
     state.pickingWorkspace = true;
     state.awaitingDirPicker = false;
-    return apiGet("pick_workspace")
+    return apiGet("pick_workspace", {}, { timeoutMs: 900000 })
       .then(function (picked) {
         if (picked.success && picked.cancelled) {
           var elapsedMs = Date.now() - browseStartedAt;
@@ -681,9 +684,12 @@
           return;
         }
 
-        if (picked.success && picked.path) {
-          el.workspacePath.value = picked.path;
-          updateWorkspaceNamePlaceholderFromPath(picked.path);
+        var pickedPath = trim(String(
+          (picked && (picked.path || picked.workspace_path || picked.selected_path)) || ""
+        ));
+        if (picked.success && pickedPath) {
+          el.workspacePath.value = pickedPath;
+          updateWorkspaceNamePlaceholderFromPath(pickedPath);
           return;
         }
 
