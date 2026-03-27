@@ -22,6 +22,7 @@ If you want reference and structure:
 If you are preparing release or contributing:
 
 - [PUBLISHING_AUDIT.md](PUBLISHING_AUDIT.md)
+- [CODEBASE_HARDENING_CHECKLIST.md](CODEBASE_HARDENING_CHECKLIST.md)
 - [release-notes/v0.1.0.md](release-notes/v0.1.0.md)
 - [../CHANGELOG.md](../CHANGELOG.md)
 - [../CONTRIBUTING.md](../CONTRIBUTING.md)
