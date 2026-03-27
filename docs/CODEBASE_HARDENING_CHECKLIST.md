@@ -88,9 +88,9 @@ Done criteria:
 
 ## 9) Final Verification
 
-- [ ] Run full release suite.
-- [ ] Verify working tree cleanliness and repo size profile.
-- [ ] Re-audit for sensitive path/name leakage.
+- [x] Run full release suite.
+- [x] Verify working tree cleanliness and repo size profile.
+- [x] Re-audit for sensitive path/name leakage.
 
 Done criteria:
 
