@@ -1326,16 +1326,20 @@
         shouldShowFinalizingLine = true;
       }
     }
+    var shouldShowQueueProgressLine = isLatestRunEvent && (queueRunning || queuePending > 0);
+    var shouldShowQueueApprovalPause = isLatestRunEvent && queueAwaitingApproval;
+    var shouldShowQueueDecisionPause = isLatestRunEvent && queueAwaitingDecision;
+    var hasLatestQueueStatusLine = shouldShowQueueProgressLine || shouldShowQueueApprovalPause || shouldShowQueueDecisionPause;
     var completedSummaryLine = "";
-    if (!queueRunning && queuePending < 1 && !queueAwaitingApproval && !queueAwaitingDecision && !shouldShowFinalizingLine) {
+    if (!hasLatestQueueStatusLine && !shouldShowFinalizingLine) {
       completedSummaryLine = trim(runTraceSummaryLabel(event, false));
     }
     html = "<article class='" + runClass + " run-narrative'>";
-    if (queueRunning || queuePending > 0) {
+    if (shouldShowQueueProgressLine) {
       html += "<p class='run-line subtle'>Run step complete. Continuing...</p>";
-    } else if (queueAwaitingApproval) {
+    } else if (shouldShowQueueApprovalPause) {
       html += "<p class='run-line subtle'>Run paused. Awaiting command approval.</p>";
-    } else if (queueAwaitingDecision) {
+    } else if (shouldShowQueueDecisionPause) {
       html += "<p class='run-line subtle'>Run paused. Awaiting your decision.</p>";
     } else if (shouldShowFinalizingLine) {
       var finalizingAt = trim(String(event.finished_at || event.last_activity_at || event.started_at || ""));
@@ -1351,7 +1355,7 @@
       }
     }
     html += formatRunTrace(event, { defaultOpen: defaultCompletedTraceOpen });
-    if (!queueRunning && queuePending < 1 && !queueAwaitingApproval && !queueAwaitingDecision) {
+    if (!hasLatestQueueStatusLine) {
       html += formatRunChangesCard(event);
     }
     html += "</article>";
