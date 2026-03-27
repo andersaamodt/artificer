@@ -54,6 +54,9 @@
   var pendingOutgoingStorageKey = "artificer.pendingOutgoingByKey.v1";
   var workspaceOrderStorageKey = "artificer.workspaceOrder.v1";
   var conversationOrderStorageKey = "artificer.conversationOrderByWorkspace.v1";
+  var durableUiStateSeenConversationKey = "seen_conversation_updated";
+  var durableUiStateWorkspaceOrderKey = "workspace_order";
+  var durableUiStateConversationOrderKey = "conversation_order_by_workspace";
 
   function storageGet(key, fallback) {
     try {
@@ -84,6 +87,30 @@
     return Math.floor(parsed);
   }
 
+  function normalizeSeenConversationMap(source) {
+    var parsed = source && typeof source === "object" ? source : {};
+    var clean = {};
+    var keys = Object.keys(parsed);
+    for (var i = 0; i < keys.length; i += 1) {
+      var key = keys[i];
+      clean[key] = parseSeenUpdatedValue(parsed[key]);
+    }
+    return clean;
+  }
+
+  function saveSeenConversationState(nextMap, options) {
+    var clean = normalizeSeenConversationMap(nextMap);
+    try {
+      window.localStorage.setItem(seenConversationStorageKey, JSON.stringify(clean));
+    } catch (_err) {
+      // Local cache failures should not block backend durability writes.
+    }
+    if (!options || options.persistBackend !== false) {
+      queueDurableUiStateWrite(durableUiStateSeenConversationKey, clean);
+    }
+    return clean;
+  }
+
   function loadSeenConversationState() {
     var raw = "";
     try {
@@ -106,15 +133,7 @@
     if (!parsed || typeof parsed !== "object") {
       return { map: {}, hasSaved: true };
     }
-
-    var clean = {};
-    var keys = Object.keys(parsed);
-    for (var i = 0; i < keys.length; i += 1) {
-      var key = keys[i];
-      clean[key] = parseSeenUpdatedValue(parsed[key]);
-    }
-
-    return { map: clean, hasSaved: true };
+    return { map: normalizeSeenConversationMap(parsed), hasSaved: true };
   }
 
   function clipTextForStorage(value, maxChars) {
@@ -471,11 +490,13 @@
   }
 
   function saveWorkspaceOrderState(orderIds) {
+    var normalized = normalizeOrderedIdList(orderIds);
     try {
-      window.localStorage.setItem(workspaceOrderStorageKey, JSON.stringify(normalizeOrderedIdList(orderIds)));
+      window.localStorage.setItem(workspaceOrderStorageKey, JSON.stringify(normalized));
     } catch (_err) {
-      return;
+      // Local cache failures should not block backend durability writes.
     }
+    queueDurableUiStateWrite(durableUiStateWorkspaceOrderKey, normalized);
   }
 
   function loadConversationOrderState() {
@@ -531,8 +552,9 @@
     try {
       window.localStorage.setItem(conversationOrderStorageKey, JSON.stringify(clean));
     } catch (_err) {
-      return;
+      // Local cache failures should not block backend durability writes.
     }
+    queueDurableUiStateWrite(durableUiStateConversationOrderKey, clean);
   }
 
   function slugifyRoutePart(text) {

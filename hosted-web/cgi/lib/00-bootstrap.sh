@@ -48,6 +48,7 @@ dictation_shortcut_hold_file="$dictation_settings_dir/shortcut-hold"
 dictation_shortcut_toggle_file="$dictation_settings_dir/shortcut-toggle"
 dictation_prewarm_enabled_file="$dictation_settings_dir/prewarm-enabled"
 dictation_language_file="$dictation_settings_dir/language"
+ui_state_dir="$data_root/ui-state"
 state_light_cache_file="$data_root/state-light-cache.json"
 state_light_cache_revision_file="$data_root/state-light-cache.revision"
 state_revision_file="$data_root/state.revision"
@@ -69,6 +70,7 @@ mkdir -p "$automations_runtime_root"
 mkdir -p "$llm_settings_dir"
 mkdir -p "$self_improve_plugins_dir"
 mkdir -p "$dictation_settings_dir"
+mkdir -p "$ui_state_dir"
 mkdir -p "$ARTIFICER_ASSAY_REPORTS_DIR"
 mkdir -p "$ARTIFICER_ASSAY_RUNS_DIR"
 
@@ -266,4 +268,3 @@ set_llm_use_gpu_enabled() {
       ;;
   esac
 }
-

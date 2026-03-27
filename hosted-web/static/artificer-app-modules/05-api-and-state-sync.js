@@ -1342,9 +1342,15 @@
 
   function refreshAll() {
     setArtificerBootPhase("loading-state", "Loading projects and threads…");
-    return runWithRetry(function () {
-      return loadState({ fast: true, fresh: true, timeoutMs: 30000 });
-    }, 3, 220)
+    return hydrateDurableUiStateFromBackend()
+      .catch(function () {
+        return null;
+      })
+      .then(function () {
+        return runWithRetry(function () {
+          return loadState({ fast: true, fresh: true, timeoutMs: 30000 });
+        }, 3, 220);
+      })
       .then(function () {
         var activeConversationPromise;
         if (state.activeWorkspaceId && state.activeConversationId) {

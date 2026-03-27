@@ -267,6 +267,176 @@
     });
   }
 
+  var durableUiStateHydratePromise = null;
+  var durableUiStateHydrated = false;
+  var durableUiStateWriteQueue = {};
+  var durableUiStateWriteFlushTimer = null;
+  var durableUiStateWriteInFlight = false;
+
+  function parseDurableUiStateValue(rawValue) {
+    var raw = trim(String(rawValue || ""));
+    if (!raw) {
+      return null;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function flushDurableUiStateWrites() {
+    if (durableUiStateWriteInFlight) {
+      return;
+    }
+    var keys = Object.keys(durableUiStateWriteQueue);
+    if (!keys.length) {
+      return;
+    }
+    var batch = {};
+    for (var i = 0; i < keys.length; i += 1) {
+      batch[keys[i]] = durableUiStateWriteQueue[keys[i]];
+      delete durableUiStateWriteQueue[keys[i]];
+    }
+    durableUiStateWriteInFlight = true;
+    var chain = Promise.resolve();
+    keys.forEach(function (key) {
+      chain = chain.then(function () {
+        return apiPost("ui_state_set", {
+          key: key,
+          value: String(batch[key] || "")
+        }, { timeoutMs: 8000 }).catch(function () {
+          return null;
+        });
+      });
+    });
+    chain.finally(function () {
+      durableUiStateWriteInFlight = false;
+      if (Object.keys(durableUiStateWriteQueue).length) {
+        if (durableUiStateWriteFlushTimer) {
+          clearTimeout(durableUiStateWriteFlushTimer);
+        }
+        durableUiStateWriteFlushTimer = setTimeout(function () {
+          durableUiStateWriteFlushTimer = null;
+          flushDurableUiStateWrites();
+        }, 140);
+      }
+    });
+  }
+
+  function queueDurableUiStateWrite(key, value) {
+    var stateKey = trim(String(key || ""));
+    if (!stateKey) {
+      return;
+    }
+    var encoded = "";
+    try {
+      encoded = JSON.stringify(value);
+    } catch (_err) {
+      return;
+    }
+    durableUiStateWriteQueue[stateKey] = encoded;
+    if (durableUiStateWriteFlushTimer) {
+      return;
+    }
+    durableUiStateWriteFlushTimer = setTimeout(function () {
+      durableUiStateWriteFlushTimer = null;
+      flushDurableUiStateWrites();
+    }, 120);
+  }
+
+  function flushDurableUiStateWritesNow() {
+    if (durableUiStateWriteFlushTimer) {
+      clearTimeout(durableUiStateWriteFlushTimer);
+      durableUiStateWriteFlushTimer = null;
+    }
+    var keys = Object.keys(durableUiStateWriteQueue);
+    if (!keys.length) {
+      return;
+    }
+    if (typeof navigator !== "undefined" && navigator && typeof navigator.sendBeacon === "function") {
+      for (var i = 0; i < keys.length; i += 1) {
+        var key = keys[i];
+        var payload = new URLSearchParams();
+        payload.set("action", "ui_state_set");
+        payload.set("key", key);
+        payload.set("value", String(durableUiStateWriteQueue[key] || ""));
+        try {
+          navigator.sendBeacon("/cgi/artificer-api", payload);
+        } catch (_err) {
+          // Best effort only.
+        }
+        delete durableUiStateWriteQueue[key];
+      }
+      return;
+    }
+    flushDurableUiStateWrites();
+  }
+
+  function hydrateDurableUiStateFromBackend() {
+    if (durableUiStateHydrated) {
+      return Promise.resolve();
+    }
+    if (durableUiStateHydratePromise) {
+      return durableUiStateHydratePromise;
+    }
+
+    function fetchDurableKey(keyName) {
+      return apiGet("ui_state_get", { key: keyName }, { timeoutMs: 8000 }).then(function (response) {
+        if (!response || !response.success) {
+          return "";
+        }
+        return String(response.value || "");
+      }).catch(function () {
+        return "";
+      });
+    }
+
+    durableUiStateHydratePromise = Promise.all([
+      fetchDurableKey(durableUiStateSeenConversationKey),
+      fetchDurableKey(durableUiStateWorkspaceOrderKey),
+      fetchDurableKey(durableUiStateConversationOrderKey)
+    ]).then(function (values) {
+      var seenParsed = parseDurableUiStateValue(values[0]);
+      if (seenParsed && typeof seenParsed === "object" && !Array.isArray(seenParsed)) {
+        var seenMap = normalizeSeenConversationMap(seenParsed);
+        state.seenConversationUpdatedByKey = seenMap;
+        state.seenConversationBootstrapPending = Object.keys(seenMap).length < 1;
+        storageSet(seenConversationStorageKey, JSON.stringify(seenMap));
+      }
+
+      var workspaceParsed = parseDurableUiStateValue(values[1]);
+      if (Array.isArray(workspaceParsed)) {
+        var workspaceOrder = normalizeOrderedIdList(workspaceParsed);
+        state.workspaceOrderIds = workspaceOrder;
+        storageSet(workspaceOrderStorageKey, JSON.stringify(workspaceOrder));
+      }
+
+      var conversationParsed = parseDurableUiStateValue(values[2]);
+      if (conversationParsed && typeof conversationParsed === "object" && !Array.isArray(conversationParsed)) {
+        var normalizedConversationOrder = {};
+        var workspaceIds = Object.keys(conversationParsed);
+        for (var i = 0; i < workspaceIds.length; i += 1) {
+          var workspaceId = trim(String(workspaceIds[i] || ""));
+          if (!workspaceId) {
+            continue;
+          }
+          var orderedIds = normalizeOrderedIdList(conversationParsed[workspaceId]);
+          if (orderedIds.length) {
+            normalizedConversationOrder[workspaceId] = orderedIds;
+          }
+        }
+        state.conversationOrderIdsByWorkspace = normalizedConversationOrder;
+        storageSet(conversationOrderStorageKey, JSON.stringify(normalizedConversationOrder));
+      }
+    }).finally(function () {
+      durableUiStateHydrated = true;
+      durableUiStateHydratePromise = null;
+    });
+
+    return durableUiStateHydratePromise;
+  }
+
   function setControlPending(control, isPending, options) {
     var node = control && control.nodeType === 1 ? control : null;
     if (!node || !node.classList) {

@@ -707,6 +707,7 @@
       clearInterval(liveRunTickTimer);
       liveRunTickTimer = null;
     }
+    flushDurableUiStateWritesNow();
     persistPendingOutgoingNow();
     stopModelInstallPolling();
     stopModelAutoRefreshLoop();

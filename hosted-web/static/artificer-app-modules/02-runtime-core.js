@@ -334,14 +334,7 @@
   }
 
   function persistSeenConversationState() {
-    try {
-      window.localStorage.setItem(
-        seenConversationStorageKey,
-        JSON.stringify(state.seenConversationUpdatedByKey || {})
-      );
-    } catch (_err) {
-      return;
-    }
+    state.seenConversationUpdatedByKey = saveSeenConversationState(state.seenConversationUpdatedByKey || {});
   }
 
   function seenUpdatedForConversation(workspaceId, conversationId) {

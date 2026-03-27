@@ -39,9 +39,9 @@ Done criteria:
 
 ## 4) Desktop Durability Policy
 
-- [ ] Move durable desktop UI state away from browser-owned storage.
-- [ ] Add backend preference actions and file-backed storage.
-- [ ] Keep localStorage as non-durable fallback/cache only where needed.
+- [x] Move durable desktop UI state away from browser-owned storage.
+- [x] Add backend preference actions and file-backed storage.
+- [x] Keep localStorage as non-durable fallback/cache only where needed.
 
 Done criteria:
 
