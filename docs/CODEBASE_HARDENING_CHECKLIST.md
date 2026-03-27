@@ -28,9 +28,9 @@ Done criteria:
 
 ## 3) Unit Coverage Expansion
 
-- [ ] Add unit-style tests for key runtime behaviors (boot flow, storage rules, automations rendering, action contract assumptions).
-- [ ] Add tests for newly introduced module boundaries and loaders.
-- [ ] Keep release contract tests as integration safety net.
+- [x] Add unit-style tests for key runtime behaviors (boot flow, storage rules, automations rendering, action contract assumptions).
+- [x] Add tests for newly introduced module boundaries and loaders.
+- [x] Keep release contract tests as integration safety net.
 
 Done criteria:
 
