@@ -41,6 +41,26 @@ wait_with_timeout() {
   return 0
 }
 
+run_ensure_site() {
+  (
+    WEB_WIZARDRY_ROOT="$sites_root" \
+    WIZARDRY_SITES_DIR="$sites_root" \
+    XDG_STATE_HOME="$state_home" \
+    ARTIFICER_STATE_ROOT="$state_home/artificer" \
+    sh "$repo_root/artificer" ensure-site >/dev/null
+  ) &
+  ensure_pid=$!
+
+  if ! wait_with_timeout "$ensure_pid" 20; then
+    fail "ensure-site timed out after 20 seconds"
+  fi
+  ensure_rc=0
+  wait "$ensure_pid" || ensure_rc=$?
+  if [ "$ensure_rc" -ne 0 ]; then
+    fail "ensure-site exited non-zero (rc=$ensure_rc)"
+  fi
+}
+
 default_extra='workspace_id=missing-workspace&conversation_id=missing-conversation&automation_id=missing-automation&item_id=missing-item&stream_session=missing-session&session_id=missing-session'
 
 action_skip_reason() {
@@ -211,11 +231,7 @@ invoke_action() {
   validate_action_response "$action_name"
 }
 
-WEB_WIZARDRY_ROOT="$sites_root" \
-WIZARDRY_SITES_DIR="$sites_root" \
-XDG_STATE_HOME="$state_home" \
-ARTIFICER_STATE_ROOT="$state_home/artificer" \
-sh "$repo_root/artificer" ensure-site >/dev/null
+run_ensure_site
 
 cat >"$sandbox_bin/ollama" <<'EOF'
 #!/bin/sh
