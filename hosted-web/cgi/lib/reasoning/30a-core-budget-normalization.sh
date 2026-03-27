@@ -15,7 +15,40 @@ trim() {
 }
 
 trim_block_edges() {
-  printf '%s' "$1" | perl -0pe 's/\A[[:space:]]+//; s/[[:space:]]+\z//;'
+  printf '%s' "$1" | awk '
+    {
+      lines[NR] = $0
+    }
+    END {
+      if (NR == 0) {
+        exit 0
+      }
+      first = 1
+      while (first <= NR && lines[first] ~ /^[[:space:]]*$/) {
+        first += 1
+      }
+      if (first > NR) {
+        exit 0
+      }
+      last = NR
+      while (last >= first && lines[last] ~ /^[[:space:]]*$/) {
+        last -= 1
+      }
+      for (i = first; i <= last; i += 1) {
+        line = lines[i]
+        if (i == first) {
+          sub(/^[[:space:]]+/, "", line)
+        }
+        if (i == last) {
+          sub(/[[:space:]]+$/, "", line)
+        }
+        printf "%s", line
+        if (i < last) {
+          printf "\n"
+        }
+      }
+    }
+  '
 }
 
 model_context_tokens_for() {
@@ -532,4 +565,3 @@ EOF
   cleaned=$(trim "$cleaned")
   printf '%s' "$cleaned"
 }
-

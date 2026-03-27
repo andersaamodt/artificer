@@ -28,6 +28,7 @@ Artificer currently targets the same desktop platform set tracked in Wizardry:
 - [Ollama](https://ollama.com/) installed and running
 - at least one local model installed in Ollama
 - Wizardry runtime (auto-installed by `./install` if missing)
+- `python3` and `perl` available for advanced runtime pipelines (details: [docs/RUNTIME_DEPENDENCIES.md](docs/RUNTIME_DEPENDENCIES.md))
 
 Artificer no longer depends on App Forge for install or launch, but it still uses the Wizardry runtime internally.
 
@@ -101,6 +102,7 @@ Human-facing docs, by intent:
 - Intelligence and reasoning: [docs/HOW_ARTIFICER_LLMS_WORK.md](docs/HOW_ARTIFICER_LLMS_WORK.md), [docs/INTELLIGENCE_MENTORING_EXPLAINED.md](docs/INTELLIGENCE_MENTORING_EXPLAINED.md)
 - Reference: [docs/GLOSSARY.md](docs/GLOSSARY.md), [docs/REPO_OVERVIEW.md](docs/REPO_OVERVIEW.md), [docs/PROJECT_LAYOUT.md](docs/PROJECT_LAYOUT.md)
 - Release and contribution: [docs/release-notes/v0.1.0.md](docs/release-notes/v0.1.0.md), [docs/PUBLISHING_AUDIT.md](docs/PUBLISHING_AUDIT.md), [docs/CODEBASE_HARDENING_CHECKLIST.md](docs/CODEBASE_HARDENING_CHECKLIST.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md)
+- Runtime/tooling dependencies: [docs/RUNTIME_DEPENDENCIES.md](docs/RUNTIME_DEPENDENCIES.md)
 - Full index: [docs/README.md](docs/README.md)
 - Internals map: [hosted-web/README.md](hosted-web/README.md)
 

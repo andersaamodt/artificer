@@ -153,42 +153,89 @@ strip_model_install_progress_noise() {
 }
 
 strip_terminal_noise() {
-  printf '%s' "$1" | perl -CS -pe '
-    s/\e\[[0-9;?]*[ -\/]*[@-~]//g;                 # ANSI CSI sequences
-    s/\e\][^\a]*(?:\a|\e\\)//g;                    # OSC sequences
-    s/\eP(?:.|\n)*?\e\\//g;                        # DCS sequences
-    s/\r//g;                                       # carriage returns from spinners
-    s/[\x{2800}-\x{28FF}]//g;    # braille spinner glyphs
-    s/[\x00-\x08\x0B\x0C\x0E-\x1F]//g;             # control chars except tab/newline
-  ' | sed '/^[[:space:]]*$/d' | strip_model_install_progress_noise
+  if command -v perl >/dev/null 2>&1; then
+    printf '%s' "$1" | perl -CS -pe '
+      s/\e\[[0-9;?]*[ -\/]*[@-~]//g;                 # ANSI CSI sequences
+      s/\e\][^\a]*(?:\a|\e\\)//g;                    # OSC sequences
+      s/\eP(?:.|\n)*?\e\\//g;                        # DCS sequences
+      s/\r//g;                                       # carriage returns from spinners
+      s/[\x{2800}-\x{28FF}]//g;                      # braille spinner glyphs
+      s/[\x00-\x08\x0B\x0C\x0E-\x1F]//g;             # control chars except tab/newline
+    ' | sed '/^[[:space:]]*$/d' | strip_model_install_progress_noise
+    return 0
+  fi
+
+  esc=$(printf '\033')
+  printf '%s' "$1" \
+    | tr '\r' '\n' \
+    | sed "s/${esc}\\[[0-9;?]*[ -\\/]*[@-~]//g" \
+    | tr -d '\000-\010\013\014\016-\037' \
+    | sed '/^[[:space:]]*$/d' \
+    | strip_model_install_progress_noise
 }
 
 canonicalize_controller_output() {
-  printf '%s' "$1" | perl -CS -0777 -pe '
-    s/\r/\n/g;
-    s/\e\[[0-9;?]*[ -\/]*[@-~]//g;                 # ANSI CSI sequences
-    s/\e\][^\a]*(?:\a|\e\\)//g;                    # OSC sequences
-    s/\eP(?:.|\n)*?\e\\//g;                        # DCS sequences
-    s/[\x00-\x08\x0B\x0C\x0E-\x1F]//g;             # control chars except tab/newline
-    s/[\x{2800}-\x{28FF}]//g;                      # braille spinner glyphs
+  if command -v perl >/dev/null 2>&1; then
+    printf '%s' "$1" | perl -CS -0777 -pe '
+      s/\r/\n/g;
+      s/\e\[[0-9;?]*[ -\/]*[@-~]//g;                 # ANSI CSI sequences
+      s/\e\][^\a]*(?:\a|\e\\)//g;                    # OSC sequences
+      s/\eP(?:.|\n)*?\e\\//g;                        # DCS sequences
+      s/[\x00-\x08\x0B\x0C\x0E-\x1F]//g;             # control chars except tab/newline
+      s/[\x{2800}-\x{28FF}]//g;                      # braille spinner glyphs
 
-    # Some local models collapse section headers into a single line.
-    s/\s*(MODE_UPDATE|COMMANDS|CONTRACT|PATCH|DONE_CLAIM|PLAN_UPDATE|CHECKPOINT|DECISION_REQUEST|FINAL):\s*/\n$1:\n/g;
-    s/\n{3,}/\n\n/g;
+      # Some local models collapse section headers into a single line.
+      s/\s*(MODE_UPDATE|COMMANDS|CONTRACT|PATCH|DONE_CLAIM|PLAN_UPDATE|CHECKPOINT|DECISION_REQUEST|FINAL):\s*/\n$1:\n/g;
+      s/\n{3,}/\n\n/g;
 
-    # Recover key/value lines that were flattened.
-    s/(target=[^\n]*?)\s+(blocking=)/$1\n$2/g;
-    s/(blocking=[^\n]*?)\s+(confidence=)/$1\n$2/g;
-    s/([^\n])\.blocking=/$1\nblocking=/g;
-    s/([^\n])\.confidence=/$1\nconfidence=/g;
-    s/(question=[^\n]*?)\s+(option=)/$1\n$2/g;
-    s/\s+(option=)/\n$1/g;
+      # Recover key/value lines that were flattened.
+      s/(target=[^\n]*?)\s+(blocking=)/$1\n$2/g;
+      s/(blocking=[^\n]*?)\s+(confidence=)/$1\n$2/g;
+      s/([^\n])\.blocking=/$1\nblocking=/g;
+      s/([^\n])\.confidence=/$1\nconfidence=/g;
+      s/(question=[^\n]*?)\s+(option=)/$1\n$2/g;
+      s/\s+(option=)/\n$1/g;
 
-    s/[ \t]+\n/\n/g;
-    s/\n[ \t]+/\n/g;
-    s/^\s+//;
-    s/\s+$//;
-  ' | sed '/^[[:space:]]*$/d'
+      s/[ \t]+\n/\n/g;
+      s/\n[ \t]+/\n/g;
+      s/^\s+//;
+      s/\s+$//;
+    ' | sed '/^[[:space:]]*$/d'
+    return 0
+  fi
+
+  esc=$(printf '\033')
+  printf '%s' "$1" \
+    | tr '\r' '\n' \
+    | sed "s/${esc}\\[[0-9;?]*[ -\\/]*[@-~]//g" \
+    | tr -d '\000-\010\013\014\016-\037' \
+    | sed \
+        -e 's/[[:space:]]*\(MODE_UPDATE\|COMMANDS\|CONTRACT\|PATCH\|DONE_CLAIM\|PLAN_UPDATE\|CHECKPOINT\|DECISION_REQUEST\|FINAL\):[[:space:]]*/\
+\1:\
+/g' \
+        -e 's/\(target=[^\n]*\)[[:space:]]\{1,\}\(blocking=\)/\1\
+\2/g' \
+        -e 's/\(blocking=[^\n]*\)[[:space:]]\{1,\}\(confidence=\)/\1\
+\2/g' \
+        -e 's/\(question=[^\n]*\)[[:space:]]\{1,\}\(option=\)/\1\
+\2/g' \
+        -e 's/[[:space:]]\{1,\}\(option=\)/\
+\1/g' \
+        -e 's/[[:space:]][[:space:]]*$//' \
+    | awk '
+        NF == 0 {
+          if (blank == 1) {
+            next
+          }
+          blank = 1
+          print ""
+          next
+        }
+        {
+          blank = 0
+          print
+        }
+      '
 }
 
 pick_workspace_path_macos() {

@@ -60,9 +60,9 @@ Done criteria:
 
 ## 6) Runtime Dependency Tightening
 
-- [ ] Reduce non-shell dependencies in core runtime paths where practical.
-- [ ] Keep probe/dev scripts allowed to use Python/Perl when justified.
-- [ ] Document any remaining hard requirements.
+- [x] Reduce non-shell dependencies in core runtime paths where practical.
+- [x] Keep probe/dev scripts allowed to use Python/Perl when justified.
+- [x] Document any remaining hard requirements.
 
 Done criteria:
 

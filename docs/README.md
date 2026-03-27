@@ -18,6 +18,7 @@ If you want reference and structure:
 - [GLOSSARY.md](GLOSSARY.md)
 - [REPO_OVERVIEW.md](REPO_OVERVIEW.md)
 - [PROJECT_LAYOUT.md](PROJECT_LAYOUT.md)
+- [RUNTIME_DEPENDENCIES.md](RUNTIME_DEPENDENCIES.md)
 
 If you are preparing release or contributing:
 
