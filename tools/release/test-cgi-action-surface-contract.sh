@@ -7,9 +7,12 @@ repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 tmp_root=$(mktemp -d "${TMPDIR:-/tmp}/artificer-cgi-action-contract.XXXXXX")
 sites_root="$tmp_root/sites"
 state_home="$tmp_root/state"
+isolated_home="$tmp_root/home"
+sandbox_bin="$tmp_root/bin"
 api_out_file="$tmp_root/cgi.out"
 api_err_file="$tmp_root/cgi.err"
-mkdir -p "$sites_root" "$state_home"
+wizardry_dir_real=${WIZARDRY_DIR:-$HOME/.wizardry}
+mkdir -p "$sites_root" "$state_home" "$isolated_home" "$sandbox_bin"
 
 cleanup() {
   rm -rf "$tmp_root"
@@ -41,29 +44,12 @@ wait_with_timeout() {
 default_extra='workspace_id=missing-workspace&conversation_id=missing-conversation&automation_id=missing-automation&item_id=missing-item&stream_session=missing-session&session_id=missing-session'
 
 action_skip_reason() {
-  case "$1" in
-    pick_workspace)
-      printf '%s' "opens a native folder chooser"
-      return 0
-      ;;
-    git_choose_ssh_key)
-      printf '%s' "opens a native file chooser"
-      return 0
-      ;;
-    git_generate_ssh)
-      printf '%s' "mutates user SSH key material"
-      return 0
-      ;;
-    dictation_install|dictation_install_start|dictation_uninstall)
-      printf '%s' "install/uninstall voice runtime side effects"
-      return 0
-      ;;
-    dictate|dictate_prepare|dictate_start)
-      printf '%s' "can start live microphone capture"
-      return 0
-      ;;
-    self_improve_run)
-      printf '%s' "can invoke long-running model work"
+  # The harness runs actions in an isolated HOME with stubbed external binaries,
+  # so action probes should be safe and deterministic by default.
+  action_name=$1
+  case "$action_name" in
+    "")
+      printf '%s' "invalid action name"
       return 0
       ;;
   esac
@@ -188,10 +174,25 @@ invoke_action() {
     WIZARDRY_SITE_NAME='artificer'
     WIZARDRY_SITES_DIR=$sites_root
     WEB_WIZARDRY_ROOT=$sites_root
+    WIZARDRY_DIR=$wizardry_dir_real
+    HOME=$isolated_home
+    PATH="$sandbox_bin:/usr/bin:/bin"
     XDG_STATE_HOME=$state_home
     ARTIFICER_STATE_ROOT="$state_home/artificer"
+    VOICE_RECOGNITION_ROOT_DIR="$isolated_home/.wizardry/voice-recognition"
+    VOICE_RECOGNITION_INSTALL_CTRANSLATE2_BIN="$sandbox_bin/install-voice-stub"
+    VOICE_RECOGNITION_INSTALL_MLX_BIN="$sandbox_bin/install-voice-stub"
+    VOICE_RECOGNITION_INSTALL_PARAKEET_BIN="$sandbox_bin/install-voice-stub"
+    VOICE_RECOGNITION_UNINSTALL_CTRANSLATE2_BIN="$sandbox_bin/uninstall-voice-stub"
+    VOICE_RECOGNITION_UNINSTALL_MLX_BIN="$sandbox_bin/uninstall-voice-stub"
+    VOICE_RECOGNITION_UNINSTALL_PARAKEET_BIN="$sandbox_bin/uninstall-voice-stub"
+    DICTATE_BIN="$sandbox_bin/dictate-stub"
     export REQUEST_METHOD QUERY_STRING SCRIPT_NAME SCRIPT_FILENAME GATEWAY_INTERFACE SERVER_PROTOCOL HTTP_HOST
-    export WIZARDRY_SITE_NAME WIZARDRY_SITES_DIR WEB_WIZARDRY_ROOT XDG_STATE_HOME ARTIFICER_STATE_ROOT
+    export WIZARDRY_SITE_NAME WIZARDRY_SITES_DIR WEB_WIZARDRY_ROOT WIZARDRY_DIR HOME PATH
+    export XDG_STATE_HOME ARTIFICER_STATE_ROOT VOICE_RECOGNITION_ROOT_DIR
+    export VOICE_RECOGNITION_INSTALL_CTRANSLATE2_BIN VOICE_RECOGNITION_INSTALL_MLX_BIN VOICE_RECOGNITION_INSTALL_PARAKEET_BIN
+    export VOICE_RECOGNITION_UNINSTALL_CTRANSLATE2_BIN VOICE_RECOGNITION_UNINSTALL_MLX_BIN VOICE_RECOGNITION_UNINSTALL_PARAKEET_BIN
+    export DICTATE_BIN
     sh "$api_path"
   ) >"$api_out_file" 2>"$api_err_file" &
   action_pid=$!
@@ -215,6 +216,36 @@ WIZARDRY_SITES_DIR="$sites_root" \
 XDG_STATE_HOME="$state_home" \
 ARTIFICER_STATE_ROOT="$state_home/artificer" \
 sh "$repo_root/artificer" ensure-site >/dev/null
+
+cat >"$sandbox_bin/ollama" <<'EOF'
+#!/bin/sh
+exit 1
+EOF
+cat >"$sandbox_bin/osascript" <<'EOF'
+#!/bin/sh
+exit 1
+EOF
+cat >"$sandbox_bin/curl" <<'EOF'
+#!/bin/sh
+exit 1
+EOF
+cat >"$sandbox_bin/ffmpeg" <<'EOF'
+#!/bin/sh
+exit 1
+EOF
+cat >"$sandbox_bin/dictate-stub" <<'EOF'
+#!/bin/sh
+exit 1
+EOF
+cat >"$sandbox_bin/install-voice-stub" <<'EOF'
+#!/bin/sh
+exit 1
+EOF
+cat >"$sandbox_bin/uninstall-voice-stub" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x "$sandbox_bin/ollama" "$sandbox_bin/osascript" "$sandbox_bin/curl" "$sandbox_bin/ffmpeg" "$sandbox_bin/dictate-stub" "$sandbox_bin/install-voice-stub" "$sandbox_bin/uninstall-voice-stub"
 
 site_root="$sites_root/artificer"
 api_path="$site_root/cgi/artificer-api"
