@@ -53,6 +53,9 @@ artificer_stage_runtime() {
          "$dest/.git" \
          "$dest/packaging" \
          "$dest/.github"
+  rm -f "$dest/hosted-web/static/artificer-app.js" \
+        "$dest/hosted-web/cgi/actions/run_parts/run-part-004.sh" \
+        "$dest/hosted-web/cgi/lib/reasoning/30c-reasoning-contracts.sh"
   chmod +x "$dest/artificer" "$dest/run-artificer" "$dest/install" "$dest/uninstall"
   find "$dest/scripts" "$dest/tools/release" -type f -name '*.sh' -exec chmod +x {} + 2>/dev/null || true
 }

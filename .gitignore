@@ -18,3 +18,6 @@ dist/
 dist
 dist-test/
 dist-test
+hosted-web/static/artificer-app.js
+hosted-web/cgi/actions/run_parts/run-part-004.sh
+hosted-web/cgi/lib/reasoning/30c-reasoning-contracts.sh

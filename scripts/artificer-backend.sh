@@ -154,6 +154,27 @@ cmd_ensure_site() {
     fi
   done
 
+  bundle_src_dir="$SITE/site/static/artificer-app-src"
+  bundle_out="$SITE/site/static/artificer-app.js"
+  needs_frontend_bundle=0
+  [ -f "$bundle_out" ] || needs_frontend_bundle=1
+  if [ "$needs_frontend_bundle" -eq 0 ] && find "$bundle_src_dir" -type f -name '*.js' -newer "$bundle_out" 2>/dev/null | read x; then
+    needs_frontend_bundle=1
+  fi
+  if [ "$needs_frontend_bundle" -eq 1 ]; then
+    tmp_bundle=$(mktemp "${TMPDIR:-/tmp}/artificer-app-bundle.XXXXXX")
+    for part in "$bundle_src_dir"/*.js; do
+      [ -f "$part" ] || continue
+      cat "$part" >> "$tmp_bundle"
+    done
+    if [ ! -s "$tmp_bundle" ]; then
+      rm -f "$tmp_bundle"
+      printf '%s\n' "frontend source parts missing at $bundle_src_dir" >&2
+      exit 1
+    fi
+    mv "$tmp_bundle" "$bundle_out"
+  fi
+
   # Keep CGI runtime tree in sync even when a full site rebuild is skipped.
   if [ -d "$hosted/cgi" ]; then
     mkdir -p "$SITE/cgi"

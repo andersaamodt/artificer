@@ -41,13 +41,13 @@ The most important one for day-to-day local use is [`../scripts/artificer-backen
 If someone only reads three files to understand the app, these are usually the right ones:
 
 - [`../hosted-web/pages/index.md`](../hosted-web/pages/index.md)
-- [`../hosted-web/static/artificer-app.js`](../hosted-web/static/artificer-app.js)
+- [`../hosted-web/static/artificer-app-src/`](../hosted-web/static/artificer-app-src/)
 - [`../hosted-web/cgi/artificer-api`](../hosted-web/cgi/artificer-api)
 
 In plain English:
 
 - `index.md` describes what the app shows
-- `artificer-app.js` describes how the browser behaves
+- `artificer-app-src/*.js` describes how the browser behaves
 - `artificer-api` describes how the backend behaves
 
 ## Short Version

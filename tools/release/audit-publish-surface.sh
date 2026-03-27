@@ -31,7 +31,6 @@ gui_files='
 hosted-web/pages/index.md
 hosted-web/pages/index.html
 hosted-web/static/style.css
-hosted-web/static/artificer-app.js
 '
 
 printf '%s\n' '== public surface: personal paths or names =='
@@ -42,7 +41,10 @@ printf '%s\n' "$public_files" \
   || true
 
 printf '\n%s\n' '== internal naming audit =='
-printf '%s\n' "$gui_files" \
+{
+  printf '%s\n' "$gui_files"
+  find "$repo_root/hosted-web/static/artificer-app-src" -type f -name '*.js' 2>/dev/null | sed "s#^$repo_root/##"
+} \
   | sed '/^$/d' \
   | sed "s#^#$repo_root/#" \
   | xargs grep -n 'forge-shell' \

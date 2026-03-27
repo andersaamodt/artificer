@@ -686,8 +686,19 @@ pagetitle: "Artificer"
 </div>
 
 <script>
-(function loadArtificerBundle() {
+(function loadArtificerRuntime() {
   var launchKey = "";
+  var versionTag = "20260326-runtime-shards1";
+  var parts = [
+    "01-boot-and-storage.js",
+    "02-runtime-core.js",
+    "03-ui-and-rendering.js",
+    "04-dictation-wave.js",
+    "05-api-and-state-sync.js",
+    "06-queue-and-automation.js",
+    "07-settings-and-actions.js",
+    "08-event-bindings-and-boot.js"
+  ];
   try {
     var search = new URLSearchParams(window.location.search || "");
     launchKey = String(search.get("launch") || "");
@@ -697,8 +708,43 @@ pagetitle: "Artificer"
   if (!launchKey) {
     launchKey = String(Date.now());
   }
-  var script = document.createElement("script");
-  script.src = "/static/artificer-app.js?v=20260325-selfimprovecomp1&launch=" + encodeURIComponent(launchKey);
-  document.body.appendChild(script);
+
+  function loadBundleFallback() {
+    var script = document.createElement("script");
+    script.src = "/static/artificer-app.js?v=" + encodeURIComponent(versionTag) + "&launch=" + encodeURIComponent(launchKey);
+    document.body.appendChild(script);
+  }
+
+  if (typeof fetch !== "function") {
+    loadBundleFallback();
+    return;
+  }
+
+  function loadShard(index, chunks) {
+    if (index >= parts.length) {
+      var runtimeScript = document.createElement("script");
+      runtimeScript.text = chunks.join("\n");
+      document.body.appendChild(runtimeScript);
+      return;
+    }
+    var shardUrl = "/static/artificer-app-src/" + parts[index] + "?v=" + encodeURIComponent(versionTag) + "&launch=" + encodeURIComponent(launchKey);
+    fetch(shardUrl, { cache: "no-store" })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error("failed shard " + parts[index] + ": " + response.status);
+        }
+        return response.text();
+      })
+      .then(function (sourceText) {
+        chunks.push(sourceText);
+        loadShard(index + 1, chunks);
+      })
+      .catch(function (error) {
+        console.error("failed to load Artificer runtime shards", error);
+        loadBundleFallback();
+      });
+  }
+
+  loadShard(0, []);
 })();
 </script>
