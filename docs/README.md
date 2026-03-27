@@ -19,6 +19,7 @@ If you want reference and structure:
 - [REPO_OVERVIEW.md](REPO_OVERVIEW.md)
 - [PROJECT_LAYOUT.md](PROJECT_LAYOUT.md)
 - [RUNTIME_DEPENDENCIES.md](RUNTIME_DEPENDENCIES.md)
+- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 If you are preparing release or contributing:
 

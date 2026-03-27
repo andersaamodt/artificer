@@ -70,8 +70,8 @@ Done criteria:
 
 ## 7) Third-Party Attribution
 
-- [ ] Add third-party notices for bundled minified JS assets.
-- [ ] Reference versions/license info used at bundle time.
+- [x] Add third-party notices for bundled minified JS assets.
+- [x] Reference versions/license info used at bundle time.
 
 Done criteria:
 

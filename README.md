@@ -103,6 +103,7 @@ Human-facing docs, by intent:
 - Reference: [docs/GLOSSARY.md](docs/GLOSSARY.md), [docs/REPO_OVERVIEW.md](docs/REPO_OVERVIEW.md), [docs/PROJECT_LAYOUT.md](docs/PROJECT_LAYOUT.md)
 - Release and contribution: [docs/release-notes/v0.1.0.md](docs/release-notes/v0.1.0.md), [docs/PUBLISHING_AUDIT.md](docs/PUBLISHING_AUDIT.md), [docs/CODEBASE_HARDENING_CHECKLIST.md](docs/CODEBASE_HARDENING_CHECKLIST.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md)
 - Runtime/tooling dependencies: [docs/RUNTIME_DEPENDENCIES.md](docs/RUNTIME_DEPENDENCIES.md)
+- Third-party bundle attribution: [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md)
 - Full index: [docs/README.md](docs/README.md)
 - Internals map: [hosted-web/README.md](hosted-web/README.md)
 
