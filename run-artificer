@@ -45,7 +45,17 @@ ensure_site() {
 site_url() {
   require_backend
   ensure_site
-  port=$("$APP_ROOT/scripts/artificer-backend.sh" start-serve "$APP_ROOT")
+  # Avoid command substitution around start-serve: subshell capture can hang
+  # when descendants keep stdout pipes open.
+  "$APP_ROOT/scripts/artificer-backend.sh" start-serve "$APP_ROOT" >/dev/null
+  port=$("$APP_ROOT/scripts/artificer-backend.sh" detect-ready-port "$APP_ROOT")
+  if [ -z "$port" ]; then
+    port=$("$APP_ROOT/scripts/artificer-backend.sh" get-port "$APP_ROOT")
+  fi
+  [ -n "$port" ] || {
+    printf '%s\n' "artificer: unable to determine local port after server start" >&2
+    exit 1
+  }
   printf 'http://127.0.0.1:%s/pages/index.html\n' "$port"
 }
 
