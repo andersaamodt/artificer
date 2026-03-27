@@ -4,11 +4,11 @@ This checklist tracks the remaining work to make Artificer production-grade, Wiz
 
 ## 1) Backend Modularity
 
-- [ ] Split `hosted-web/cgi/actions/run_parts/run-part-004.sh` into named submodules with a stable loader.
-- [ ] Split `hosted-web/cgi/mode-runtime-lib.sh` into named submodules grouped by concern.
-- [ ] Split `hosted-web/cgi/lib/reasoning/30c-reasoning-contracts.sh` into named submodules grouped by concern.
-- [ ] Keep canonical entrypoint files stable so action wiring does not break.
-- [ ] Keep generated-artifact policy tests passing.
+- [x] Split `hosted-web/cgi/actions/run_parts/run-part-004.sh` into named submodules with a stable loader.
+- [x] Split `hosted-web/cgi/mode-runtime-lib.sh` into named submodules grouped by concern.
+- [x] Split `hosted-web/cgi/lib/reasoning/30c-reasoning-contracts.sh` into named submodules grouped by concern.
+- [x] Keep canonical entrypoint files stable so action wiring does not break.
+- [x] Keep generated-artifact policy tests passing.
 
 Done criteria:
 
