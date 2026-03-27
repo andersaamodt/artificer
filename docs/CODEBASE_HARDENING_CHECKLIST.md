@@ -79,8 +79,8 @@ Done criteria:
 
 ## 8) Publish Surface Cleanup
 
-- [ ] Remove personal-default publish settings from release scripts.
-- [ ] Require explicit config or neutral defaults.
+- [x] Remove personal-default publish settings from release scripts.
+- [x] Require explicit config or neutral defaults.
 
 Done criteria:
 

@@ -1,6 +1,6 @@
 # Publishing Audit
 
-Date: 2026-03-24
+Date: 2026-03-26
 
 ## Scope
 
@@ -9,46 +9,27 @@ This audit covers the GitHub-facing publish surface:
 - root docs
 - install and launcher scripts
 - release tooling
-- GitHub Actions
+- GitHub Actions release pipeline
 
-## Fixed In This Pass
+## Current Publish Surface Status
 
-- added a standalone Artificer launcher and installer independent of App Forge
-- replaced public docs that hardcoded local workstation paths as startup instructions
-- added release packaging scripts for Linux and macOS
-- added Linux release matrix support for `x86_64` and `arm64` artifact names
-- added a publish-surface audit script at [tools/release/audit-publish-surface.sh](../tools/release/audit-publish-surface.sh)
-- added GitHub Actions release/build workflow support
-- added version, changelog, license, and release notes
-- added standalone background automations scheduler controls and daemon actions
+- standalone install and launcher paths are in place
+- release artifact scripts exist for Linux (`x86_64`, `arm64`) and macOS
+- release workflow publishes from GitHub context (no hardcoded Artificer owner/repo target)
+- third-party JS bundle attribution is documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+- public docs avoid workstation-specific startup instructions
 
-## Remaining Internal References
+## Verification Gates
 
-The repo still contains workstation-specific absolute paths and legacy Forge-era naming in developer-only surfaces, mainly under `hosted-web/` assay and quality documents.
+- publish surface path/name scanner: [tools/release/audit-publish-surface.sh](../tools/release/audit-publish-surface.sh)
+- neutral publish defaults regression test: [tools/release/test-publish-surface-neutral-defaults.sh](../tools/release/test-publish-surface-neutral-defaults.sh)
+- release suite runner: [tools/release/run-release-tests.sh](../tools/release/run-release-tests.sh)
 
-Current known categories:
+## Notes
 
-- internal quality trackers with absolute clickable file paths
-- internal CSS and DOM names that still use `forge-shell`
-- internal runtime coupling to Wizardry web helpers such as `web-wizardry`
-
-## Publish Assessment
-
-### Ready
-
-- standalone install path
-- standalone launcher path
-- release artifact generation
-- public README/getting-started docs
-- license and release metadata
-
-### Not Yet Removed Everywhere
-
-- all personal-path references from deep internal development docs
-- all legacy internal naming from non-user-visible implementation details
+- Wizardry runtime bootstrap defaults still point to the canonical Wizardry repository via `ARTIFICER_WIZARDRY_REPO_URL`; this is runtime dependency sourcing, not an Artificer publish target.
+- Developer-only assay/probe content may still include internal implementation naming, but this is outside the user publish/install contract.
 
 ## Recommendation
 
-Publish is reasonable once the release workflow artifacts are green.
-
-A later hygiene pass should scrub remaining personal absolute paths from the deep developer assay documents, but those are no longer on the primary user path.
+Publish is ready once the release workflow and release test suite are green.
