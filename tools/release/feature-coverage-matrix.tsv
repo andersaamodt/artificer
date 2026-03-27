@@ -3,7 +3,7 @@ feature_coverage_matrix	Feature coverage matrix references every release behavio
 startup_bridge_timeouts	Desktop startup bridge actions use explicit timeout policy.	test-startup-bridge-timeouts.sh
 startup_boot_order	Desktop startup prefers ready-port detect/start before ensure-site fallback.	test-startup-boot-order.sh
 splash_status_contract	Splash keeps a stable preparing message until ready or error.	test-splash-status-contract.sh
-workspace_add_modal_and_tilde	Add Project supports ~/ expansion and modal action order.	test-add-workspace-tilde-and-modal-actions.sh
+workspace_add_modal_and_tilde	Add Project supports ~/ expansion and modal action order.	test-add-workspace-tilde-and-modal-actions.sh,test-add-workspace-tilde-runtime.sh
 workspace_browse_path_population	Browse and directory picker populate folder path and placeholder.	test-workspace-browse-path-population.sh
 workspace_drag_surface	Project rows drag from row surface (not drag-handle controls).	test-workspace-drag-surface-behavior.sh
 automations_layout	Automations appears as left-nav section with right-pane workflow.	test-automations-pane-layout.sh

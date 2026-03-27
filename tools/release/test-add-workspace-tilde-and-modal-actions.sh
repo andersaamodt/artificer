@@ -24,8 +24,23 @@ if ! grep -q '"~/"\*)' "$action_file"; then
   exit 1
 fi
 
-if ! grep -q 'expanded_path=$HOME/${expanded_path#~/}' "$action_file"; then
+if ! grep -q 'expanded_path=$HOME/${expanded_path#\\~/}' "$action_file"; then
   printf '%s\n' "add_workspace action missing HOME-based ~/ expansion" >&2
+  exit 1
+fi
+
+if ! grep -q '%7E/\*)' "$action_file"; then
+  printf '%s\n' "add_workspace action missing %7E/ percent-decoded tilde expansion case" >&2
+  exit 1
+fi
+
+if ! grep -q '%7e/\*)' "$action_file"; then
+  printf '%s\n' "add_workspace action missing %7e/ percent-decoded tilde expansion case" >&2
+  exit 1
+fi
+
+if ! grep -q '"~"\*)' "$action_file"; then
+  printf '%s\n' "add_workspace action missing ~user expansion case" >&2
   exit 1
 fi
 

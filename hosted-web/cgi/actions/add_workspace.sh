@@ -10,11 +10,36 @@
 
     expanded_path=$raw_path
     case "$expanded_path" in
+      %7E)
+        expanded_path="~"
+        ;;
+      %7e)
+        expanded_path="~"
+        ;;
+      %7E/*)
+        expanded_path="~/${expanded_path#%7E/}"
+        ;;
+      %7e/*)
+        expanded_path="~/${expanded_path#%7e/}"
+        ;;
+    esac
+    case "$expanded_path" in
       "~")
         expanded_path=$HOME
         ;;
       "~/"*)
-        expanded_path=$HOME/${expanded_path#~/}
+        expanded_path=$HOME/${expanded_path#\~/}
+        ;;
+      "~"*)
+        tilde_user=${expanded_path#~}
+        tilde_user=${tilde_user%%/*}
+        if [ -n "$tilde_user" ]; then
+          user_home=$(awk -F: -v u="$tilde_user" '$1 == u { print $6; exit }' /etc/passwd 2>/dev/null || true)
+          if [ -n "$user_home" ]; then
+            suffix=${expanded_path#"~$tilde_user"}
+            expanded_path=$user_home$suffix
+          fi
+        fi
         ;;
     esac
 
