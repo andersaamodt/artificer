@@ -216,6 +216,24 @@ Policy and audit operations:
 - policy update:  artificer-appctl self-actuation policy-set --action <operation> --enabled <0|1> [--workspace-id <id>] --json
 - audit tail:     artificer-appctl self-actuation audit --limit <n> --json
 
+Orchestrated operation map:
+- ensure_workspace: create-by-path if missing, otherwise resolve existing workspace id.
+- rename_workspace: requires existing workspace id and new name.
+- delete_workspace: destructive; requires existing workspace id.
+- ensure_thread: create-by-title when missing, otherwise reuse resolved conversation id.
+- archive_thread: destructive; requires workspace id + conversation id.
+- ensure_automation: create-or-update automation using workspace/conversation context.
+- toggle_automation: requires automation id + enabled flag.
+- run_automation_now: queues immediate execution for existing automation id.
+- delete_automation: destructive; requires existing automation id.
+- bootstrap_workspace_stack: id-safe multi-step ensure flow for workspace + optional thread + optional automation.
+
+Failure diagnosis runbook:
+- "confirm_token mismatch": regenerate preview and apply with the returned token.
+- "operation blocked by self-actuation policy": inspect policy-get scope (workspace/global), then set explicit allow when intended.
+- "workspace/conversation/automation not found": re-list state and resolve real ids before retrying.
+- "invalid <field>": normalize flags to allowed values (enabled 0/1, schedule-kind cron|interval|once, command-exec mode).
+
 Project operations:
 - create:  artificer-appctl project add --path <path> [--name <label>]
 - rename:  artificer-appctl project rename --workspace-id <id> --name <label>
@@ -238,6 +256,8 @@ Reliability rules:
 - Never chain multiple destructive operations without re-reading state.
 - When id lookups fail, report mismatch and request a fresh list operation.
 - Prefer orchestration preview/apply for destructive changes.
+- Treat policy-set changes as explicit intent changes and confirm with policy-get.
+- Use audit entries to explain exactly what ran, when, and why it failed or succeeded.
 EOF
 }
 
@@ -263,7 +283,7 @@ self_knowledge_topic_learning_goals_text() {
       printf '%s' "- Prepare contributors for reproducible, tested upstream runtime patches."
       ;;
     self-actuation)
-      printf '%s' "- Execute accurate in-app workflow mutations with id-safe verification loops."
+      printf '%s' "- Execute safe preview/apply self-actuation workflows with policy awareness, idempotent retries, and auditable outcomes."
       ;;
     *)
       printf '%s' "- Deliver accurate, grounded explanations with explicit uncertainty boundaries."
@@ -284,7 +304,7 @@ self_knowledge_topic_misconceptions_text() {
       printf '%s' "- Refactor and behavior change should be mixed in one patch.\n- Manual repro is enough without regression tests."
       ;;
     self-actuation)
-      printf '%s' "- Guessed ids are acceptable.\n- Multiple destructive operations can be batched safely without verification."
+      printf '%s' "- A valid-looking id string is enough without checking live state.\n- Confirmation tokens can be reused after changing operation payload.\n- Policy gates only matter for destructive operations."
       ;;
     *)
       printf '%s' "- Confident wording is equivalent to grounded evidence."
@@ -305,7 +325,7 @@ self_knowledge_topic_assessment_checks_text() {
       printf '%s' "1. Propose a bug-fix patch with deterministic repro and regression test.\n2. Provide rollback criteria for the patch."
       ;;
     self-actuation)
-      printf '%s' "1. List projects/threads/automations before mutating.\n2. Perform one mutation and prove the resulting state."
+      printf '%s' "1. Given a requested mutation, produce preview command, explain confirm token purpose, and provide a safe apply command.\n2. Diagnose blocked-policy vs confirm-token mismatch from API error text and prescribe exact recovery steps."
       ;;
     *)
       printf '%s' "1. Explain the subsystem with concrete artifacts.\n2. Separate known facts from inferred details."
@@ -326,7 +346,7 @@ self_knowledge_topic_practice_tasks_text() {
       printf '%s' "- Draft a contributor-ready issue-to-PR plan with tests, benchmarks, and compatibility notes."
       ;;
     self-actuation)
-      printf '%s' "- Create a project, create a thread, create/update automation, run it once, verify resulting queue state."
+      printf '%s' "- Execute a complete orchestrated lifecycle: ensure_workspace -> ensure_thread -> ensure_automation -> run_automation_now, then verify via list/audit and perform one policy-set rollback."
       ;;
     *)
       printf '%s' "- Teach this topic to a beginner, then validate with two concrete comprehension checks."
