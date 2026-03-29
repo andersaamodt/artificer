@@ -262,6 +262,18 @@ pagetitle: "Artificer"
 <span class="loop-track" aria-hidden="true"><span class="loop-knob"></span></span>
 </button>
 </div>
+<div class="perm-toggle-row">
+<button id="reflexive-knowledge-toggle-btn" class="perm-access-toggle" type="button" aria-pressed="false" aria-label="Toggle reflexive knowledge" title="Allow Artificer to reason about and explain its own architecture.">
+<span class="perm-toggle-text">Reflexive knowledge</span>
+<span class="loop-track" aria-hidden="true"><span class="loop-knob"></span></span>
+</button>
+</div>
+<div class="perm-toggle-row">
+<button id="self-actuation-toggle-btn" class="perm-access-toggle" type="button" aria-pressed="false" aria-label="Toggle self actuation" title="Allow Artificer to create projects, threads, and automations in-app through mediated commands.">
+<span class="perm-toggle-text">Self-actuation</span>
+<span class="loop-track" aria-hidden="true"><span class="loop-knob"></span></span>
+</button>
+</div>
 </div>
 
 <div id="command-approval-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="command-approval-title">

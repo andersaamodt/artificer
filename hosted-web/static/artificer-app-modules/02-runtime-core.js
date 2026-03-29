@@ -522,6 +522,8 @@
       compute_budget: normalizeComputeBudget(item.compute_budget || "auto"),
       command_exec_mode: normalizeCommandExecModeValue(item.command_exec_mode || ""),
       permission_mode: normalizePermissionModeValue(item.permission_mode || ""),
+      reflexive_knowledge: normalizeToggle01Value(item.reflexive_knowledge),
+      self_actuation: normalizeToggle01Value(item.self_actuation),
       programmer_review: normalizeProgrammerReviewEnabledValue(item.programmer_review),
       programmer_review_rounds: normalizeProgrammerReviewRoundsValue(item.programmer_review_rounds || 2),
       explicit_skill_ids: Array.isArray(item.explicit_skill_ids) ? item.explicit_skill_ids : []
@@ -1380,6 +1382,17 @@
     var value = trim(String(mode || "")).toLowerCase();
     if (value === "workspace-write" || value === "read-only" || value === "default" || value === "full-access") {
       return value;
+    }
+    return "";
+  }
+
+  function normalizeToggle01Value(value) {
+    var normalized = trim(String(value || "")).toLowerCase();
+    if (normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on" || normalized === "enabled") {
+      return "1";
+    }
+    if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off" || normalized === "disabled") {
+      return "0";
     }
     return "";
   }

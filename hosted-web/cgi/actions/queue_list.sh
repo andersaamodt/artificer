@@ -60,6 +60,8 @@
       queued_compute_budget=$(queue_meta_compute_budget_from_file "$queued_meta")
       queued_command_exec_mode=$(queue_meta_command_exec_mode_from_file "$queued_meta")
       queued_permission_mode=$(queue_meta_permission_mode_from_file "$queued_meta")
+      queued_reflexive_knowledge=$(queue_meta_reflexive_knowledge_from_file "$queued_meta")
+      queued_self_actuation=$(queue_meta_self_actuation_from_file "$queued_meta")
       queued_programmer_review=$(queue_meta_programmer_review_from_file "$queued_meta")
       queued_programmer_review_rounds=$(queue_meta_programmer_review_rounds_from_file "$queued_meta")
       queued_mode_json=$(json_escape "$queued_mode")
@@ -67,6 +69,8 @@
       queued_compute_budget_json=$(json_escape "$queued_compute_budget")
       queued_command_exec_mode_json=$(json_escape "$queued_command_exec_mode")
       queued_permission_mode_json=$(json_escape "$queued_permission_mode")
+      queued_reflexive_knowledge_json=$(json_escape "$queued_reflexive_knowledge")
+      queued_self_actuation_json=$(json_escape "$queued_self_actuation")
       queued_programmer_review_json=$(json_escape "$queued_programmer_review")
       queued_programmer_review_rounds_json=$(json_escape "$queued_programmer_review_rounds")
 
@@ -78,7 +82,7 @@
       if [ "$queue_items_count" -gt 0 ]; then
         queue_items_json="$queue_items_json,"
       fi
-      queue_items_json="$queue_items_json{\"id\":\"$queued_item_id_json\",\"order\":\"$queued_order_json\",\"prompt\":\"$queued_prompt_json\",\"run_mode\":\"$queued_mode_json\",\"assistant_mode_id\":\"$queued_assistant_mode_json\",\"compute_budget\":\"$queued_compute_budget_json\",\"command_exec_mode\":\"$queued_command_exec_mode_json\",\"permission_mode\":\"$queued_permission_mode_json\",\"programmer_review\":\"$queued_programmer_review_json\",\"programmer_review_rounds\":\"$queued_programmer_review_rounds_json\",\"explicit_skill_ids\":$queued_skills_json}"
+      queue_items_json="$queue_items_json{\"id\":\"$queued_item_id_json\",\"order\":\"$queued_order_json\",\"prompt\":\"$queued_prompt_json\",\"run_mode\":\"$queued_mode_json\",\"assistant_mode_id\":\"$queued_assistant_mode_json\",\"compute_budget\":\"$queued_compute_budget_json\",\"command_exec_mode\":\"$queued_command_exec_mode_json\",\"permission_mode\":\"$queued_permission_mode_json\",\"reflexive_knowledge\":\"$queued_reflexive_knowledge_json\",\"self_actuation\":\"$queued_self_actuation_json\",\"programmer_review\":\"$queued_programmer_review_json\",\"programmer_review_rounds\":\"$queued_programmer_review_rounds_json\",\"explicit_skill_ids\":$queued_skills_json}"
       queue_items_count=$((queue_items_count + 1))
     done < "$queue_paths_file"
     rm -f "$queue_paths_file"

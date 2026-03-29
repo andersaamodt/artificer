@@ -1,0 +1,351 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+site_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+default_api_script="$site_root/cgi/artificer-api"
+api_script=${ARTIFICER_API_SCRIPT:-$default_api_script}
+
+if [ ! -x "$api_script" ]; then
+  printf '%s\n' "artificer-appctl: API script not found: $api_script" >&2
+  exit 1
+fi
+
+usage() {
+  cat <<'EOF'
+Usage:
+  artificer-appctl project add --path <absolute-or-tilde-path> [--name <name>] [--command-exec <mode>]
+  artificer-appctl thread new --workspace-id <id> [--title <title>] [--model <model>]
+  artificer-appctl automation upsert --workspace-id <id> --name <name> --prompt <text> --schedule-kind <cron|interval|once> --schedule-value <value> [options]
+
+Automation options:
+  --automation-id <id>
+  --conversation-id <id>
+  --enabled <0|1>
+  --allow-self-reschedule <0|1>
+  --run-mode <mode>
+  --assistant-mode-id <id>
+  --compute-budget <auto|quick|standard|long|until-complete>
+  --command-exec-mode <none|ask-all|ask-some|all>
+  --permission-mode <default|workspace-write|read-only>
+  --programmer-review <0|1>
+  --programmer-review-rounds <1-4>
+  --assay-task-id <id>
+  --explicit-skill-ids <csv>
+  --next-run <unix-epoch>
+EOF
+}
+
+url_encode() {
+  input=$1
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$input" <<'PY'
+import sys
+import urllib.parse
+print(urllib.parse.quote(sys.argv[1], safe=""))
+PY
+    return 0
+  fi
+  if command -v perl >/dev/null 2>&1; then
+    perl -MURI::Escape -e 'print uri_escape($ARGV[0]);' "$input"
+    return 0
+  fi
+  # Minimal fallback for environments without python/perl.
+  printf '%s' "$input" | sed 's/%/%25/g;s/ /%20/g;s/\t/%09/g;s/\n/%0A/g;s/\r/%0D/g;s/&/%26/g;s/=/%3D/g;s/?/%3F/g;s/#/%23/g'
+}
+
+call_action() {
+  action=$1
+  shift
+  query="action=$(url_encode "$action")"
+  while [ "$#" -gt 0 ]; do
+    key=$1
+    value=$2
+    shift 2
+    query="${query}&$(url_encode "$key")=$(url_encode "$value")"
+  done
+
+  if ! response=$(REQUEST_METHOD=GET QUERY_STRING="$query" "$api_script" 2>&1); then
+    printf '%s\n' "$response" >&2
+    return 1
+  fi
+  json_payload=$(printf '%s\n' "$response" | awk '
+    BEGIN { body = 0 }
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (body == 1) {
+        print line
+        next
+      }
+      if (line == "") {
+        body = 1
+      }
+    }
+  ')
+  if [ -n "$json_payload" ]; then
+    response=$json_payload
+  fi
+  printf '%s\n' "$response"
+
+  case "$response" in
+    *'"success":true'*)
+      return 0
+      ;;
+  esac
+
+  error_text=$(printf '%s' "$response" | sed -n 's/.*"error":"\([^"]*\)".*/\1/p' | sed -n '1p')
+  if [ -n "$error_text" ]; then
+    printf '%s\n' "artificer-appctl: $error_text" >&2
+  fi
+  return 1
+}
+
+require_non_empty() {
+  label=$1
+  value=$2
+  if [ -z "$value" ]; then
+    printf '%s\n' "artificer-appctl: missing required value for $label" >&2
+    exit 1
+  fi
+}
+
+command_kind=${1:-}
+command_action=${2:-}
+
+case "$command_kind" in
+  ""|-h|--help|help)
+    usage
+    exit 0
+    ;;
+esac
+
+case "$command_kind:$command_action" in
+  project:add)
+    shift 2
+    project_path=""
+    project_name=""
+    command_exec_mode=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --path)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --path requires a value" >&2; exit 1; }
+          project_path=$2
+          shift 2
+          ;;
+        --name)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --name requires a value" >&2; exit 1; }
+          project_name=$2
+          shift 2
+          ;;
+        --command-exec|--command-exec-mode)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: $1 requires a value" >&2; exit 1; }
+          command_exec_mode=$2
+          shift 2
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for project add: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    require_non_empty "--path" "$project_path"
+    call_action "add_workspace" \
+      "path" "$project_path" \
+      "name" "$project_name" \
+      "command_exec_mode" "$command_exec_mode"
+    exit $?
+    ;;
+  thread:new)
+    shift 2
+    workspace_id=""
+    thread_title=""
+    thread_model=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --workspace-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --workspace-id requires a value" >&2; exit 1; }
+          workspace_id=$2
+          shift 2
+          ;;
+        --title)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --title requires a value" >&2; exit 1; }
+          thread_title=$2
+          shift 2
+          ;;
+        --model)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --model requires a value" >&2; exit 1; }
+          thread_model=$2
+          shift 2
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for thread new: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    require_non_empty "--workspace-id" "$workspace_id"
+    call_action "new_conversation" \
+      "workspace_id" "$workspace_id" \
+      "title" "$thread_title" \
+      "model" "$thread_model"
+    exit $?
+    ;;
+  automation:upsert)
+    shift 2
+    automation_id=""
+    workspace_id=""
+    conversation_id=""
+    automation_name=""
+    prompt_text=""
+    schedule_kind=""
+    schedule_value=""
+    enabled_value=""
+    allow_self_reschedule=""
+    run_mode=""
+    assistant_mode_id=""
+    compute_budget=""
+    command_exec_mode=""
+    permission_mode=""
+    programmer_review=""
+    programmer_review_rounds=""
+    assay_task_id=""
+    explicit_skill_ids=""
+    next_run=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --automation-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --automation-id requires a value" >&2; exit 1; }
+          automation_id=$2
+          shift 2
+          ;;
+        --workspace-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --workspace-id requires a value" >&2; exit 1; }
+          workspace_id=$2
+          shift 2
+          ;;
+        --conversation-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --conversation-id requires a value" >&2; exit 1; }
+          conversation_id=$2
+          shift 2
+          ;;
+        --name)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --name requires a value" >&2; exit 1; }
+          automation_name=$2
+          shift 2
+          ;;
+        --prompt)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --prompt requires a value" >&2; exit 1; }
+          prompt_text=$2
+          shift 2
+          ;;
+        --schedule-kind)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --schedule-kind requires a value" >&2; exit 1; }
+          schedule_kind=$2
+          shift 2
+          ;;
+        --schedule-value)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --schedule-value requires a value" >&2; exit 1; }
+          schedule_value=$2
+          shift 2
+          ;;
+        --enabled)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --enabled requires a value" >&2; exit 1; }
+          enabled_value=$2
+          shift 2
+          ;;
+        --allow-self-reschedule)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --allow-self-reschedule requires a value" >&2; exit 1; }
+          allow_self_reschedule=$2
+          shift 2
+          ;;
+        --run-mode)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --run-mode requires a value" >&2; exit 1; }
+          run_mode=$2
+          shift 2
+          ;;
+        --assistant-mode-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --assistant-mode-id requires a value" >&2; exit 1; }
+          assistant_mode_id=$2
+          shift 2
+          ;;
+        --compute-budget)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --compute-budget requires a value" >&2; exit 1; }
+          compute_budget=$2
+          shift 2
+          ;;
+        --command-exec-mode|--command-exec)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: $1 requires a value" >&2; exit 1; }
+          command_exec_mode=$2
+          shift 2
+          ;;
+        --permission-mode)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --permission-mode requires a value" >&2; exit 1; }
+          permission_mode=$2
+          shift 2
+          ;;
+        --programmer-review)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --programmer-review requires a value" >&2; exit 1; }
+          programmer_review=$2
+          shift 2
+          ;;
+        --programmer-review-rounds)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --programmer-review-rounds requires a value" >&2; exit 1; }
+          programmer_review_rounds=$2
+          shift 2
+          ;;
+        --assay-task-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --assay-task-id requires a value" >&2; exit 1; }
+          assay_task_id=$2
+          shift 2
+          ;;
+        --explicit-skill-ids)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --explicit-skill-ids requires a value" >&2; exit 1; }
+          explicit_skill_ids=$2
+          shift 2
+          ;;
+        --next-run)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --next-run requires a value" >&2; exit 1; }
+          next_run=$2
+          shift 2
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for automation upsert: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+
+    require_non_empty "--workspace-id" "$workspace_id"
+    require_non_empty "--name" "$automation_name"
+    require_non_empty "--prompt" "$prompt_text"
+    require_non_empty "--schedule-kind" "$schedule_kind"
+    require_non_empty "--schedule-value" "$schedule_value"
+
+    call_action "automation_upsert" \
+      "automation_id" "$automation_id" \
+      "name" "$automation_name" \
+      "workspace_id" "$workspace_id" \
+      "conversation_id" "$conversation_id" \
+      "prompt" "$prompt_text" \
+      "schedule_kind" "$schedule_kind" \
+      "schedule_value" "$schedule_value" \
+      "enabled" "$enabled_value" \
+      "allow_self_reschedule" "$allow_self_reschedule" \
+      "run_mode" "$run_mode" \
+      "assistant_mode_id" "$assistant_mode_id" \
+      "compute_budget" "$compute_budget" \
+      "command_exec_mode" "$command_exec_mode" \
+      "permission_mode" "$permission_mode" \
+      "programmer_review" "$programmer_review" \
+      "programmer_review_rounds" "$programmer_review_rounds" \
+      "assay_task_id" "$assay_task_id" \
+      "explicit_skill_ids" "$explicit_skill_ids" \
+      "next_run" "$next_run"
+    exit $?
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac

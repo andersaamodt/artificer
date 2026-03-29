@@ -28,6 +28,8 @@
         programmerReviewRounds: normalizeProgrammerReviewRoundsValue(item.programmer_review_rounds || 2),
         permissionMode: normalizePermissionModeValue(item.permission_mode || ""),
         commandExecMode: normalizeCommandExecModeValue(item.command_exec_mode || ""),
+        reflexiveKnowledge: normalizeToggle01Value(item.reflexive_knowledge || "") === "1",
+        selfActuation: normalizeToggle01Value(item.self_actuation || "") === "1",
         explicitSkillIds: Array.isArray(item.explicit_skill_ids) ? item.explicit_skill_ids : [],
         approvalRetry: options.approvalRetry === true,
         pendingEvent: resumedPendingEvent

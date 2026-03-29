@@ -1096,6 +1096,14 @@
       el.webToggleBtn.classList.toggle("disabled", !state.networkAccess);
       el.webToggleBtn.disabled = !state.networkAccess;
     }
+    if (el.reflexiveKnowledgeToggleBtn) {
+      el.reflexiveKnowledgeToggleBtn.classList.toggle("on", !!state.reflexiveKnowledge);
+      el.reflexiveKnowledgeToggleBtn.setAttribute("aria-pressed", state.reflexiveKnowledge ? "true" : "false");
+    }
+    if (el.selfActuationToggleBtn) {
+      el.selfActuationToggleBtn.classList.toggle("on", !!state.selfActuation);
+      el.selfActuationToggleBtn.setAttribute("aria-pressed", state.selfActuation ? "true" : "false");
+    }
   }
 
   function renderAttachmentStrip() {

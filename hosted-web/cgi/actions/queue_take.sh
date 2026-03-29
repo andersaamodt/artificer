@@ -140,6 +140,8 @@
     item_compute_budget=$(queue_meta_compute_budget_from_file "$running_meta_file")
     item_command_exec_mode=$(queue_meta_command_exec_mode_from_file "$running_meta_file")
     item_permission_mode=$(queue_meta_permission_mode_from_file "$running_meta_file")
+    item_reflexive_knowledge=$(queue_meta_reflexive_knowledge_from_file "$running_meta_file")
+    item_self_actuation=$(queue_meta_self_actuation_from_file "$running_meta_file")
     item_programmer_review=$(queue_meta_programmer_review_from_file "$running_meta_file")
     item_programmer_review_rounds=$(queue_meta_programmer_review_rounds_from_file "$running_meta_file")
     item_run_mode_json=$(json_escape "$item_run_mode")
@@ -147,9 +149,11 @@
     item_compute_budget_json=$(json_escape "$item_compute_budget")
     item_command_exec_mode_json=$(json_escape "$item_command_exec_mode")
     item_permission_mode_json=$(json_escape "$item_permission_mode")
+    item_reflexive_knowledge_json=$(json_escape "$item_reflexive_knowledge")
+    item_self_actuation_json=$(json_escape "$item_self_actuation")
     item_programmer_review_json=$(json_escape "$item_programmer_review")
     item_programmer_review_rounds_json=$(json_escape "$item_programmer_review_rounds")
 
-    printf '{"success":true,"busy":false,"has_item":true,"item":{"id":"%s","prompt":"%s","attachments":%s,"run_mode":"%s","assistant_mode_id":"%s","compute_budget":"%s","command_exec_mode":"%s","permission_mode":"%s","programmer_review":"%s","programmer_review_rounds":"%s","explicit_skill_ids":%s},"queue_pending":%s,"queue_running":1,"queue_done":0,"queue_first_id":"%s","queue_last_status":"running"}\n' \
-      "$item_id_json" "$prompt_json" "$attachments_json" "$item_run_mode_json" "$item_assistant_mode_json" "$item_compute_budget_json" "$item_command_exec_mode_json" "$item_permission_mode_json" "$item_programmer_review_json" "$item_programmer_review_rounds_json" "$explicit_skills_json" "$queue_pending" "$queue_first_id_json"
+    printf '{"success":true,"busy":false,"has_item":true,"item":{"id":"%s","prompt":"%s","attachments":%s,"run_mode":"%s","assistant_mode_id":"%s","compute_budget":"%s","command_exec_mode":"%s","permission_mode":"%s","reflexive_knowledge":"%s","self_actuation":"%s","programmer_review":"%s","programmer_review_rounds":"%s","explicit_skill_ids":%s},"queue_pending":%s,"queue_running":1,"queue_done":0,"queue_first_id":"%s","queue_last_status":"running"}\n' \
+      "$item_id_json" "$prompt_json" "$attachments_json" "$item_run_mode_json" "$item_assistant_mode_json" "$item_compute_budget_json" "$item_command_exec_mode_json" "$item_permission_mode_json" "$item_reflexive_knowledge_json" "$item_self_actuation_json" "$item_programmer_review_json" "$item_programmer_review_rounds_json" "$explicit_skills_json" "$queue_pending" "$queue_first_id_json"
     exit 0

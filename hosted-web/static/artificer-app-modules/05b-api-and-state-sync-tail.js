@@ -457,9 +457,17 @@
     var explicitComputeBudgetOverride = trim(String(runOptions.computeBudget || ""));
     var explicitPermissionModeOverride = normalizePermissionModeValue(runOptions.permissionMode || "");
     var explicitCommandExecModeOverride = normalizeCommandExecModeValue(runOptions.commandExecMode || "");
+    var explicitReflexiveKnowledgeOverride = null;
+    var explicitSelfActuationOverride = null;
     var explicitSkillIdsOverride = Array.isArray(runOptions.explicitSkillIds) ? runOptions.explicitSkillIds : [];
     var explicitProgrammerReviewOverride = null;
     var explicitProgrammerReviewRoundsOverride = null;
+    if (Object.prototype.hasOwnProperty.call(runOptions, "reflexiveKnowledge")) {
+      explicitReflexiveKnowledgeOverride = !!runOptions.reflexiveKnowledge;
+    }
+    if (Object.prototype.hasOwnProperty.call(runOptions, "selfActuation")) {
+      explicitSelfActuationOverride = !!runOptions.selfActuation;
+    }
     if (Object.prototype.hasOwnProperty.call(runOptions, "programmerReview")) {
       explicitProgrammerReviewOverride = normalizeProgrammerReviewEnabledValue(runOptions.programmerReview);
     }
@@ -581,6 +589,12 @@
     var computeBudgetForRun = explicitComputeBudgetOverride || normalizeComputeBudget(runProfile.computeBudget || state.computeBudget);
     var permissionModeForRun = explicitPermissionModeOverride || normalizePermissionModeValue(state.permissionMode) || "default";
     var commandExecModeForRun = explicitCommandExecModeOverride || normalizeCommandExecModeValue(state.commandExecMode) || "ask-some";
+    var reflexiveKnowledgeForRun = explicitReflexiveKnowledgeOverride !== null
+      ? explicitReflexiveKnowledgeOverride
+      : !!state.reflexiveKnowledge;
+    var selfActuationForRun = explicitSelfActuationOverride !== null
+      ? explicitSelfActuationOverride
+      : !!state.selfActuation;
     var programmerReviewEnabledForRun = explicitProgrammerReviewOverride !== null
       ? explicitProgrammerReviewOverride
       : !!state.programmerReviewEnabled;
@@ -736,6 +750,8 @@
       approval_retry: approvalRetry ? "1" : "0",
       network_access: state.networkAccess ? "1" : "0",
       web_access: state.webAccess ? "1" : "0",
+      reflexive_knowledge: reflexiveKnowledgeForRun ? "1" : "0",
+      self_actuation: selfActuationForRun ? "1" : "0",
       attachment_ids: attachmentIds.join(","),
       queue_item_id: queueItemId,
       advanced_loop: runProfile.advancedLoop ? "1" : "0",
@@ -1108,7 +1124,7 @@
     }
   }
 
-  function enqueuePrompt(workspaceId, conversationId, promptText, position, attachmentIds, runMode, assistantModeId, computeBudget, explicitSkillIds, permissionMode, commandExecMode, programmerReviewEnabled, programmerReviewRounds) {
+  function enqueuePrompt(workspaceId, conversationId, promptText, position, attachmentIds, runMode, assistantModeId, computeBudget, explicitSkillIds, permissionMode, commandExecMode, programmerReviewEnabled, programmerReviewRounds, reflexiveKnowledgeEnabled, selfActuationEnabled) {
     var attachmentList = Array.isArray(attachmentIds) ? attachmentIds : [];
     var normalizedMode = normalizeRunMode(runMode || state.runMode);
     var normalizedAssistantMode = normalizedMode === "assistant" ? normalizeAssistantModeId(assistantModeId || state.assistantModeId) : "";
@@ -1127,6 +1143,12 @@
     if (!normalizedProgrammerReview) {
       normalizedProgrammerReviewRounds = 0;
     }
+    var normalizedReflexiveKnowledge = typeof reflexiveKnowledgeEnabled === "undefined"
+      ? !!state.reflexiveKnowledge
+      : !!reflexiveKnowledgeEnabled;
+    var normalizedSelfActuation = typeof selfActuationEnabled === "undefined"
+      ? !!state.selfActuation
+      : !!selfActuationEnabled;
     var normalizedSkillIds = mergeSkillIdLists(explicitSkillIds, []);
     return apiPost("queue_enqueue", {
       workspace_id: workspaceId,
@@ -1139,6 +1161,8 @@
       compute_budget: normalizedComputeBudget,
       permission_mode: normalizedPermissionMode,
       command_exec_mode: normalizedCommandExecMode,
+      reflexive_knowledge: normalizedReflexiveKnowledge ? "1" : "0",
+      self_actuation: normalizedSelfActuation ? "1" : "0",
       programmer_review: normalizedProgrammerReview ? "1" : "0",
       programmer_review_rounds: String(normalizedProgrammerReviewRounds),
       explicit_skill_ids: normalizedSkillIds.join(",")
@@ -1158,7 +1182,7 @@
     });
   }
 
-  function enqueuePromptInConversationOrder(workspaceId, conversationId, promptText, position, attachmentIds, runMode, assistantModeId, computeBudget, explicitSkillIds, permissionMode, commandExecMode, programmerReviewEnabled, programmerReviewRounds) {
+  function enqueuePromptInConversationOrder(workspaceId, conversationId, promptText, position, attachmentIds, runMode, assistantModeId, computeBudget, explicitSkillIds, permissionMode, commandExecMode, programmerReviewEnabled, programmerReviewRounds, reflexiveKnowledgeEnabled, selfActuationEnabled) {
     var queueKey = queueConversationKey(workspaceId, conversationId);
     if (!queueKey) {
       return enqueuePrompt(
@@ -1174,7 +1198,9 @@
         permissionMode,
         commandExecMode,
         programmerReviewEnabled,
-        programmerReviewRounds
+        programmerReviewRounds,
+        reflexiveKnowledgeEnabled,
+        selfActuationEnabled
       );
     }
     var previous = enqueueChainByConversationKey[queueKey];
@@ -1200,7 +1226,9 @@
         permissionMode,
         commandExecMode,
         programmerReviewEnabled,
-        programmerReviewRounds
+        programmerReviewRounds,
+        reflexiveKnowledgeEnabled,
+        selfActuationEnabled
       );
     });
     enqueueChainByConversationKey[queueKey] = current;

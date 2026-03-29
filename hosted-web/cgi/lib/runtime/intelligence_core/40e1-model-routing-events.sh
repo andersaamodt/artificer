@@ -1852,6 +1852,32 @@ allowed_command() {
       fi
       return 1
       ;;
+    artificer-appctl)
+      if [ "${SELF_ACTUATION:-0}" != "1" ] && [ "${ARTIFICER_SELF_ACTUATION:-0}" != "1" ]; then
+        return 1
+      fi
+      case "$second_word" in
+        project)
+          [ "$third_word" = "add" ] || return 1
+          return 0
+          ;;
+        thread)
+          [ "$third_word" = "new" ] || return 1
+          return 0
+          ;;
+        automation)
+          [ "$third_word" = "upsert" ] || return 1
+          return 0
+          ;;
+        help|--help|-h)
+          [ "$word_count" -le 2 ] || return 1
+          return 0
+          ;;
+        *)
+          return 1
+          ;;
+      esac
+      ;;
     node)
       if [ "$second_word" = "--check" ] && [ "$word_count" -eq 3 ] && is_safe_relative_path "$third_word"; then
         return 0

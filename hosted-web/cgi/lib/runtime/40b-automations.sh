@@ -678,7 +678,7 @@ automation_enqueue_prompt_for_run() {
   if [ ! -f "$explicit_skills_file" ]; then
     : > "$explicit_skills_file"
   fi
-  queue_meta_write "$queue_item_meta" "$run_mode_value" "$assistant_mode_value" "$compute_budget_value" "$command_exec_mode_value" "$permission_mode_value" "$programmer_review_value" "$programmer_review_rounds_value" "$explicit_skills_file" "$empty_attachment_ids" "$assay_task_id_value" "$automation_id"
+  queue_meta_write "$queue_item_meta" "$run_mode_value" "$assistant_mode_value" "$compute_budget_value" "$command_exec_mode_value" "$permission_mode_value" "$programmer_review_value" "$programmer_review_rounds_value" "$explicit_skills_file" "$empty_attachment_ids" "$assay_task_id_value" "$automation_id" "0" "0"
   rm -f "$empty_attachment_ids"
 
   append_message "$conv_dir" "user" "$prompt_text"
@@ -947,4 +947,3 @@ automation_daemon_status_json_from_kv() {
     "$(json_escape "$label_value")" \
     "$(json_escape "$detail_value")"
 }
-

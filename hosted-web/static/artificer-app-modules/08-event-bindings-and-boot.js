@@ -972,6 +972,22 @@
       });
     }
 
+    if (el.reflexiveKnowledgeToggleBtn) {
+      on(el.reflexiveKnowledgeToggleBtn, "click", function (event) {
+        event.preventDefault();
+        saveReflexiveKnowledge(!state.reflexiveKnowledge);
+        renderUi();
+      });
+    }
+
+    if (el.selfActuationToggleBtn) {
+      on(el.selfActuationToggleBtn, "click", function (event) {
+        event.preventDefault();
+        saveSelfActuation(!state.selfActuation);
+        renderUi();
+      });
+    }
+
     on(el.runActionBtn, "click", function () {
       openModal(el.runActionModal);
       setTimeout(function () {

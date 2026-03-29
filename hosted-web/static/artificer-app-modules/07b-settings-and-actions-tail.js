@@ -1411,7 +1411,9 @@
             state.permissionMode,
             state.commandExecMode,
             state.programmerReviewEnabled,
-            state.programmerReviewRounds
+            state.programmerReviewRounds,
+            state.reflexiveKnowledge,
+            state.selfActuation
           ).then(function () {
             queueSubmissionAccepted = true;
             resetComposerAttachments();

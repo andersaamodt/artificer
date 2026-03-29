@@ -179,6 +179,29 @@ normalize_permission_mode_value() {
   esac
 }
 
+normalize_toggle_01_value() {
+  raw_value=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  case "$raw_value" in
+    1|true|yes|on|enabled)
+      printf '%s' "1"
+      ;;
+    0|false|no|off|disabled)
+      printf '%s' "0"
+      ;;
+    *)
+      printf '%s' ""
+      ;;
+  esac
+}
+
+normalize_reflexive_knowledge_value() {
+  normalize_toggle_01_value "$1"
+}
+
+normalize_self_actuation_value() {
+  normalize_toggle_01_value "$1"
+}
+
 normalize_programmer_review_enabled_value() {
   raw_value=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
   case "$raw_value" in
@@ -1334,6 +1357,8 @@ queue_meta_write() {
   attachment_ids_file=${10}
   assay_task_id_value=${11}
   automation_id_value=${12:-}
+  reflexive_knowledge_value=${13:-}
+  self_actuation_value=${14:-}
   temp_meta=$(mktemp)
   : > "$temp_meta"
 
@@ -1376,6 +1401,16 @@ queue_meta_write() {
   normalized_automation_id=$(normalize_automation_id_value "$automation_id_value")
   if [ -n "$normalized_automation_id" ]; then
     printf 'automation_id=%s\n' "$normalized_automation_id" >> "$temp_meta"
+  fi
+
+  normalized_reflexive_knowledge=$(normalize_reflexive_knowledge_value "$reflexive_knowledge_value")
+  if [ -n "$normalized_reflexive_knowledge" ]; then
+    printf 'reflexive_knowledge=%s\n' "$normalized_reflexive_knowledge" >> "$temp_meta"
+  fi
+
+  normalized_self_actuation=$(normalize_self_actuation_value "$self_actuation_value")
+  if [ -n "$normalized_self_actuation" ]; then
+    printf 'self_actuation=%s\n' "$normalized_self_actuation" >> "$temp_meta"
   fi
 
   if [ -f "$explicit_skill_ids_file" ]; then
@@ -1433,6 +1468,10 @@ queue_meta_attachment_ids_to_file() {
       assay_task_id=*)
         ;;
       automation_id=*)
+        ;;
+      reflexive_knowledge=*)
+        ;;
+      self_actuation=*)
         ;;
       explicit_skill=*)
         ;;
@@ -1585,6 +1624,44 @@ queue_meta_permission_mode_from_file() {
   done < "$meta_file"
 }
 
+queue_meta_reflexive_knowledge_from_file() {
+  meta_file=$1
+  [ -f "$meta_file" ] || return 0
+  while IFS= read -r meta_line || [ -n "$meta_line" ]; do
+    line_trimmed=$(trim "$meta_line")
+    [ -n "$line_trimmed" ] || continue
+    case "$line_trimmed" in
+      reflexive_knowledge=*)
+        value=${line_trimmed#reflexive_knowledge=}
+        value=$(normalize_reflexive_knowledge_value "$value")
+        if [ -n "$value" ]; then
+          printf '%s' "$value"
+          return 0
+        fi
+        ;;
+    esac
+  done < "$meta_file"
+}
+
+queue_meta_self_actuation_from_file() {
+  meta_file=$1
+  [ -f "$meta_file" ] || return 0
+  while IFS= read -r meta_line || [ -n "$meta_line" ]; do
+    line_trimmed=$(trim "$meta_line")
+    [ -n "$line_trimmed" ] || continue
+    case "$line_trimmed" in
+      self_actuation=*)
+        value=${line_trimmed#self_actuation=}
+        value=$(normalize_self_actuation_value "$value")
+        if [ -n "$value" ]; then
+          printf '%s' "$value"
+          return 0
+        fi
+        ;;
+    esac
+  done < "$meta_file"
+}
+
 queue_meta_programmer_review_from_file() {
   meta_file=$1
   [ -f "$meta_file" ] || return 0
@@ -1703,6 +1780,18 @@ queue_last_assay_task_id_file_for() {
   conv_dir=$1
   queue_dir=$(conversation_queue_dir_for "$conv_dir")
   printf '%s/last_assay_task_id' "$queue_dir"
+}
+
+queue_last_reflexive_knowledge_file_for() {
+  conv_dir=$1
+  queue_dir=$(conversation_queue_dir_for "$conv_dir")
+  printf '%s/last_reflexive_knowledge' "$queue_dir"
+}
+
+queue_last_self_actuation_file_for() {
+  conv_dir=$1
+  queue_dir=$(conversation_queue_dir_for "$conv_dir")
+  printf '%s/last_self_actuation' "$queue_dir"
 }
 
 queue_item_id_from_path() {
@@ -2170,4 +2259,3 @@ queue_finalize_for_run_item() {
   fi
   date +%s > "$queue_dir/last_done"
 }
-

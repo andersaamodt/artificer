@@ -454,6 +454,16 @@
     storageSet("artificer.webAccess", state.webAccess ? "1" : "0");
   }
 
+  function saveReflexiveKnowledge(enabled) {
+    state.reflexiveKnowledge = !!enabled;
+    storageSet("artificer.reflexiveKnowledge", state.reflexiveKnowledge ? "1" : "0");
+  }
+
+  function saveSelfActuation(enabled) {
+    state.selfActuation = !!enabled;
+    storageSet("artificer.selfActuation", state.selfActuation ? "1" : "0");
+  }
+
   function appendTerminalLine(line) {
     var next = state.terminalStreamText + String(line || "") + "\n";
     if (next.length > 180000) {

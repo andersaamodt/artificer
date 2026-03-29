@@ -749,7 +749,7 @@ mr_try_queue_injection() {
   empty_skill_ids=$(mktemp)
   : > "$empty_attachment_ids"
   : > "$empty_skill_ids"
-  queue_meta_write "$queue_item_meta" "assistant" "$mode_id" "auto" "$empty_skill_ids" "$empty_attachment_ids"
+  queue_meta_write "$queue_item_meta" "assistant" "$mode_id" "auto" "" "" "0" "0" "$empty_skill_ids" "$empty_attachment_ids" "" "" "0" "0"
   rm -f "$empty_attachment_ids" "$empty_skill_ids"
 
   printf '%s' "$item_id"
@@ -1241,4 +1241,3 @@ mode_runtime_state_json() {
     "$controller_variants_state" \
     "$quality_scorecard_state"
 }
-

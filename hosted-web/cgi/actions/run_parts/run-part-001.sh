@@ -7,6 +7,8 @@
     approval_retry_raw=$(trim "$(param "approval_retry")")
     network_access_raw=$(trim "$(param "network_access")")
     web_access_raw=$(trim "$(param "web_access")")
+    reflexive_knowledge_raw=$(trim "$(param "reflexive_knowledge")")
+    self_actuation_raw=$(trim "$(param "self_actuation")")
     attachment_ids_raw=$(param "attachment_ids")
     queue_item_id=$(trim "$(param "queue_item_id")")
     advanced_loop_raw=$(trim "$(param "advanced_loop")")
@@ -31,6 +33,8 @@
     append_user_message=1
     command_mode="ask-some"
     permission_mode="default"
+    REFLEXIVE_KNOWLEDGE=0
+    SELF_ACTUATION=0
     programmer_review_enabled=1
     programmer_review_max_rounds=2
     programmer_review_rounds_completed=0
@@ -122,6 +126,8 @@
     queue_compute_budget_override=""
     queue_command_exec_mode_override=""
     queue_permission_mode_override=""
+    queue_reflexive_knowledge_override=""
+    queue_self_actuation_override=""
     queue_programmer_review_override=""
     queue_programmer_review_rounds_override=""
     queue_assay_task_override=""
@@ -139,6 +145,8 @@
         queue_compute_budget_override=$(queue_meta_compute_budget_from_file "$running_meta_for_mode")
         queue_command_exec_mode_override=$(queue_meta_command_exec_mode_from_file "$running_meta_for_mode")
         queue_permission_mode_override=$(queue_meta_permission_mode_from_file "$running_meta_for_mode")
+        queue_reflexive_knowledge_override=$(queue_meta_reflexive_knowledge_from_file "$running_meta_for_mode")
+        queue_self_actuation_override=$(queue_meta_self_actuation_from_file "$running_meta_for_mode")
         queue_programmer_review_override=$(queue_meta_programmer_review_from_file "$running_meta_for_mode")
         queue_programmer_review_rounds_override=$(queue_meta_programmer_review_rounds_from_file "$running_meta_for_mode")
         queue_assay_task_override=$(queue_meta_assay_task_id_from_file "$running_meta_for_mode")
@@ -822,6 +830,26 @@ EOF
     if [ "$permission_mode" = "read-only" ]; then
       allow_workspace_writes=0
     fi
+
+    request_reflexive_knowledge=$(normalize_reflexive_knowledge_value "$reflexive_knowledge_raw")
+    if [ -n "$request_reflexive_knowledge" ]; then
+      REFLEXIVE_KNOWLEDGE=$request_reflexive_knowledge
+    fi
+    if [ -n "$queue_reflexive_knowledge_override" ]; then
+      REFLEXIVE_KNOWLEDGE=$(normalize_reflexive_knowledge_value "$queue_reflexive_knowledge_override")
+    fi
+    [ -n "$REFLEXIVE_KNOWLEDGE" ] || REFLEXIVE_KNOWLEDGE=0
+
+    request_self_actuation=$(normalize_self_actuation_value "$self_actuation_raw")
+    if [ -n "$request_self_actuation" ]; then
+      SELF_ACTUATION=$request_self_actuation
+    fi
+    if [ -n "$queue_self_actuation_override" ]; then
+      SELF_ACTUATION=$(normalize_self_actuation_value "$queue_self_actuation_override")
+    fi
+    [ -n "$SELF_ACTUATION" ] || SELF_ACTUATION=0
+    ARTIFICER_SELF_ACTUATION=$SELF_ACTUATION
+    export REFLEXIVE_KNOWLEDGE SELF_ACTUATION ARTIFICER_SELF_ACTUATION
 
     incoming_attachment_ids=$(mktemp)
     valid_attachment_ids=$(mktemp)

@@ -4,10 +4,13 @@ startup_bridge_timeouts	Desktop startup bridge actions use explicit timeout poli
 startup_boot_order	Desktop startup prefers ready-port detect/start before ensure-site fallback.	test-startup-boot-order.sh
 startup_port_resolution	Desktop launcher resolves URL port without command-substitution capture hangs.	test-startup-run-artificer-port-resolution.sh
 splash_status_contract	Splash keeps a stable preparing message until ready or error.	test-splash-status-contract.sh
+run_stream_poll_lifecycle	Run stream polling drains final deltas before stop and avoids lost streamed content.	test-run-stream-poll-lifecycle.sh
+run_event_status_copy	Run status copy remains latest-run scoped and non-contradictory while active runs continue.	test-run-event-status-copy-consistency.sh
 workspace_add_modal_and_tilde	Add Project supports ~/ expansion and modal action order.	test-add-workspace-tilde-and-modal-actions.sh,test-add-workspace-tilde-runtime.sh
 workspace_browse_path_population	Browse and directory picker populate folder path and placeholder.	test-workspace-browse-path-population.sh
 workspace_drag_surface	Project rows drag from row surface (not drag-handle controls).	test-workspace-drag-surface-behavior.sh
 automations_layout	Automations appears as left-nav section with right-pane workflow.	test-automations-pane-layout.sh
+self_reflexive_self_actuation	Permissions include reflexive knowledge plus self-actuation and wire both through run/queue/runtime command gating.	test-self-reflexive-self-actuation-permissions.sh
 model_catalog_metadata	Model rows preserve description optionality and always include size metadata.	test-model-catalog-installed-metadata.sh
 model_auto_refresh_recovery	Model list refresh loop recovers after failed fetch cycles.	test-model-auto-refresh-recovery.sh
 ui_state_durable_backend	Desktop preferences persist via backend UI state API.	test-ui-state-durable-backend.sh

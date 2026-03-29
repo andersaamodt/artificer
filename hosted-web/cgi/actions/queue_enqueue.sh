@@ -9,6 +9,8 @@
     compute_budget_raw=$(trim "$(param "compute_budget")")
     command_exec_mode_raw=$(trim "$(param "command_exec_mode")")
     permission_mode_raw=$(trim "$(param "permission_mode")")
+    reflexive_knowledge_raw=$(trim "$(param "reflexive_knowledge")")
+    self_actuation_raw=$(trim "$(param "self_actuation")")
     programmer_review_raw=$(trim "$(param "programmer_review")")
     programmer_review_rounds_raw=$(trim "$(param "programmer_review_rounds")")
     assay_task_id_raw=$(trim "$(param "assay_task_id")")
@@ -50,6 +52,8 @@
     queue_item_compute_budget=$(normalize_compute_budget "$compute_budget_raw")
     queue_item_command_exec_mode=$(normalize_command_exec_mode_value "$command_exec_mode_raw")
     queue_item_permission_mode=$(normalize_permission_mode_value "$permission_mode_raw")
+    queue_item_reflexive_knowledge=$(normalize_reflexive_knowledge_value "$reflexive_knowledge_raw")
+    queue_item_self_actuation=$(normalize_self_actuation_value "$self_actuation_raw")
     queue_item_programmer_review=$(normalize_programmer_review_enabled_value "$programmer_review_raw")
     queue_item_programmer_review_rounds=$(normalize_programmer_review_rounds_value "$programmer_review_rounds_raw" 2)
     queue_item_assay_task_id=$(normalize_assay_task_id_value "$assay_task_id_raw")
@@ -79,7 +83,7 @@
         printf '%s\n' "$skill_id" >> "$validated_skill_ids_file"
       fi
     done < "$incoming_skill_ids_file"
-    queue_meta_write "$queue_item_meta" "$queue_item_mode" "$queue_item_assistant_mode" "$queue_item_compute_budget" "$queue_item_command_exec_mode" "$queue_item_permission_mode" "$queue_item_programmer_review" "$queue_item_programmer_review_rounds" "$validated_skill_ids_file" "$validated_ids_file" "$queue_item_assay_task_id" ""
+    queue_meta_write "$queue_item_meta" "$queue_item_mode" "$queue_item_assistant_mode" "$queue_item_compute_budget" "$queue_item_command_exec_mode" "$queue_item_permission_mode" "$queue_item_programmer_review" "$queue_item_programmer_review_rounds" "$validated_skill_ids_file" "$validated_ids_file" "$queue_item_assay_task_id" "" "$queue_item_reflexive_knowledge" "$queue_item_self_actuation"
 
     # Persist user intent at enqueue time so threads are never blank even if queue execution is interrupted.
     user_message_prompt=$prompt_text

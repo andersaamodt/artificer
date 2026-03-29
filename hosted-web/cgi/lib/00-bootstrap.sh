@@ -4,6 +4,12 @@ set -eu
 WIZARDRY_DIR=${WIZARDRY_DIR:-$HOME/.wizardry}
 PATH="$WIZARDRY_DIR/spells/.imps/cgi:$PATH:/usr/local/bin:/opt/homebrew/bin:$HOME/.local/bin:/usr/bin"
 ARTIFICER_SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+ARTIFICER_TOOLS_DIR="$ARTIFICER_SCRIPT_DIR/../../scripts"
+if [ -d "$ARTIFICER_TOOLS_DIR" ]; then
+  PATH="$PATH:$ARTIFICER_TOOLS_DIR"
+fi
+ARTIFICER_API_SCRIPT=${ARTIFICER_API_SCRIPT:-$ARTIFICER_SCRIPT_DIR/../artificer-api}
+export ARTIFICER_API_SCRIPT
 
 http-ok-json
 
@@ -54,6 +60,9 @@ state_light_cache_revision_file="$data_root/state-light-cache.revision"
 state_revision_file="$data_root/state.revision"
 ALLOW_NETWORK=0
 ALLOW_WEB=0
+REFLEXIVE_KNOWLEDGE=0
+SELF_ACTUATION=0
+ARTIFICER_SELF_ACTUATION=0
 ARTIFICER_STATE_ROOT=${ARTIFICER_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/artificer}
 ARTIFICER_ASSAY_REPORTS_DIR=${ARTIFICER_ASSAY_REPORTS_DIR:-$ARTIFICER_STATE_ROOT/assay-reports}
 ARTIFICER_ASSAY_RUNS_DIR=${ARTIFICER_ASSAY_RUNS_DIR:-$ARTIFICER_STATE_ROOT/assay-runs}

@@ -733,6 +733,8 @@
     selfImproveError: "",
     networkAccess: storageGet("artificer.networkAccess", "0") === "1",
     webAccess: storageGet("artificer.webAccess", "0") === "1",
+    reflexiveKnowledge: storageGet("artificer.reflexiveKnowledge", "0") === "1",
+    selfActuation: storageGet("artificer.selfActuation", "0") === "1",
     agentLoopEnabled: storageGet("artificer.agentLoopEnabled", "1") !== "0",
     runMode: storageGet("artificer.runMode", "auto"),
     assistantModeId: storageGet("artificer.assistantModeId", ""),
@@ -1168,6 +1170,8 @@
   if (state.commandExecMode === "ask") {
     state.commandExecMode = "ask-some";
   }
+  state.reflexiveKnowledge = !!state.reflexiveKnowledge;
+  state.selfActuation = !!state.selfActuation;
   state.dictationShortcutHold = normalizeDictationShortcut("hold", state.dictationShortcutHold);
   state.dictationShortcutToggle = normalizeDictationShortcut("toggle", state.dictationShortcutToggle);
   state.dictationLanguages = normalizeDictationLanguageOptions(state.dictationLanguages);
@@ -1256,6 +1260,8 @@
     permissionsMenu: document.getElementById("permissions-menu"),
     networkToggleBtn: document.getElementById("network-toggle-btn"),
     webToggleBtn: document.getElementById("web-toggle-btn"),
+    reflexiveKnowledgeToggleBtn: document.getElementById("reflexive-knowledge-toggle-btn"),
+    selfActuationToggleBtn: document.getElementById("self-actuation-toggle-btn"),
     terminalToggleBtn: document.getElementById("terminal-toggle-btn"),
     changesBtn: document.getElementById("changes-btn"),
     contextWindowBtn: document.getElementById("context-window-btn"),

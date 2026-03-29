@@ -291,6 +291,8 @@
     queue_last_programmer_review_file=$(queue_last_programmer_review_file_for "$conv_dir")
     queue_last_programmer_review_rounds_file=$(queue_last_programmer_review_rounds_file_for "$conv_dir")
     queue_last_assay_task_id_file=$(queue_last_assay_task_id_file_for "$conv_dir")
+    queue_last_reflexive_knowledge_file=$(queue_last_reflexive_knowledge_file_for "$conv_dir")
+    queue_last_self_actuation_file=$(queue_last_self_actuation_file_for "$conv_dir")
     printf '%s\n' "$run_mode" > "$queue_last_mode_file"
     printf '%s\n' "$assistant_mode_id" > "$queue_last_assistant_mode_file"
     printf '%s\n' "$compute_budget" > "$queue_last_compute_budget_file"
@@ -299,6 +301,8 @@
     printf '%s\n' "$programmer_review_enabled" > "$queue_last_programmer_review_file"
     printf '%s\n' "$programmer_review_max_rounds" > "$queue_last_programmer_review_rounds_file"
     printf '%s\n' "$assay_task_id" > "$queue_last_assay_task_id_file"
+    printf '%s\n' "$REFLEXIVE_KNOWLEDGE" > "$queue_last_reflexive_knowledge_file"
+    printf '%s\n' "$SELF_ACTUATION" > "$queue_last_self_actuation_file"
     max_iterations_label=$max_iterations
     if [ "$max_iterations" -le 0 ]; then
       max_iterations_label="unbounded"

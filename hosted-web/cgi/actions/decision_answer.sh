@@ -59,10 +59,14 @@ EOF
     queue_last_programmer_review_file=$(queue_last_programmer_review_file_for "$conv_dir")
     queue_last_programmer_review_rounds_file=$(queue_last_programmer_review_rounds_file_for "$conv_dir")
     queue_last_assay_task_id_file=$(queue_last_assay_task_id_file_for "$conv_dir")
+    queue_last_reflexive_knowledge_file=$(queue_last_reflexive_knowledge_file_for "$conv_dir")
+    queue_last_self_actuation_file=$(queue_last_self_actuation_file_for "$conv_dir")
     decision_run_mode=$(normalize_run_mode_name "$(read_file_line "$queue_last_mode_file" "auto")")
     decision_compute_budget=$(normalize_compute_budget "$(read_file_line "$queue_last_compute_budget_file" "auto")")
     decision_command_exec_mode=$(normalize_command_exec_mode_value "$(read_file_line "$queue_last_command_exec_mode_file" "ask-some")")
     decision_permission_mode=$(normalize_permission_mode_value "$(read_file_line "$queue_last_permission_mode_file" "default")")
+    decision_reflexive_knowledge=$(normalize_reflexive_knowledge_value "$(read_file_line "$queue_last_reflexive_knowledge_file" "0")")
+    decision_self_actuation=$(normalize_self_actuation_value "$(read_file_line "$queue_last_self_actuation_file" "0")")
     decision_programmer_review=$(normalize_programmer_review_enabled_value "$(read_file_line "$queue_last_programmer_review_file" "1")")
     decision_programmer_review_rounds=$(normalize_programmer_review_rounds_value "$(read_file_line "$queue_last_programmer_review_rounds_file" "2")" 2)
     decision_assay_task_id=$(normalize_assay_task_id_value "$(read_file_line "$queue_last_assay_task_id_file" "")")
@@ -85,7 +89,7 @@ EOF
     empty_skill_ids=$(mktemp)
     : > "$empty_attachment_ids"
     : > "$empty_skill_ids"
-    queue_meta_write "$queue_item_meta" "$decision_run_mode" "$decision_assistant_mode" "$decision_compute_budget" "$decision_command_exec_mode" "$decision_permission_mode" "$decision_programmer_review" "$decision_programmer_review_rounds" "$empty_skill_ids" "$empty_attachment_ids" "$decision_assay_task_id" ""
+    queue_meta_write "$queue_item_meta" "$decision_run_mode" "$decision_assistant_mode" "$decision_compute_budget" "$decision_command_exec_mode" "$decision_permission_mode" "$decision_programmer_review" "$decision_programmer_review_rounds" "$empty_skill_ids" "$empty_attachment_ids" "$decision_assay_task_id" "" "$decision_reflexive_knowledge" "$decision_self_actuation"
     rm -f "$empty_attachment_ids" "$empty_skill_ids"
     printf '%s\n' "queued" > "$queue_dir/last_status"
     date +%s > "$queue_dir/last_done"
