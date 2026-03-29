@@ -1671,6 +1671,527 @@ sanitize_plan_update_text() {
   '
 }
 
+artificer_appctl_strip_outer_quotes() {
+  token=$1
+  case "$token" in
+    \"*\")
+      token=${token#\"}
+      token=${token%\"}
+      ;;
+    \'*\')
+      token=${token#\'}
+      token=${token%\'}
+      ;;
+  esac
+  printf '%s' "$token"
+}
+
+artificer_appctl_id_valid() {
+  token=$(artificer_appctl_strip_outer_quotes "$1")
+  printf '%s\n' "$token" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'
+}
+
+artificer_appctl_bool_valid() {
+  token=$(printf '%s' "$(artificer_appctl_strip_outer_quotes "$1")" | tr '[:upper:]' '[:lower:]')
+  case "$token" in
+    0|1|true|false|yes|no|on|off|enabled|disabled)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+artificer_appctl_command_exec_mode_valid() {
+  token=$(printf '%s' "$(artificer_appctl_strip_outer_quotes "$1")" | tr '[:upper:]' '[:lower:]')
+  case "$token" in
+    none|ask-all|ask-some|all)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+artificer_appctl_permission_mode_valid() {
+  token=$(printf '%s' "$(artificer_appctl_strip_outer_quotes "$1")" | tr '[:upper:]' '[:lower:]')
+  case "$token" in
+    default|workspace-write|read-only|full-access)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+artificer_appctl_schedule_kind_valid() {
+  token=$(printf '%s' "$(artificer_appctl_strip_outer_quotes "$1")" | tr '[:upper:]' '[:lower:]')
+  case "$token" in
+    cron|interval|once)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+artificer_appctl_run_mode_valid() {
+  token=$(printf '%s' "$(artificer_appctl_strip_outer_quotes "$1")" | tr '[:upper:]' '[:lower:]')
+  case "$token" in
+    instant|auto|chat|programming|pentest|security-audit|teacher|report|text-perfecter|gui-testing|assistant)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+artificer_appctl_compute_budget_valid() {
+  token=$(printf '%s' "$(artificer_appctl_strip_outer_quotes "$1")" | tr '[:upper:]' '[:lower:]')
+  case "$token" in
+    auto|quick|standard|long|until-complete)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+artificer_appctl_rounds_valid() {
+  token=$(artificer_appctl_strip_outer_quotes "$1")
+  case "$token" in
+    1|2|3|4)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+artificer_appctl_epoch_valid() {
+  token=$(artificer_appctl_strip_outer_quotes "$1")
+  case "$token" in
+    ''|*[!0-9]*)
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+artificer_appctl_value_token_valid() {
+  token=$1
+  case "$token" in
+    ''|--*)
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+artificer_appctl_consume_text_value() {
+  # Consumes one or more non-flag tokens and returns remaining args on stdout.
+  # shellcheck disable=SC2120
+  if [ "$#" -lt 1 ]; then
+    return 1
+  fi
+  saw=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --*)
+        break
+        ;;
+      *)
+        saw=1
+        shift
+        ;;
+    esac
+  done
+  [ "$saw" -eq 1 ] || return 1
+  printf '%s\n' "$*"
+  return 0
+}
+
+validate_artificer_appctl_project_add_args() {
+  seen_path=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --path|--name)
+        flag=$1
+        shift
+        [ "$#" -gt 0 ] || return 1
+        remaining=$(artificer_appctl_consume_text_value "$@") || return 1
+        # shellcheck disable=SC2086
+        set -- $remaining
+        if [ "$flag" = "--path" ]; then
+          seen_path=1
+        fi
+        ;;
+      --command-exec|--command-exec-mode)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_command_exec_mode_valid "$1" || return 1
+        shift
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done
+  [ "$seen_path" -eq 1 ] || return 1
+  return 0
+}
+
+validate_artificer_appctl_thread_new_args() {
+  seen_workspace=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --workspace-id)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_id_valid "$1" || return 1
+        seen_workspace=1
+        shift
+        ;;
+      --model)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_value_token_valid "$1" || return 1
+        shift
+        ;;
+      --title)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        remaining=$(artificer_appctl_consume_text_value "$@") || return 1
+        # shellcheck disable=SC2086
+        set -- $remaining
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done
+  [ "$seen_workspace" -eq 1 ] || return 1
+  return 0
+}
+
+validate_artificer_appctl_automation_upsert_args() {
+  seen_workspace=0
+  seen_name=0
+  seen_prompt=0
+  seen_schedule_kind=0
+  seen_schedule_value=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --automation-id|--conversation-id|--assistant-mode-id|--assay-task-id|--explicit-skill-ids)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_value_token_valid "$1" || return 1
+        shift
+        ;;
+      --workspace-id)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_id_valid "$1" || return 1
+        seen_workspace=1
+        shift
+        ;;
+      --name)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        remaining=$(artificer_appctl_consume_text_value "$@") || return 1
+        seen_name=1
+        # shellcheck disable=SC2086
+        set -- $remaining
+        ;;
+      --prompt)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        remaining=$(artificer_appctl_consume_text_value "$@") || return 1
+        seen_prompt=1
+        # shellcheck disable=SC2086
+        set -- $remaining
+        ;;
+      --schedule-kind)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_schedule_kind_valid "$1" || return 1
+        seen_schedule_kind=1
+        shift
+        ;;
+      --schedule-value)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        remaining=$(artificer_appctl_consume_text_value "$@") || return 1
+        seen_schedule_value=1
+        # shellcheck disable=SC2086
+        set -- $remaining
+        ;;
+      --enabled|--allow-self-reschedule|--programmer-review)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_bool_valid "$1" || return 1
+        shift
+        ;;
+      --run-mode)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_run_mode_valid "$1" || return 1
+        shift
+        ;;
+      --compute-budget)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_compute_budget_valid "$1" || return 1
+        shift
+        ;;
+      --command-exec|--command-exec-mode)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_command_exec_mode_valid "$1" || return 1
+        shift
+        ;;
+      --permission-mode)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_permission_mode_valid "$1" || return 1
+        shift
+        ;;
+      --programmer-review-rounds)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_rounds_valid "$1" || return 1
+        shift
+        ;;
+      --next-run)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_epoch_valid "$1" || return 1
+        shift
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done
+  [ "$seen_workspace" -eq 1 ] || return 1
+  [ "$seen_name" -eq 1 ] || return 1
+  [ "$seen_prompt" -eq 1 ] || return 1
+  [ "$seen_schedule_kind" -eq 1 ] || return 1
+  [ "$seen_schedule_value" -eq 1 ] || return 1
+  return 0
+}
+
+validate_artificer_appctl_command() {
+  cmd_text=$1
+  reflexive_gate=$2
+  self_actuation_gate=$3
+
+  (
+    # shellcheck disable=SC2086
+    set -- $cmd_text
+    [ "$#" -ge 2 ] || exit 1
+    [ "$1" = "artificer-appctl" ] || exit 1
+    [ "$#" -ge 3 ] || exit 1
+    kind=$2
+    action=$3
+    shift 3
+    case "$kind:$action" in
+      project:add)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        validate_artificer_appctl_project_add_args "$@" || exit 1
+        exit 0
+        ;;
+      project:list)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        case "$#" in
+          0) exit 0 ;;
+          1) [ "$1" = "--json" ] && exit 0 ;;
+        esac
+        exit 1
+        ;;
+      project:rename)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        seen_workspace=0
+        seen_name=0
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --workspace-id)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_id_valid "$1" || exit 1
+              seen_workspace=1
+              shift
+              ;;
+            --name)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              remaining=$(artificer_appctl_consume_text_value "$@") || exit 1
+              seen_name=1
+              # shellcheck disable=SC2086
+              set -- $remaining
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+        done
+        [ "$seen_workspace" -eq 1 ] && [ "$seen_name" -eq 1 ] || exit 1
+        exit 0
+        ;;
+      project:delete)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        [ "$#" -eq 2 ] || exit 1
+        [ "$1" = "--workspace-id" ] || exit 1
+        artificer_appctl_id_valid "$2" || exit 1
+        exit 0
+        ;;
+      thread:new)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        validate_artificer_appctl_thread_new_args "$@" || exit 1
+        exit 0
+        ;;
+      thread:list)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        seen_workspace=0
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --workspace-id)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_id_valid "$1" || exit 1
+              seen_workspace=1
+              shift
+              ;;
+            --json)
+              shift
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+        done
+        [ "$seen_workspace" -eq 1 ] || exit 1
+        exit 0
+        ;;
+      thread:archive)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        seen_workspace=0
+        seen_conversation=0
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --workspace-id)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_id_valid "$1" || exit 1
+              seen_workspace=1
+              shift
+              ;;
+            --conversation-id)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_id_valid "$1" || exit 1
+              seen_conversation=1
+              shift
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+        done
+        [ "$seen_workspace" -eq 1 ] && [ "$seen_conversation" -eq 1 ] || exit 1
+        exit 0
+        ;;
+      knowledge:show)
+        [ "$reflexive_gate" -eq 1 ] || exit 1
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --json)
+              shift
+              ;;
+            --topic)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_value_token_valid "$1" || exit 1
+              shift
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+        done
+        exit 0
+        ;;
+      knowledge:teach)
+        [ "$reflexive_gate" -eq 1 ] || exit 1
+        seen_topic=0
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --json)
+              shift
+              ;;
+            --topic)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_value_token_valid "$1" || exit 1
+              seen_topic=1
+              shift
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+        done
+        [ "$seen_topic" -eq 1 ] || exit 1
+        exit 0
+        ;;
+      automation:list)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        case "$#" in
+          0) exit 0 ;;
+          1) [ "$1" = "--json" ] && exit 0 ;;
+        esac
+        exit 1
+        ;;
+      automation:toggle)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        seen_id=0
+        seen_enabled=0
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --automation-id)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_id_valid "$1" || exit 1
+              seen_id=1
+              shift
+              ;;
+            --enabled)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_bool_valid "$1" || exit 1
+              seen_enabled=1
+              shift
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+        done
+        [ "$seen_id" -eq 1 ] && [ "$seen_enabled" -eq 1 ] || exit 1
+        exit 0
+        ;;
+      automation:run-now|automation:delete)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        [ "$#" -eq 2 ] || exit 1
+        [ "$1" = "--automation-id" ] || exit 1
+        artificer_appctl_id_valid "$2" || exit 1
+        exit 0
+        ;;
+      automation:upsert)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        validate_artificer_appctl_automation_upsert_args "$@" || exit 1
+        exit 0
+        ;;
+      *)
+        exit 1
+        ;;
+    esac
+  )
+}
+
 allowed_command() {
   cmd=$1
 
@@ -1862,50 +2383,6 @@ allowed_command() {
         self_actuation_gate=1
       fi
       case "$second_word" in
-        project)
-          [ "$self_actuation_gate" -eq 1 ] || return 1
-          case "$third_word" in
-            add|list|rename|delete)
-              return 0
-              ;;
-            *)
-              return 1
-              ;;
-          esac
-          ;;
-        thread)
-          [ "$self_actuation_gate" -eq 1 ] || return 1
-          case "$third_word" in
-            new|list|archive)
-              return 0
-              ;;
-            *)
-              return 1
-              ;;
-          esac
-          ;;
-        automation)
-          [ "$self_actuation_gate" -eq 1 ] || return 1
-          case "$third_word" in
-            upsert|list|toggle|run-now|delete)
-              return 0
-              ;;
-            *)
-              return 1
-              ;;
-          esac
-          ;;
-        knowledge)
-          [ "$reflexive_gate" -eq 1 ] || return 1
-          case "$third_word" in
-            show|teach)
-              return 0
-              ;;
-            *)
-              return 1
-              ;;
-          esac
-          ;;
         help|--help|-h)
           if [ "$reflexive_gate" -ne 1 ] && [ "$self_actuation_gate" -ne 1 ]; then
             return 1
@@ -1913,10 +2390,11 @@ allowed_command() {
           [ "$word_count" -le 2 ] || return 1
           return 0
           ;;
-        *)
-          return 1
-          ;;
       esac
+      if validate_artificer_appctl_command "$cmd" "$reflexive_gate" "$self_actuation_gate"; then
+        return 0
+      fi
+      return 1
       ;;
     node)
       if [ "$second_word" = "--check" ] && [ "$word_count" -eq 3 ] && is_safe_relative_path "$third_word"; then

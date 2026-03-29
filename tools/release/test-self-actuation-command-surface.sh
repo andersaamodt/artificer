@@ -33,12 +33,21 @@ do
 done
 
 for allow_snippet in \
-  'add|list|rename|delete' \
-  'new|list|archive' \
-  'upsert|list|toggle|run-now|delete'
+  'project:add' \
+  'project:list' \
+  'project:rename' \
+  'project:delete' \
+  'thread:new' \
+  'thread:list' \
+  'thread:archive' \
+  'automation:upsert' \
+  'automation:list' \
+  'automation:toggle' \
+  'automation:run-now' \
+  'automation:delete'
 do
   if ! grep -q "$allow_snippet" "$allow_file"; then
-    printf '%s\n' "allowlist missing expanded self-actuation command set: $allow_snippet" >&2
+    printf '%s\n' "allowlist missing expanded self-actuation command branch: $allow_snippet" >&2
     exit 1
   fi
 done

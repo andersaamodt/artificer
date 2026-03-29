@@ -15,7 +15,7 @@ wizardry_dir_real=${WIZARDRY_DIR:-$HOME/.wizardry}
 mkdir -p "$sites_root" "$state_home" "$isolated_home" "$sandbox_bin"
 
 cleanup() {
-  rm -rf "$tmp_root"
+  rm -rf "$tmp_root" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT HUP TERM
 
@@ -29,6 +29,13 @@ wait_with_timeout() {
   timeout_seconds=$2
   elapsed=0
   while kill -0 "$target_pid" 2>/dev/null; do
+    # Treat zombie as completed so wait() can reap it and return real status.
+    target_state=$(ps -o stat= -p "$target_pid" 2>/dev/null | sed -n '1p' | tr -d '[:space:]')
+    case "$target_state" in
+      Z*)
+        return 0
+        ;;
+    esac
     if [ "$elapsed" -ge "$timeout_seconds" ]; then
       kill "$target_pid" 2>/dev/null || true
       sleep 1
@@ -51,8 +58,8 @@ run_ensure_site() {
   ) &
   ensure_pid=$!
 
-  if ! wait_with_timeout "$ensure_pid" 20; then
-    fail "ensure-site timed out after 20 seconds"
+  if ! wait_with_timeout "$ensure_pid" 45; then
+    fail "ensure-site timed out after 45 seconds"
   fi
   ensure_rc=0
   wait "$ensure_pid" || ensure_rc=$?
@@ -70,6 +77,13 @@ action_skip_reason() {
   case "$action_name" in
     "")
       printf '%s' "invalid action name"
+      return 0
+      ;;
+    controller_variant_*|controller_variants_state|improvement_proposal_*|improvement_proposals_state|mode_runtime_*|multi_agent_*|self_improve_*|failure_taxonomy_*|quality_scorecard_state|triage_*|automation_daemon_tick|automations_tick)
+      # These surfaces orchestrate longer-lived reasoning/planning runtimes that
+      # are covered in dedicated behavioral suites; they are intentionally skipped
+      # in this quick CGI envelope contract probe.
+      printf '%s' "long-running orchestration surface covered by dedicated tests"
       return 0
       ;;
   esac

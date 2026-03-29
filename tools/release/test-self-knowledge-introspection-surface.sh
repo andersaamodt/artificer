@@ -55,7 +55,7 @@ if ! grep -q 'requested_topic' "$appctl_file"; then
   exit 1
 fi
 
-if ! grep -q 'knowledge)' "$allow_file"; then
+if ! grep -q 'knowledge:show' "$allow_file" || ! grep -q 'knowledge:teach' "$allow_file"; then
   printf '%s\n' "command allowlist missing artificer-appctl knowledge branch" >&2
   exit 1
 fi
