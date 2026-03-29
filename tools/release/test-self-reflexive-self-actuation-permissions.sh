@@ -94,4 +94,14 @@ if ! grep -q 'project list' "$appctl_file" || ! grep -q 'automation run-now' "$a
   exit 1
 fi
 
+if ! grep -q 'self-actuation preview' "$appctl_file" || ! grep -q 'self-actuation policy-set' "$appctl_file"; then
+  printf '%s\n' "artificer-appctl script is missing orchestrated self-actuation policy/preview surfaces" >&2
+  exit 1
+fi
+
+if ! grep -q 'self-actuation:preview' "$allow_file" || ! grep -q 'self-actuation:policy-set' "$allow_file"; then
+  printf '%s\n' "command allowlist is missing orchestrated self-actuation command branches" >&2
+  exit 1
+fi
+
 printf '%s\n' "ok reflexive knowledge + self-actuation permissions are wired through UI, queue/run payloads, and command gating"

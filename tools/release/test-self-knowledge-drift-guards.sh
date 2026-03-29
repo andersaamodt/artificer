@@ -108,6 +108,11 @@ for usage_snippet in \
   'automation toggle' \
   'automation run-now' \
   'automation delete' \
+  'self-actuation preview' \
+  'self-actuation apply' \
+  'self-actuation policy-get' \
+  'self-actuation policy-set' \
+  'self-actuation audit' \
   'knowledge show' \
   'knowledge teach'
 do
@@ -130,6 +135,11 @@ for allow_snippet in \
   'automation:toggle' \
   'automation:run-now' \
   'automation:delete' \
+  'self-actuation:preview' \
+  'self-actuation:apply' \
+  'self-actuation:policy-get' \
+  'self-actuation:policy-set' \
+  'self-actuation:audit' \
   'knowledge:show' \
   'knowledge:teach'
 do
@@ -143,6 +153,11 @@ for guidance_snippet in \
   'project list --json' \
   'automation list --json' \
   'thread list --workspace-id <id> --json' \
+  'self-actuation preview --operation <operation>' \
+  'self-actuation apply --operation <operation> --confirm-token <token>' \
+  'self-actuation policy-get' \
+  'self-actuation policy-set --action <operation> --enabled <0|1>' \
+  'self-actuation audit --limit <n>' \
   'project add|rename|delete' \
   'thread new|archive' \
   'automation upsert|toggle|run-now|delete'

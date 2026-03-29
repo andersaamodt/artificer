@@ -1974,6 +1974,104 @@ validate_artificer_appctl_automation_upsert_args() {
   return 0
 }
 
+artificer_appctl_self_actuation_operation_valid() {
+  token=$(printf '%s' "$(artificer_appctl_strip_outer_quotes "$1")" | tr '[:upper:]' '[:lower:]')
+  case "$token" in
+    read_state|ensure_workspace|rename_workspace|delete_workspace|ensure_thread|archive_thread|ensure_automation|toggle_automation|run_automation_now|delete_automation|bootstrap_workspace_stack)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+artificer_appctl_idempotency_key_valid() {
+  token=$(artificer_appctl_strip_outer_quotes "$1")
+  printf '%s\n' "$token" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+}
+
+artificer_appctl_uint_valid() {
+  token=$(artificer_appctl_strip_outer_quotes "$1")
+  case "$token" in
+    ''|*[!0-9]*)
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+validate_artificer_appctl_self_actuation_orchestrate_args() {
+  mode_name=$1
+  shift
+  seen_operation=0
+  seen_confirm=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --operation)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_self_actuation_operation_valid "$1" || return 1
+        seen_operation=1
+        shift
+        ;;
+      --workspace-id|--conversation-id|--automation-id)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_id_valid "$1" || return 1
+        shift
+        ;;
+      --path|--name|--title|--model|--prompt|--schedule-value)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        remaining=$(artificer_appctl_consume_text_value "$@") || return 1
+        # shellcheck disable=SC2086
+        set -- $remaining
+        ;;
+      --schedule-kind)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_schedule_kind_valid "$1" || return 1
+        shift
+        ;;
+      --command-exec|--command-exec-mode)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_command_exec_mode_valid "$1" || return 1
+        shift
+        ;;
+      --enabled|--allow-self-reschedule)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_bool_valid "$1" || return 1
+        shift
+        ;;
+      --confirm-token)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_value_token_valid "$1" || return 1
+        seen_confirm=1
+        shift
+        ;;
+      --idempotency-key)
+        shift
+        [ "$#" -gt 0 ] || return 1
+        artificer_appctl_idempotency_key_valid "$1" || return 1
+        shift
+        ;;
+      --json)
+        shift
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done
+  [ "$seen_operation" -eq 1 ] || return 1
+  if [ "$mode_name" = "apply" ] && [ "$seen_confirm" -ne 1 ]; then
+    return 1
+  fi
+  return 0
+}
+
 validate_artificer_appctl_command() {
   cmd_text=$1
   reflexive_gate=$2
@@ -2183,6 +2281,99 @@ validate_artificer_appctl_command() {
       automation:upsert)
         [ "$self_actuation_gate" -eq 1 ] || exit 1
         validate_artificer_appctl_automation_upsert_args "$@" || exit 1
+        exit 0
+        ;;
+      self-actuation:preview)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        validate_artificer_appctl_self_actuation_orchestrate_args "preview" "$@" || exit 1
+        exit 0
+        ;;
+      self-actuation:apply)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        validate_artificer_appctl_self_actuation_orchestrate_args "apply" "$@" || exit 1
+        exit 0
+        ;;
+      self-actuation:policy-get)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --workspace-id)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_id_valid "$1" || exit 1
+              shift
+              ;;
+            --action)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_self_actuation_operation_valid "$1" || exit 1
+              shift
+              ;;
+            --json)
+              shift
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+        done
+        exit 0
+        ;;
+      self-actuation:policy-set)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        seen_action=0
+        seen_enabled=0
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --workspace-id)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_id_valid "$1" || exit 1
+              shift
+              ;;
+            --action)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_self_actuation_operation_valid "$1" || exit 1
+              seen_action=1
+              shift
+              ;;
+            --enabled)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_bool_valid "$1" || exit 1
+              seen_enabled=1
+              shift
+              ;;
+            --json)
+              shift
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+        done
+        [ "$seen_action" -eq 1 ] && [ "$seen_enabled" -eq 1 ] || exit 1
+        exit 0
+        ;;
+      self-actuation:audit)
+        [ "$self_actuation_gate" -eq 1 ] || exit 1
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --limit)
+              shift
+              [ "$#" -gt 0 ] || exit 1
+              artificer_appctl_uint_valid "$1" || exit 1
+              shift
+              ;;
+            --json)
+              shift
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+        done
         exit 0
         ;;
       *)

@@ -166,7 +166,13 @@ Self-actuation command workflow:
    - artificer-appctl project list --json
    - artificer-appctl automation list --json
    - artificer-appctl thread list --workspace-id <id> --json
-2. mutate one resource at a time.
-3. re-list and verify before further mutations.
+2. prefer orchestrated mutation planning:
+   - artificer-appctl self-actuation preview --operation <operation> ... --json
+3. apply only with returned confirmation token:
+   - artificer-appctl self-actuation apply --operation <operation> --confirm-token <token> ... --json
+4. inspect policy and audit trails when diagnosing blocked or unexpected mutations:
+   - artificer-appctl self-actuation policy-get --json
+   - artificer-appctl self-actuation audit --limit <n> --json
+5. re-list and verify before further mutations.
 EOF
 }

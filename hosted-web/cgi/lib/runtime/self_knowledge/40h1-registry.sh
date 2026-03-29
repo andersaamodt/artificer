@@ -203,9 +203,18 @@ Safe execution sequence (always in this order):
    - artificer-appctl project list --json
    - artificer-appctl automation list --json
    - artificer-appctl thread list --workspace-id <id> --json
-2. Decide target ids from real state output, never from guesses.
-3. Execute one mutation at a time.
+2. Generate a dry-run plan:
+   - artificer-appctl self-actuation preview --operation <operation> ... --json
+3. Apply only with returned confirmation token:
+   - artificer-appctl self-actuation apply --operation <operation> --confirm-token <token> ... --json
 4. Re-list state and verify result before next mutation.
+5. Use idempotency keys for retry-safe applies:
+   - --idempotency-key <stable-key>
+
+Policy and audit operations:
+- policy inspect: artificer-appctl self-actuation policy-get [--workspace-id <id>] [--action <operation>] --json
+- policy update:  artificer-appctl self-actuation policy-set --action <operation> --enabled <0|1> [--workspace-id <id>] --json
+- audit tail:     artificer-appctl self-actuation audit --limit <n> --json
 
 Project operations:
 - create:  artificer-appctl project add --path <path> [--name <label>]
@@ -228,6 +237,7 @@ Reliability rules:
 - Never mutate resources using unknown ids.
 - Never chain multiple destructive operations without re-reading state.
 - When id lookups fail, report mismatch and request a fresh list operation.
+- Prefer orchestration preview/apply for destructive changes.
 EOF
 }
 
@@ -346,7 +356,7 @@ self_knowledge_topic_reference_paths_json() {
       printf '%s' '["docs/OLLAMA_CONTRIBUTOR_PATH.md"]'
       ;;
     self-actuation)
-      printf '%s' '["hosted-web/scripts/artificer-appctl","hosted-web/cgi/actions","hosted-web/cgi/lib/runtime/40a-core-queue.sh","hosted-web/cgi/lib/runtime/40b-automations.sh"]'
+      printf '%s' '["hosted-web/scripts/artificer-appctl","hosted-web/cgi/actions/self_actuation_orchestrate.sh","hosted-web/cgi/actions/self_actuation_policy_get.sh","hosted-web/cgi/actions/self_actuation_policy_set.sh","hosted-web/cgi/actions/self_actuation_audit_state.sh","hosted-web/cgi/lib/runtime/40i-self-actuation.sh","hosted-web/cgi/lib/runtime/intelligence_core/40e1-model-routing-events.sh"]'
       ;;
     *)
       printf '%s' '[]'

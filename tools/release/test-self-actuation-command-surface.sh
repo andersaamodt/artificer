@@ -24,7 +24,12 @@ for command_snippet in \
   'automation list' \
   'automation toggle' \
   'automation run-now' \
-  'automation delete'
+  'automation delete' \
+  'self-actuation preview' \
+  'self-actuation apply' \
+  'self-actuation policy-get' \
+  'self-actuation policy-set' \
+  'self-actuation audit'
 do
   if ! grep -q "$command_snippet" "$appctl_file"; then
     printf '%s\n' "artificer-appctl missing command surface: $command_snippet" >&2
@@ -44,7 +49,12 @@ for allow_snippet in \
   'automation:list' \
   'automation:toggle' \
   'automation:run-now' \
-  'automation:delete'
+  'automation:delete' \
+  'self-actuation:preview' \
+  'self-actuation:apply' \
+  'self-actuation:policy-get' \
+  'self-actuation:policy-set' \
+  'self-actuation:audit'
 do
   if ! grep -q "$allow_snippet" "$allow_file"; then
     printf '%s\n' "allowlist missing expanded self-actuation command branch: $allow_snippet" >&2
@@ -56,6 +66,11 @@ for workflow_snippet in \
   'project list --json' \
   'automation list --json' \
   'thread list --workspace-id <id> --json' \
+  'self-actuation preview --operation <operation>' \
+  'self-actuation apply --operation <operation> --confirm-token <token>' \
+  'self-actuation policy-get' \
+  'self-actuation policy-set --action <operation> --enabled <0|1>' \
+  'self-actuation audit --limit <n>' \
   'project add|rename|delete' \
   'thread new|archive' \
   'automation upsert|toggle|run-now|delete'

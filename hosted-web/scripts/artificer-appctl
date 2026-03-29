@@ -28,6 +28,11 @@ Usage:
   artificer-appctl automation run-now --automation-id <id>
   artificer-appctl automation delete --automation-id <id>
   artificer-appctl automation upsert --workspace-id <id> --name <name> --prompt <text> --schedule-kind <cron|interval|once> --schedule-value <value> [options]
+  artificer-appctl self-actuation preview --operation <operation> [options] [--json]
+  artificer-appctl self-actuation apply --operation <operation> --confirm-token <token> [options] [--idempotency-key <key>] [--json]
+  artificer-appctl self-actuation policy-get [--workspace-id <id>] [--action <operation>] [--json]
+  artificer-appctl self-actuation policy-set --action <operation> --enabled <0|1> [--workspace-id <id>] [--json]
+  artificer-appctl self-actuation audit [--limit <n>] [--json]
 
 Automation options:
   --automation-id <id>
@@ -44,6 +49,26 @@ Automation options:
   --assay-task-id <id>
   --explicit-skill-ids <csv>
   --next-run <unix-epoch>
+
+Self-actuation operations:
+  read_state, ensure_workspace, rename_workspace, delete_workspace, ensure_thread,
+  archive_thread, ensure_automation, toggle_automation, run_automation_now,
+  delete_automation, bootstrap_workspace_stack
+
+Self-actuation preview/apply options:
+  --workspace-id <id>
+  --conversation-id <id>
+  --automation-id <id>
+  --path <path>
+  --name <name>
+  --title <title>
+  --model <model>
+  --prompt <text>
+  --schedule-kind <cron|interval|once>
+  --schedule-value <value>
+  --command-exec|--command-exec-mode <none|ask-all|ask-some|all>
+  --enabled <0|1>
+  --allow-self-reschedule <0|1>
 EOF
 }
 
@@ -257,6 +282,137 @@ PY
   printf '%s\n' "$payload"
 }
 
+print_self_actuation_orchestrate_from_json() {
+  payload=$1
+  if command -v python3 >/dev/null 2>&1; then
+    JSON_PAYLOAD=$payload python3 - <<'PY'
+import json
+import os
+import sys
+
+payload = os.environ.get("JSON_PAYLOAD", "")
+try:
+    data = json.loads(payload)
+except Exception:
+    sys.exit(1)
+if not isinstance(data, dict):
+    sys.exit(2)
+mode = str(data.get("mode", "") or "")
+operation = str(data.get("operation", "") or "")
+confirm_token = str(data.get("confirm_token", "") or "")
+workspace_id = str(data.get("workspace_id", "") or "")
+conversation_id = str(data.get("conversation_id", "") or "")
+automation_id = str(data.get("automation_id", "") or "")
+idempotent_hit = str(data.get("idempotent_hit", "") or "")
+changes = data.get("changes") or data.get("planned_changes") or []
+print(f"mode: {mode}")
+print(f"operation: {operation}")
+if confirm_token:
+    print(f"confirm_token: {confirm_token}")
+if workspace_id:
+    print(f"workspace_id: {workspace_id}")
+if conversation_id:
+    print(f"conversation_id: {conversation_id}")
+if automation_id:
+    print(f"automation_id: {automation_id}")
+if idempotent_hit:
+    print(f"idempotent_hit: {idempotent_hit}")
+print("changes:")
+if isinstance(changes, list) and changes:
+    for item in changes:
+        if not isinstance(item, dict):
+            continue
+        step = str(item.get("step", "") or "")
+        status = str(item.get("status", "") or "")
+        wid = str(item.get("workspace_id", "") or "")
+        cid = str(item.get("conversation_id", "") or "")
+        aid = str(item.get("automation_id", "") or "")
+        detail = []
+        if wid:
+            detail.append(f"workspace_id={wid}")
+        if cid:
+            detail.append(f"conversation_id={cid}")
+        if aid:
+            detail.append(f"automation_id={aid}")
+        suffix = f" ({', '.join(detail)})" if detail else ""
+        print(f"- {step}:{status}{suffix}")
+else:
+    print("- none")
+PY
+    return $?
+  fi
+  printf '%s\n' "$payload"
+}
+
+print_self_actuation_policy_from_json() {
+  payload=$1
+  if command -v python3 >/dev/null 2>&1; then
+    JSON_PAYLOAD=$payload python3 - <<'PY'
+import json
+import os
+import sys
+
+payload = os.environ.get("JSON_PAYLOAD", "")
+try:
+    data = json.loads(payload)
+except Exception:
+    sys.exit(1)
+if not isinstance(data, dict):
+    sys.exit(2)
+policy = data.get("policy") or {}
+operations = policy.get("operations") or {}
+workspace_id = str(policy.get("workspace_id", "") or data.get("workspace_id", "") or "")
+operation = str(data.get("operation", "") or "")
+enabled = str(data.get("enabled", "") or "")
+if workspace_id:
+    print(f"workspace_id: {workspace_id}")
+if operation:
+    print(f"operation: {operation}")
+if enabled:
+    print(f"enabled: {enabled}")
+print("operations:")
+for name in sorted(operations.keys()):
+    value = str(operations.get(name, "") or "")
+    print(f"- {name}={value}")
+PY
+    return $?
+  fi
+  printf '%s\n' "$payload"
+}
+
+print_self_actuation_audit_from_json() {
+  payload=$1
+  if command -v python3 >/dev/null 2>&1; then
+    JSON_PAYLOAD=$payload python3 - <<'PY'
+import json
+import os
+import sys
+
+payload = os.environ.get("JSON_PAYLOAD", "")
+try:
+    data = json.loads(payload)
+except Exception:
+    sys.exit(1)
+if not isinstance(data, dict):
+    sys.exit(2)
+entries = data.get("entries") or []
+print("ts_iso\tevent\taction\tstatus\tdetail")
+if isinstance(entries, list):
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        ts = str(item.get("ts_iso", "") or "")
+        event = str(item.get("event", "") or "")
+        action = str(item.get("action", "") or "")
+        status = str(item.get("status", "") or "")
+        detail = str(item.get("detail", "") or "")
+        print(f"{ts}\t{event}\t{action}\t{status}\t{detail}")
+PY
+    return $?
+  fi
+  printf '%s\n' "$payload"
+}
+
 require_non_empty() {
   label=$1
   value=$2
@@ -264,6 +420,145 @@ require_non_empty() {
     printf '%s\n' "artificer-appctl: missing required value for $label" >&2
     exit 1
   fi
+}
+
+parse_self_actuation_orchestrate_args() {
+  sa_operation=""
+  sa_workspace_id=""
+  sa_conversation_id=""
+  sa_automation_id=""
+  sa_path=""
+  sa_name=""
+  sa_title=""
+  sa_model=""
+  sa_prompt=""
+  sa_schedule_kind=""
+  sa_schedule_value=""
+  sa_command_exec_mode=""
+  sa_enabled=""
+  sa_allow_self_reschedule=""
+  sa_confirm_token=""
+  sa_idempotency_key=""
+  sa_output_json=0
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --operation)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --operation requires a value" >&2; exit 1; }
+        sa_operation=$2
+        shift 2
+        ;;
+      --workspace-id)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --workspace-id requires a value" >&2; exit 1; }
+        sa_workspace_id=$2
+        shift 2
+        ;;
+      --conversation-id)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --conversation-id requires a value" >&2; exit 1; }
+        sa_conversation_id=$2
+        shift 2
+        ;;
+      --automation-id)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --automation-id requires a value" >&2; exit 1; }
+        sa_automation_id=$2
+        shift 2
+        ;;
+      --path)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --path requires a value" >&2; exit 1; }
+        sa_path=$2
+        shift 2
+        ;;
+      --name)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --name requires a value" >&2; exit 1; }
+        sa_name=$2
+        shift 2
+        ;;
+      --title)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --title requires a value" >&2; exit 1; }
+        sa_title=$2
+        shift 2
+        ;;
+      --model)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --model requires a value" >&2; exit 1; }
+        sa_model=$2
+        shift 2
+        ;;
+      --prompt)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --prompt requires a value" >&2; exit 1; }
+        sa_prompt=$2
+        shift 2
+        ;;
+      --schedule-kind)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --schedule-kind requires a value" >&2; exit 1; }
+        sa_schedule_kind=$2
+        shift 2
+        ;;
+      --schedule-value)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --schedule-value requires a value" >&2; exit 1; }
+        sa_schedule_value=$2
+        shift 2
+        ;;
+      --command-exec|--command-exec-mode)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: $1 requires a value" >&2; exit 1; }
+        sa_command_exec_mode=$2
+        shift 2
+        ;;
+      --enabled)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --enabled requires a value" >&2; exit 1; }
+        sa_enabled=$2
+        shift 2
+        ;;
+      --allow-self-reschedule)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --allow-self-reschedule requires a value" >&2; exit 1; }
+        sa_allow_self_reschedule=$2
+        shift 2
+        ;;
+      --confirm-token)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --confirm-token requires a value" >&2; exit 1; }
+        sa_confirm_token=$2
+        shift 2
+        ;;
+      --idempotency-key)
+        [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --idempotency-key requires a value" >&2; exit 1; }
+        sa_idempotency_key=$2
+        shift 2
+        ;;
+      --json)
+        sa_output_json=1
+        shift 1
+        ;;
+      *)
+        printf '%s\n' "artificer-appctl: unknown option for self-actuation orchestrate: $1" >&2
+        exit 1
+        ;;
+    esac
+  done
+}
+
+call_self_actuation_orchestrate() {
+  mode=$1
+  dry_run_value=0
+  if [ "$mode" = "preview" ]; then
+    dry_run_value=1
+  fi
+  call_action "self_actuation_orchestrate" \
+    "operation" "$sa_operation" \
+    "workspace_id" "$sa_workspace_id" \
+    "conversation_id" "$sa_conversation_id" \
+    "automation_id" "$sa_automation_id" \
+    "path" "$sa_path" \
+    "name" "$sa_name" \
+    "title" "$sa_title" \
+    "model" "$sa_model" \
+    "prompt" "$sa_prompt" \
+    "schedule_kind" "$sa_schedule_kind" \
+    "schedule_value" "$sa_schedule_value" \
+    "command_exec_mode" "$sa_command_exec_mode" \
+    "enabled" "$sa_enabled" \
+    "allow_self_reschedule" "$sa_allow_self_reschedule" \
+    "dry_run" "$dry_run_value" \
+    "confirm_token" "$sa_confirm_token" \
+    "idempotency_key" "$sa_idempotency_key"
 }
 
 command_kind=${1:-}
@@ -808,6 +1103,144 @@ case "$command_kind:$command_action" in
       "explicit_skill_ids" "$explicit_skill_ids" \
       "next_run" "$next_run"
     exit $?
+    ;;
+  self-actuation:preview)
+    shift 2
+    parse_self_actuation_orchestrate_args "$@"
+    require_non_empty "--operation" "$sa_operation"
+    response=$(call_self_actuation_orchestrate "preview")
+    if [ "$sa_output_json" -eq 1 ]; then
+      printf '%s\n' "$response"
+      exit 0
+    fi
+    print_self_actuation_orchestrate_from_json "$response"
+    exit 0
+    ;;
+  self-actuation:apply)
+    shift 2
+    parse_self_actuation_orchestrate_args "$@"
+    require_non_empty "--operation" "$sa_operation"
+    require_non_empty "--confirm-token" "$sa_confirm_token"
+    response=$(call_self_actuation_orchestrate "apply")
+    if [ "$sa_output_json" -eq 1 ]; then
+      printf '%s\n' "$response"
+      exit 0
+    fi
+    print_self_actuation_orchestrate_from_json "$response"
+    exit 0
+    ;;
+  self-actuation:policy-get)
+    shift 2
+    workspace_id=""
+    action_name=""
+    output_json=0
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --workspace-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --workspace-id requires a value" >&2; exit 1; }
+          workspace_id=$2
+          shift 2
+          ;;
+        --action)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --action requires a value" >&2; exit 1; }
+          action_name=$2
+          shift 2
+          ;;
+        --json)
+          output_json=1
+          shift 1
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for self-actuation policy-get: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    response=$(call_action "self_actuation_policy_get" \
+      "workspace_id" "$workspace_id" \
+      "operation" "$action_name")
+    if [ "$output_json" -eq 1 ]; then
+      printf '%s\n' "$response"
+      exit 0
+    fi
+    print_self_actuation_policy_from_json "$response"
+    exit 0
+    ;;
+  self-actuation:policy-set)
+    shift 2
+    workspace_id=""
+    action_name=""
+    enabled_value=""
+    output_json=0
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --workspace-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --workspace-id requires a value" >&2; exit 1; }
+          workspace_id=$2
+          shift 2
+          ;;
+        --action)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --action requires a value" >&2; exit 1; }
+          action_name=$2
+          shift 2
+          ;;
+        --enabled)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --enabled requires a value" >&2; exit 1; }
+          enabled_value=$2
+          shift 2
+          ;;
+        --json)
+          output_json=1
+          shift 1
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for self-actuation policy-set: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    require_non_empty "--action" "$action_name"
+    require_non_empty "--enabled" "$enabled_value"
+    response=$(call_action "self_actuation_policy_set" \
+      "workspace_id" "$workspace_id" \
+      "operation" "$action_name" \
+      "enabled" "$enabled_value")
+    if [ "$output_json" -eq 1 ]; then
+      printf '%s\n' "$response"
+      exit 0
+    fi
+    print_self_actuation_policy_from_json "$response"
+    exit 0
+    ;;
+  self-actuation:audit)
+    shift 2
+    limit_value=""
+    output_json=0
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --limit)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --limit requires a value" >&2; exit 1; }
+          limit_value=$2
+          shift 2
+          ;;
+        --json)
+          output_json=1
+          shift 1
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for self-actuation audit: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    response=$(call_action "self_actuation_audit_state" \
+      "limit" "$limit_value")
+    if [ "$output_json" -eq 1 ]; then
+      printf '%s\n' "$response"
+      exit 0
+    fi
+    print_self_actuation_audit_from_json "$response"
+    exit 0
     ;;
   *)
     usage >&2

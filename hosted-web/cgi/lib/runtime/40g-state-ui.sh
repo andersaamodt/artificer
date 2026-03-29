@@ -1281,7 +1281,7 @@ state_light_cache_valid_for_revision() {
 
 state_action_mutates_light_state() {
   case "$1" in
-    add_workspace|delete_workspace|rename_workspace|archive_conversation|new_conversation|set_model|save_draft|queue_enqueue|queue_update|queue_reorder|queue_take|queue_finish|queue_cancel|queue_stop|queue_steer|approval_answer|decision_answer|run|automation_upsert|automation_delete|automation_toggle|automation_run_now|automations_tick|automation_daemon_tick)
+    add_workspace|delete_workspace|rename_workspace|archive_conversation|new_conversation|set_model|save_draft|queue_enqueue|queue_update|queue_reorder|queue_take|queue_finish|queue_cancel|queue_stop|queue_steer|approval_answer|decision_answer|run|automation_upsert|automation_delete|automation_toggle|automation_run_now|automations_tick|automation_daemon_tick|self_actuation_orchestrate|self_actuation_policy_set)
       return 0
       ;;
   esac
