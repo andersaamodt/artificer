@@ -1853,23 +1853,45 @@ allowed_command() {
       return 1
       ;;
     artificer-appctl)
-      if [ "${SELF_ACTUATION:-0}" != "1" ] && [ "${ARTIFICER_SELF_ACTUATION:-0}" != "1" ]; then
-        return 1
+      reflexive_gate=0
+      self_actuation_gate=0
+      if [ "${REFLEXIVE_KNOWLEDGE:-0}" = "1" ] || [ "${ARTIFICER_REFLEXIVE_KNOWLEDGE:-0}" = "1" ]; then
+        reflexive_gate=1
+      fi
+      if [ "${SELF_ACTUATION:-0}" = "1" ] || [ "${ARTIFICER_SELF_ACTUATION:-0}" = "1" ]; then
+        self_actuation_gate=1
       fi
       case "$second_word" in
         project)
+          [ "$self_actuation_gate" -eq 1 ] || return 1
           [ "$third_word" = "add" ] || return 1
           return 0
           ;;
         thread)
+          [ "$self_actuation_gate" -eq 1 ] || return 1
           [ "$third_word" = "new" ] || return 1
           return 0
           ;;
         automation)
+          [ "$self_actuation_gate" -eq 1 ] || return 1
           [ "$third_word" = "upsert" ] || return 1
           return 0
           ;;
+        knowledge)
+          [ "$reflexive_gate" -eq 1 ] || return 1
+          case "$third_word" in
+            show|teach)
+              return 0
+              ;;
+            *)
+              return 1
+              ;;
+          esac
+          ;;
         help|--help|-h)
+          if [ "$reflexive_gate" -ne 1 ] && [ "$self_actuation_gate" -ne 1 ]; then
+            return 1
+          fi
           [ "$word_count" -le 2 ] || return 1
           return 0
           ;;

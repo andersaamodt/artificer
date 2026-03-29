@@ -720,34 +720,36 @@ EOF
       fi
       reflexive_context_block="Reflexive knowledge is disabled for this run."
       if [ "$REFLEXIVE_KNOWLEDGE" = "1" ]; then
-        reflexive_context_block=$(cat <<'EOF'
-Artificer architecture map:
-- UI composition: hosted-web/pages/index.md plus hosted-web/static/artificer-app-modules/*
-- API entrypoint: hosted-web/cgi/artificer-api routes action handlers in hosted-web/cgi/actions/*
-- Runtime orchestration: hosted-web/cgi/actions/run_parts/*
-- Core runtime libraries: hosted-web/cgi/lib/runtime/*
-- Queue and automations state: queue files and automation files under get-site-data-dir("artificer")
-
-Self-explanation policy:
-- describe components and boundaries using this map when asked
-- clearly mark inferred details when evidence is missing
-- prefer concrete file paths and action names over vague summaries
+        if command -v self_knowledge_reflexive_prompt_block >/dev/null 2>&1; then
+          reflexive_context_block=$(self_knowledge_reflexive_prompt_block)
+        else
+          reflexive_context_block=$(cat <<'EOF'
+Reflexive knowledge is enabled.
+- explain Artificer with concrete UI labels and file paths
+- mark inferred details explicitly
 EOF
 )
+        fi
       fi
-      command_slot_guidance="- up to 3 read-only shell commands, or NONE"
-      if [ "$SELF_ACTUATION" = "1" ]; then
-        command_slot_guidance=$(cat <<'EOF'
-- up to 3 commands total
-- read-only shell commands for investigation/debugging
-- for Artificer self-actuation tasks, you may use:
-  - artificer-appctl project add ...
-  - artificer-appctl thread new ...
-  - artificer-appctl automation upsert ...
-- otherwise NONE
-EOF
-)
-      fi
+      command_slot_guidance_file=$(mktemp)
+      {
+        printf '%s\n' "- up to 3 commands total"
+        printf '%s\n' "- read-only shell commands for investigation/debugging"
+        if [ "$REFLEXIVE_KNOWLEDGE" = "1" ]; then
+          printf '%s\n' "- for reflexive system introspection tasks, you may use:"
+          printf '%s\n' "  - artificer-appctl knowledge show"
+          printf '%s\n' "  - artificer-appctl knowledge teach --topic <topic>"
+        fi
+        if [ "$SELF_ACTUATION" = "1" ]; then
+          printf '%s\n' "- for Artificer self-actuation tasks, you may use:"
+          printf '%s\n' "  - artificer-appctl project add ..."
+          printf '%s\n' "  - artificer-appctl thread new ..."
+          printf '%s\n' "  - artificer-appctl automation upsert ..."
+        fi
+        printf '%s\n' "- otherwise NONE"
+      } > "$command_slot_guidance_file"
+      command_slot_guidance=$(cat "$command_slot_guidance_file")
+      rm -f "$command_slot_guidance_file"
 
       use_seeded_programming_controller=0
       use_seeded_programming_narrow_slice_controller=0

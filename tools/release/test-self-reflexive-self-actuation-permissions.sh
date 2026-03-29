@@ -84,4 +84,9 @@ if ! grep -q 'automation upsert' "$appctl_file"; then
   exit 1
 fi
 
+if ! grep -q 'knowledge show' "$appctl_file"; then
+  printf '%s\n' "artificer-appctl script is missing reflexive knowledge show surface" >&2
+  exit 1
+fi
+
 printf '%s\n' "ok reflexive knowledge + self-actuation permissions are wired through UI, queue/run payloads, and command gating"

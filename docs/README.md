@@ -11,6 +11,7 @@ If you are new:
 If you want the intelligence deep-dive:
 
 - [HOW_ARTIFICER_LLMS_WORK.md](HOW_ARTIFICER_LLMS_WORK.md)
+- [OLLAMA_CONTRIBUTOR_PATH.md](OLLAMA_CONTRIBUTOR_PATH.md)
 - [INTELLIGENCE_MENTORING_EXPLAINED.md](INTELLIGENCE_MENTORING_EXPLAINED.md)
 
 If you want reference and structure:

@@ -16,6 +16,8 @@ usage() {
 Usage:
   artificer-appctl project add --path <absolute-or-tilde-path> [--name <name>] [--command-exec <mode>]
   artificer-appctl thread new --workspace-id <id> [--title <title>] [--model <model>]
+  artificer-appctl knowledge show [--topic <topic>] [--json]
+  artificer-appctl knowledge teach --topic <topic> [--json]
   artificer-appctl automation upsert --workspace-id <id> --name <name> --prompt <text> --schedule-kind <cron|interval|once> --schedule-value <value> [options]
 
 Automation options:
@@ -99,6 +101,37 @@ call_action() {
     printf '%s\n' "artificer-appctl: $error_text" >&2
   fi
   return 1
+}
+
+json_extract_field() {
+  key=$1
+  payload=$2
+  if command -v python3 >/dev/null 2>&1; then
+    JSON_KEY=$key JSON_PAYLOAD=$payload python3 - <<'PY'
+import json
+import os
+import sys
+
+key = os.environ.get("JSON_KEY", "")
+payload = os.environ.get("JSON_PAYLOAD", "")
+try:
+    value = json.loads(payload)
+except Exception:
+    sys.exit(1)
+if not isinstance(value, dict):
+    sys.exit(2)
+field = value.get(key, "")
+if field is None:
+    print("")
+    raise SystemExit(0)
+if isinstance(field, (dict, list)):
+    print(json.dumps(field, ensure_ascii=False, separators=(",", ":")))
+    raise SystemExit(0)
+print(str(field))
+PY
+    return $?
+  fi
+  printf '%s' "$payload" | sed -n "s/.*\"$key\":\"\\([^\"]*\\)\".*/\\1/p" | sed -n '1p'
 }
 
 require_non_empty() {
@@ -190,6 +223,79 @@ case "$command_kind:$command_action" in
       "title" "$thread_title" \
       "model" "$thread_model"
     exit $?
+    ;;
+  knowledge:show)
+    shift 2
+    topic_name=""
+    output_json=0
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --topic)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --topic requires a value" >&2; exit 1; }
+          topic_name=$2
+          shift 2
+          ;;
+        --json)
+          output_json=1
+          shift 1
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for knowledge show: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    response=$(call_action "self_knowledge_state" \
+      "topic" "$topic_name" \
+      "format" "state")
+    if [ "$output_json" -eq 1 ]; then
+      printf '%s\n' "$response"
+      exit 0
+    fi
+    summary_text=$(json_extract_field "summary" "$response" 2>/dev/null || true)
+    selected_topic=$(json_extract_field "requested_topic" "$response" 2>/dev/null || true)
+    selected_content=$(json_extract_field "selected_content" "$response" 2>/dev/null || true)
+    [ -n "$selected_topic" ] || selected_topic="overview"
+    printf '%s\n\n%s\n\n%s\n' "Topic: $selected_topic" "$summary_text" "$selected_content"
+    exit 0
+    ;;
+  knowledge:teach)
+    shift 2
+    topic_name=""
+    output_json=0
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --topic)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --topic requires a value" >&2; exit 1; }
+          topic_name=$2
+          shift 2
+          ;;
+        --json)
+          output_json=1
+          shift 1
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for knowledge teach: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    require_non_empty "--topic" "$topic_name"
+    response=$(call_action "self_knowledge_state" \
+      "topic" "$topic_name" \
+      "format" "teach")
+    if [ "$output_json" -eq 1 ]; then
+      printf '%s\n' "$response"
+      exit 0
+    fi
+    selected_topic=$(json_extract_field "topic" "$response" 2>/dev/null || true)
+    content_text=$(json_extract_field "content" "$response" 2>/dev/null || true)
+    if [ -n "$selected_topic" ]; then
+      printf '%s\n\n%s\n' "Teaching topic: $selected_topic" "$content_text"
+    else
+      printf '%s\n' "$content_text"
+    fi
+    exit 0
     ;;
   automation:upsert)
     shift 2
