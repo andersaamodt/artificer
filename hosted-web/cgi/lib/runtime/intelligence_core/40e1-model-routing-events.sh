@@ -1864,18 +1864,36 @@ allowed_command() {
       case "$second_word" in
         project)
           [ "$self_actuation_gate" -eq 1 ] || return 1
-          [ "$third_word" = "add" ] || return 1
-          return 0
+          case "$third_word" in
+            add|list|rename|delete)
+              return 0
+              ;;
+            *)
+              return 1
+              ;;
+          esac
           ;;
         thread)
           [ "$self_actuation_gate" -eq 1 ] || return 1
-          [ "$third_word" = "new" ] || return 1
-          return 0
+          case "$third_word" in
+            new|list|archive)
+              return 0
+              ;;
+            *)
+              return 1
+              ;;
+          esac
           ;;
         automation)
           [ "$self_actuation_gate" -eq 1 ] || return 1
-          [ "$third_word" = "upsert" ] || return 1
-          return 0
+          case "$third_word" in
+            upsert|list|toggle|run-now|delete)
+              return 0
+              ;;
+            *)
+              return 1
+              ;;
+          esac
           ;;
         knowledge)
           [ "$reflexive_gate" -eq 1 ] || return 1

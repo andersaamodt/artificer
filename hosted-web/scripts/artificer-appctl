@@ -15,9 +15,18 @@ usage() {
   cat <<'EOF'
 Usage:
   artificer-appctl project add --path <absolute-or-tilde-path> [--name <name>] [--command-exec <mode>]
+  artificer-appctl project list [--json]
+  artificer-appctl project rename --workspace-id <id> --name <name>
+  artificer-appctl project delete --workspace-id <id>
   artificer-appctl thread new --workspace-id <id> [--title <title>] [--model <model>]
+  artificer-appctl thread list --workspace-id <id> [--json]
+  artificer-appctl thread archive --workspace-id <id> --conversation-id <id>
   artificer-appctl knowledge show [--topic <topic>] [--json]
   artificer-appctl knowledge teach --topic <topic> [--json]
+  artificer-appctl automation list [--json]
+  artificer-appctl automation toggle --automation-id <id> --enabled <0|1>
+  artificer-appctl automation run-now --automation-id <id>
+  artificer-appctl automation delete --automation-id <id>
   artificer-appctl automation upsert --workspace-id <id> --name <name> --prompt <text> --schedule-kind <cron|interval|once> --schedule-value <value> [options]
 
 Automation options:
@@ -134,6 +143,120 @@ PY
   printf '%s' "$payload" | sed -n "s/.*\"$key\":\"\\([^\"]*\\)\".*/\\1/p" | sed -n '1p'
 }
 
+state_payload_json() {
+  call_action "state" "level" "light" "cached" "0"
+}
+
+print_projects_from_state_json() {
+  payload=$1
+  if command -v python3 >/dev/null 2>&1; then
+    JSON_PAYLOAD=$payload python3 - <<'PY'
+import json
+import os
+import sys
+
+payload = os.environ.get("JSON_PAYLOAD", "")
+try:
+    data = json.loads(payload)
+except Exception:
+    sys.exit(1)
+if not isinstance(data, dict):
+    sys.exit(2)
+workspaces = data.get("workspaces") or []
+print("workspace_id\tname\tpath")
+for ws in workspaces:
+    if not isinstance(ws, dict):
+        continue
+    wid = str(ws.get("id", "") or "")
+    name = str(ws.get("name", "") or "")
+    path = str(ws.get("path", "") or "")
+    print(f"{wid}\t{name}\t{path}")
+PY
+    return $?
+  fi
+  printf '%s\n' "$payload"
+}
+
+print_threads_from_state_json() {
+  payload=$1
+  workspace_id=$2
+  if command -v python3 >/dev/null 2>&1; then
+    JSON_PAYLOAD=$payload WORKSPACE_ID=$workspace_id python3 - <<'PY'
+import json
+import os
+import sys
+
+payload = os.environ.get("JSON_PAYLOAD", "")
+workspace_id = os.environ.get("WORKSPACE_ID", "")
+try:
+    data = json.loads(payload)
+except Exception:
+    sys.exit(1)
+if not isinstance(data, dict):
+    sys.exit(2)
+workspaces = data.get("workspaces") or []
+target = None
+for ws in workspaces:
+    if not isinstance(ws, dict):
+        continue
+    if str(ws.get("id", "") or "") == workspace_id:
+        target = ws
+        break
+if target is None:
+    print("workspace_id\ttitle\tconversation_id\tmodel")
+    raise SystemExit(0)
+threads = target.get("conversations") or []
+print("workspace_id\ttitle\tconversation_id\tmodel")
+for thread in threads:
+    if not isinstance(thread, dict):
+        continue
+    title = str(thread.get("title", "") or "")
+    cid = str(thread.get("id", "") or "")
+    model = str(thread.get("model", "") or "")
+    print(f"{workspace_id}\t{title}\t{cid}\t{model}")
+PY
+    return $?
+  fi
+  printf '%s\n' "$payload"
+}
+
+print_automations_from_json() {
+  payload=$1
+  if command -v python3 >/dev/null 2>&1; then
+    JSON_PAYLOAD=$payload python3 - <<'PY'
+import json
+import os
+import sys
+
+payload = os.environ.get("JSON_PAYLOAD", "")
+try:
+    data = json.loads(payload)
+except Exception:
+    sys.exit(1)
+if not isinstance(data, dict):
+    sys.exit(2)
+automations = {}
+if isinstance(data.get("automations"), dict):
+    automations = data.get("automations") or {}
+items = automations.get("items") or []
+print("automation_id\tname\tenabled\tschedule\tnext_run_iso\tworkspace_id\tconversation_id")
+for item in items:
+    if not isinstance(item, dict):
+        continue
+    aid = str(item.get("id", "") or "")
+    name = str(item.get("name", "") or "")
+    enabled = str(item.get("enabled", "") or "")
+    schedule = str(item.get("schedule_text", "") or "")
+    next_run = str(item.get("next_run_iso", "") or "")
+    workspace_id = str(item.get("workspace_id", "") or "")
+    conversation_id = str(item.get("conversation_id", "") or "")
+    print(f"{aid}\t{name}\t{enabled}\t{schedule}\t{next_run}\t{workspace_id}\t{conversation_id}")
+PY
+    return $?
+  fi
+  printf '%s\n' "$payload"
+}
+
 require_non_empty() {
   label=$1
   value=$2
@@ -189,6 +312,79 @@ case "$command_kind:$command_action" in
       "command_exec_mode" "$command_exec_mode"
     exit $?
     ;;
+  project:list)
+    shift 2
+    output_json=0
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --json)
+          output_json=1
+          shift 1
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for project list: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    response=$(state_payload_json)
+    if [ "$output_json" -eq 1 ]; then
+      printf '%s\n' "$response"
+      exit 0
+    fi
+    print_projects_from_state_json "$response"
+    exit 0
+    ;;
+  project:rename)
+    shift 2
+    workspace_id=""
+    project_name=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --workspace-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --workspace-id requires a value" >&2; exit 1; }
+          workspace_id=$2
+          shift 2
+          ;;
+        --name)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --name requires a value" >&2; exit 1; }
+          project_name=$2
+          shift 2
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for project rename: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    require_non_empty "--workspace-id" "$workspace_id"
+    require_non_empty "--name" "$project_name"
+    call_action "rename_workspace" \
+      "workspace_id" "$workspace_id" \
+      "name" "$project_name"
+    exit $?
+    ;;
+  project:delete)
+    shift 2
+    workspace_id=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --workspace-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --workspace-id requires a value" >&2; exit 1; }
+          workspace_id=$2
+          shift 2
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for project delete: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    require_non_empty "--workspace-id" "$workspace_id"
+    call_action "delete_workspace" \
+      "workspace_id" "$workspace_id"
+    exit $?
+    ;;
   thread:new)
     shift 2
     workspace_id=""
@@ -222,6 +418,65 @@ case "$command_kind:$command_action" in
       "workspace_id" "$workspace_id" \
       "title" "$thread_title" \
       "model" "$thread_model"
+    exit $?
+    ;;
+  thread:list)
+    shift 2
+    workspace_id=""
+    output_json=0
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --workspace-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --workspace-id requires a value" >&2; exit 1; }
+          workspace_id=$2
+          shift 2
+          ;;
+        --json)
+          output_json=1
+          shift 1
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for thread list: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    require_non_empty "--workspace-id" "$workspace_id"
+    response=$(state_payload_json)
+    if [ "$output_json" -eq 1 ]; then
+      printf '%s\n' "$response"
+      exit 0
+    fi
+    print_threads_from_state_json "$response" "$workspace_id"
+    exit 0
+    ;;
+  thread:archive)
+    shift 2
+    workspace_id=""
+    conversation_id=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --workspace-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --workspace-id requires a value" >&2; exit 1; }
+          workspace_id=$2
+          shift 2
+          ;;
+        --conversation-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --conversation-id requires a value" >&2; exit 1; }
+          conversation_id=$2
+          shift 2
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for thread archive: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    require_non_empty "--workspace-id" "$workspace_id"
+    require_non_empty "--conversation-id" "$conversation_id"
+    call_action "archive_conversation" \
+      "workspace_id" "$workspace_id" \
+      "conversation_id" "$conversation_id"
     exit $?
     ;;
   knowledge:show)
@@ -289,13 +544,117 @@ case "$command_kind:$command_action" in
       exit 0
     fi
     selected_topic=$(json_extract_field "topic" "$response" 2>/dev/null || true)
+    learning_goals=$(json_extract_field "learning_goals" "$response" 2>/dev/null || true)
+    misconceptions=$(json_extract_field "common_misconceptions" "$response" 2>/dev/null || true)
+    assessment_checks=$(json_extract_field "assessment_checks" "$response" 2>/dev/null || true)
+    practice_tasks=$(json_extract_field "practice_tasks" "$response" 2>/dev/null || true)
     content_text=$(json_extract_field "content" "$response" 2>/dev/null || true)
     if [ -n "$selected_topic" ]; then
-      printf '%s\n\n%s\n' "Teaching topic: $selected_topic" "$content_text"
+      printf '%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n' \
+        "Teaching topic: $selected_topic" \
+        "Learning goals: $learning_goals" \
+        "Common misconceptions: $misconceptions" \
+        "Assessment checks: $assessment_checks" \
+        "Practice tasks: $practice_tasks" \
+        "$content_text"
     else
       printf '%s\n' "$content_text"
     fi
     exit 0
+    ;;
+  automation:list)
+    shift 2
+    output_json=0
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --json)
+          output_json=1
+          shift 1
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for automation list: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    response=$(call_action "automations_state")
+    if [ "$output_json" -eq 1 ]; then
+      printf '%s\n' "$response"
+      exit 0
+    fi
+    print_automations_from_json "$response"
+    exit 0
+    ;;
+  automation:toggle)
+    shift 2
+    automation_id=""
+    enabled_value=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --automation-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --automation-id requires a value" >&2; exit 1; }
+          automation_id=$2
+          shift 2
+          ;;
+        --enabled)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --enabled requires a value" >&2; exit 1; }
+          enabled_value=$2
+          shift 2
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for automation toggle: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    require_non_empty "--automation-id" "$automation_id"
+    require_non_empty "--enabled" "$enabled_value"
+    call_action "automation_toggle" \
+      "automation_id" "$automation_id" \
+      "enabled" "$enabled_value"
+    exit $?
+    ;;
+  automation:run-now)
+    shift 2
+    automation_id=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --automation-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --automation-id requires a value" >&2; exit 1; }
+          automation_id=$2
+          shift 2
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for automation run-now: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    require_non_empty "--automation-id" "$automation_id"
+    call_action "automation_run_now" \
+      "automation_id" "$automation_id"
+    exit $?
+    ;;
+  automation:delete)
+    shift 2
+    automation_id=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --automation-id)
+          [ "$#" -ge 2 ] || { printf '%s\n' "artificer-appctl: --automation-id requires a value" >&2; exit 1; }
+          automation_id=$2
+          shift 2
+          ;;
+        *)
+          printf '%s\n' "artificer-appctl: unknown option for automation delete: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    require_non_empty "--automation-id" "$automation_id"
+    call_action "automation_delete" \
+      "automation_id" "$automation_id"
+    exit $?
     ;;
   automation:upsert)
     shift 2

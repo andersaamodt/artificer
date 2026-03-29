@@ -738,13 +738,17 @@ EOF
         if [ "$REFLEXIVE_KNOWLEDGE" = "1" ]; then
           printf '%s\n' "- for reflexive system introspection tasks, you may use:"
           printf '%s\n' "  - artificer-appctl knowledge show"
-          printf '%s\n' "  - artificer-appctl knowledge teach --topic <topic>"
+          printf '%s\n' "  - artificer-appctl knowledge teach --topic <overview|gui|architecture|llm-foundations|ollama-runtime|ollama-contributing|self-actuation>"
         fi
         if [ "$SELF_ACTUATION" = "1" ]; then
+          printf '%s\n' "- for self-actuation, inspect current resources before mutating them:"
+          printf '%s\n' "  - artificer-appctl project list --json"
+          printf '%s\n' "  - artificer-appctl automation list --json"
+          printf '%s\n' "  - artificer-appctl thread list --workspace-id <id> --json"
           printf '%s\n' "- for Artificer self-actuation tasks, you may use:"
-          printf '%s\n' "  - artificer-appctl project add ..."
-          printf '%s\n' "  - artificer-appctl thread new ..."
-          printf '%s\n' "  - artificer-appctl automation upsert ..."
+          printf '%s\n' "  - artificer-appctl project add|rename|delete ..."
+          printf '%s\n' "  - artificer-appctl thread new|archive ..."
+          printf '%s\n' "  - artificer-appctl automation upsert|toggle|run-now|delete ..."
         fi
         printf '%s\n' "- otherwise NONE"
       } > "$command_slot_guidance_file"

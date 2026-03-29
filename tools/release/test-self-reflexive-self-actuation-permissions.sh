@@ -89,4 +89,9 @@ if ! grep -q 'knowledge show' "$appctl_file"; then
   exit 1
 fi
 
+if ! grep -q 'project list' "$appctl_file" || ! grep -q 'automation run-now' "$appctl_file"; then
+  printf '%s\n' "artificer-appctl script is missing expanded self-actuation surfaces" >&2
+  exit 1
+fi
+
 printf '%s\n' "ok reflexive knowledge + self-actuation permissions are wired through UI, queue/run payloads, and command gating"

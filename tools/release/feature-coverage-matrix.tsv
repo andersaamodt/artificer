@@ -12,6 +12,7 @@ workspace_drag_surface	Project rows drag from row surface (not drag-handle contr
 automations_layout	Automations appears as left-nav section with right-pane workflow.	test-automations-pane-layout.sh
 self_reflexive_self_actuation	Permissions include reflexive knowledge plus self-actuation and wire both through run/queue/runtime command gating.	test-self-reflexive-self-actuation-permissions.sh
 self_knowledge_introspection	Reflexive knowledge runtime exposes structured self-knowledge and contributor-level LLM/Ollama teaching surfaces through API and appctl.	test-self-knowledge-introspection-surface.sh
+self_actuation_command_surface	Self-actuation supports id-safe list-and-mutate command workflows through appctl, runtime allowlists, and controller guidance.	test-self-actuation-command-surface.sh
 model_catalog_metadata	Model rows preserve description optionality and always include size metadata.	test-model-catalog-installed-metadata.sh
 model_auto_refresh_recovery	Model list refresh loop recovers after failed fetch cycles.	test-model-auto-refresh-recovery.sh
 ui_state_durable_backend	Desktop preferences persist via backend UI state API.	test-ui-state-durable-backend.sh

@@ -6,11 +6,11 @@ self_knowledge_registry_version() {
 }
 
 self_knowledge_topics_json() {
-  printf '%s' '["overview","gui","architecture","llm-foundations","ollama-runtime","ollama-contributing"]'
+  printf '%s' '["overview","gui","architecture","llm-foundations","ollama-runtime","ollama-contributing","self-actuation"]'
 }
 
 self_knowledge_valid_topics_csv() {
-  printf '%s' "overview,gui,architecture,llm-foundations,ollama-runtime,ollama-contributing"
+  printf '%s' "overview,gui,architecture,llm-foundations,ollama-runtime,ollama-contributing,self-actuation"
 }
 
 self_knowledge_normalize_topic() {
@@ -39,6 +39,10 @@ self_knowledge_normalize_topic() {
       ;;
     ollama-contributing|contributing|contrib|contributor|contributors)
       printf '%s' "ollama-contributing"
+      return 0
+      ;;
+    self-actuation|self-actuate|actuation|automation-ops|workflow-ops|workflows|operations)
+      printf '%s' "self-actuation"
       return 0
       ;;
   esac
@@ -188,6 +192,168 @@ Phase 5: Teaching mastery check.
 EOF
 }
 
+self_knowledge_self_actuation_text() {
+  cat <<'EOF'
+Artificer self-actuation operator playbook:
+Permission gate:
+- Self-actuation commands are allowed only when the Self-actuation permission is enabled for the run.
+
+Safe execution sequence (always in this order):
+1. Inspect current state:
+   - artificer-appctl project list --json
+   - artificer-appctl automation list --json
+   - artificer-appctl thread list --workspace-id <id> --json
+2. Decide target ids from real state output, never from guesses.
+3. Execute one mutation at a time.
+4. Re-list state and verify result before next mutation.
+
+Project operations:
+- create:  artificer-appctl project add --path <path> [--name <label>]
+- rename:  artificer-appctl project rename --workspace-id <id> --name <label>
+- delete:  artificer-appctl project delete --workspace-id <id>
+
+Thread operations:
+- list:    artificer-appctl thread list --workspace-id <id>
+- create:  artificer-appctl thread new --workspace-id <id> [--title <title>] [--model <model>]
+- archive: artificer-appctl thread archive --workspace-id <id> --conversation-id <id>
+
+Automation operations:
+- list:    artificer-appctl automation list
+- upsert:  artificer-appctl automation upsert ...
+- enable/disable: artificer-appctl automation toggle --automation-id <id> --enabled <0|1>
+- run now: artificer-appctl automation run-now --automation-id <id>
+- delete:  artificer-appctl automation delete --automation-id <id>
+
+Reliability rules:
+- Never mutate resources using unknown ids.
+- Never chain multiple destructive operations without re-reading state.
+- When id lookups fail, report mismatch and request a fresh list operation.
+EOF
+}
+
+self_knowledge_topic_learning_goals_text() {
+  topic_name=$1
+  case "$topic_name" in
+    overview)
+      printf '%s' "- Explain Artificer as UI + API + runtime + file-backed state."
+      ;;
+    gui)
+      printf '%s' "- Navigate users by exact labels and locate each core control."
+      ;;
+    architecture)
+      printf '%s' "- Trace one run from UI input to runtime output with concrete file paths."
+      ;;
+    llm-foundations)
+      printf '%s' "- Teach tokenization, transformer inference, decoding, and reliability tradeoffs."
+      ;;
+    ollama-runtime)
+      printf '%s' "- Explain local model runtime behavior and diagnose common operational failures."
+      ;;
+    ollama-contributing)
+      printf '%s' "- Prepare contributors for reproducible, tested upstream runtime patches."
+      ;;
+    self-actuation)
+      printf '%s' "- Execute accurate in-app workflow mutations with id-safe verification loops."
+      ;;
+    *)
+      printf '%s' "- Deliver accurate, grounded explanations with explicit uncertainty boundaries."
+      ;;
+  esac
+}
+
+self_knowledge_topic_misconceptions_text() {
+  topic_name=$1
+  case "$topic_name" in
+    llm-foundations)
+      printf '%s' "- Fluency implies factuality.\n- Bigger model always means correct answer."
+      ;;
+    ollama-runtime)
+      printf '%s' "- Model not listed means model is broken (could be service/process/state mismatch).\n- Slow output always means weak hardware (can be prompt/context pressure)."
+      ;;
+    ollama-contributing)
+      printf '%s' "- Refactor and behavior change should be mixed in one patch.\n- Manual repro is enough without regression tests."
+      ;;
+    self-actuation)
+      printf '%s' "- Guessed ids are acceptable.\n- Multiple destructive operations can be batched safely without verification."
+      ;;
+    *)
+      printf '%s' "- Confident wording is equivalent to grounded evidence."
+      ;;
+  esac
+}
+
+self_knowledge_topic_assessment_checks_text() {
+  topic_name=$1
+  case "$topic_name" in
+    llm-foundations)
+      printf '%s' "1. Explain KV cache impact on streaming latency.\n2. Distinguish sampling errors from context truncation failures."
+      ;;
+    ollama-runtime)
+      printf '%s' "1. Diagnose a missing model using service/list/show checks.\n2. Provide a stepwise fix plan for failed model pull or run."
+      ;;
+    ollama-contributing)
+      printf '%s' "1. Propose a bug-fix patch with deterministic repro and regression test.\n2. Provide rollback criteria for the patch."
+      ;;
+    self-actuation)
+      printf '%s' "1. List projects/threads/automations before mutating.\n2. Perform one mutation and prove the resulting state."
+      ;;
+    *)
+      printf '%s' "1. Explain the subsystem with concrete artifacts.\n2. Separate known facts from inferred details."
+      ;;
+  esac
+}
+
+self_knowledge_topic_practice_tasks_text() {
+  topic_name=$1
+  case "$topic_name" in
+    llm-foundations)
+      printf '%s' "- Compare two local models on one prompt and explain quality deltas using context/sampling hypotheses."
+      ;;
+    ollama-runtime)
+      printf '%s' "- Perform a local runtime triage runbook: service check, model inventory, run smoke, and output verification."
+      ;;
+    ollama-contributing)
+      printf '%s' "- Draft a contributor-ready issue-to-PR plan with tests, benchmarks, and compatibility notes."
+      ;;
+    self-actuation)
+      printf '%s' "- Create a project, create a thread, create/update automation, run it once, verify resulting queue state."
+      ;;
+    *)
+      printf '%s' "- Teach this topic to a beginner, then validate with two concrete comprehension checks."
+      ;;
+  esac
+}
+
+self_knowledge_topic_reference_paths_json() {
+  topic_name=$1
+  case "$topic_name" in
+    overview)
+      printf '%s' '["README.md","docs/REPO_OVERVIEW.md"]'
+      ;;
+    gui)
+      printf '%s' '["hosted-web/pages/index.md","hosted-web/static/artificer-app-modules"]'
+      ;;
+    architecture)
+      printf '%s' '["hosted-web/cgi/artificer-api","hosted-web/cgi/actions","hosted-web/cgi/lib/runtime"]'
+      ;;
+    llm-foundations)
+      printf '%s' '["docs/HOW_ARTIFICER_LLMS_WORK.md"]'
+      ;;
+    ollama-runtime)
+      printf '%s' '["docs/SETTINGS_AND_MODELS.md","docs/HOW_ARTIFICER_LLMS_WORK.md"]'
+      ;;
+    ollama-contributing)
+      printf '%s' '["docs/OLLAMA_CONTRIBUTOR_PATH.md"]'
+      ;;
+    self-actuation)
+      printf '%s' '["hosted-web/scripts/artificer-appctl","hosted-web/cgi/actions","hosted-web/cgi/lib/runtime/40a-core-queue.sh","hosted-web/cgi/lib/runtime/40b-automations.sh"]'
+      ;;
+    *)
+      printf '%s' '[]'
+      ;;
+  esac
+}
+
 self_knowledge_topic_text() {
   topic_name=$1
   case "$topic_name" in
@@ -209,6 +375,9 @@ self_knowledge_topic_text() {
     ollama-contributing)
       self_knowledge_ollama_contributing_text
       ;;
+    self-actuation)
+      self_knowledge_self_actuation_text
+      ;;
     *)
       return 1
       ;;
@@ -217,7 +386,7 @@ self_knowledge_topic_text() {
 
 self_knowledge_summary_text() {
   cat <<'EOF'
-Artificer can teach and explain itself through six grounded topics: overview, gui, architecture, llm-foundations, ollama-runtime, and ollama-contributing.
+Artificer can teach and explain itself through seven grounded topics: overview, gui, architecture, llm-foundations, ollama-runtime, ollama-contributing, and self-actuation.
 Use the exact GUI labels, file paths, and runtime boundaries in explanations, and mark unknown details as inferred when evidence is missing.
 EOF
 }

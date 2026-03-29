@@ -80,6 +80,16 @@ if ! grep -q 'llm-foundations' "$registry_module" || ! grep -q 'ollama-contribut
   exit 1
 fi
 
+if ! grep -q 'self-actuation' "$registry_module"; then
+  printf '%s\n' "self-knowledge registry topics missing self-actuation track" >&2
+  exit 1
+fi
+
+if ! grep -q 'learning_goals' "$state_module" || ! grep -q 'assessment_checks' "$state_module"; then
+  printf '%s\n' "self-knowledge teach payload missing curriculum scaffolding fields" >&2
+  exit 1
+fi
+
 for parse_target in "$runtime_loader" "$registry_module" "$state_module" "$action_file"; do
   if ! sh -n "$parse_target"; then
     printf '%s\n' "shell parse failed for self-knowledge file: $parse_target" >&2
