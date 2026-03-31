@@ -1704,7 +1704,7 @@ artificer_appctl_bool_valid() {
 artificer_appctl_command_exec_mode_valid() {
   token=$(printf '%s' "$(artificer_appctl_strip_outer_quotes "$1")" | tr '[:upper:]' '[:lower:]')
   case "$token" in
-    none|ask-all|ask-some|all)
+    ask|none|ask-all|ask-some|all)
       return 0
       ;;
   esac
@@ -1734,7 +1734,7 @@ artificer_appctl_schedule_kind_valid() {
 artificer_appctl_run_mode_valid() {
   token=$(printf '%s' "$(artificer_appctl_strip_outer_quotes "$1")" | tr '[:upper:]' '[:lower:]')
   case "$token" in
-    instant|auto|chat|programming|pentest|security-audit|teacher|report|text-perfecter|gui-testing|assistant)
+    instant|auto|chat|programming|pentest|security-audit|teacher|report|text-perfecter|gui-testing|assistant|team|teams)
       return 0
       ;;
   esac

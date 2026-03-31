@@ -49,6 +49,7 @@ expect_allowed "artificer-appctl automation toggle --automation-id auto_1 --enab
 expect_allowed "artificer-appctl automation run-now --automation-id auto_1"
 expect_allowed "artificer-appctl automation delete --automation-id auto_1"
 expect_allowed "artificer-appctl automation upsert --workspace-id ws_1 --name nightly --prompt summarize --schedule-kind interval --schedule-value 900 --enabled 1 --allow-self-reschedule 1 --run-mode auto --compute-budget quick --command-exec-mode ask-some --permission-mode workspace-write --programmer-review 1 --programmer-review-rounds 2 --next-run 1999999999"
+expect_allowed "artificer-appctl automation upsert --workspace-id ws_1 --name nightly --prompt summarize --schedule-kind interval --schedule-value 900 --run-mode team --command-exec-mode ask"
 expect_allowed "artificer-appctl self-actuation preview --operation ensure_workspace --path /tmp/project-a --name project-a --json"
 expect_allowed "artificer-appctl self-actuation apply --operation rename_workspace --workspace-id ws_1 --name project-renamed --confirm-token token_123 --idempotency-key idem-1 --json"
 expect_allowed "artificer-appctl self-actuation policy-get --workspace-id ws_1 --action ensure_workspace --json"
