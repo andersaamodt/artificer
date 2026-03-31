@@ -76,6 +76,15 @@ refresh_context_memory_file() {
     assistant)
       mode_focus="- Drive autonomous progress with legal/ethical compliance and real-value outcomes."
       ;;
+    auto)
+      mode_focus="- Adapt depth to task risk and uncertainty, preferring complete verified slices over shallow breadth."
+      ;;
+    chat)
+      mode_focus="- Provide concise, context-aware guidance and preserve conversation continuity."
+      ;;
+    instant)
+      mode_focus="- Optimize for fast, direct responses while preserving correctness and safety."
+      ;;
     *)
       mode_focus="- Maintain forward progress while preserving safety and correctness."
       ;;

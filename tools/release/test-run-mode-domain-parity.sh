@@ -6,8 +6,10 @@ repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 
 policy_file="$repo_root/hosted-web/cgi/lib/runtime/intelligence_core/40e4-policy-doc-vision-reasoning.sh"
 run_part_file="$repo_root/hosted-web/cgi/actions/run_parts/run-part-004-modules/10-runtime-and-finalization.sh"
+run_part_budget_file="$repo_root/hosted-web/cgi/actions/run_parts/run-part-002.sh"
+state_ui_file="$repo_root/hosted-web/cgi/lib/runtime/40g-state-ui.sh"
 
-for file_path in "$policy_file" "$run_part_file"; do
+for file_path in "$policy_file" "$run_part_file" "$run_part_budget_file" "$state_ui_file"; do
   [ -f "$file_path" ] || {
     printf '%s\n' "missing run-mode domain parity dependency: $file_path" >&2
     exit 1
@@ -55,6 +57,10 @@ for mode_name in $policy_mode_list; do
     printf '%s\n' "run-part-004 missing run_mode_instruction branch: $mode_name" >&2
     exit 1
   fi
+  if ! grep -Fq "    $mode_name)" "$state_ui_file"; then
+    printf '%s\n' "state-ui context memory missing mode_focus branch: $mode_name" >&2
+    exit 1
+  fi
 done
 
 if ! grep -Fq 'programming|teacher|report|text-perfecter|assistant|auto|gui-testing|security-audit|pentest' "$run_part_file"; then
@@ -69,6 +75,11 @@ fi
 
 if ! grep -Fq 'programming|teacher|assistant|auto|gui-testing)' "$run_part_file"; then
   printf '%s\n' "run-part-004 minimum context budget branch missing adaptive auto case" >&2
+  exit 1
+fi
+
+if ! grep -Fq '        text-perfecter)' "$run_part_budget_file"; then
+  printf '%s\n' "run-part-002 runtime budget parity missing text-perfecter branch" >&2
   exit 1
 fi
 
@@ -104,11 +115,11 @@ if ! awk '
   exit 1
 fi
 
-for parse_target in "$policy_file" "$run_part_file"; do
+for parse_target in "$policy_file" "$run_part_file" "$run_part_budget_file" "$state_ui_file"; do
   if ! sh -n "$parse_target"; then
     printf '%s\n' "shell parse failed for run-mode parity file: $parse_target" >&2
     exit 1
   fi
 done
 
-printf '%s\n' "ok run-mode domain parity: policy branches, run directives, and adaptive/security context budgets are synchronized"
+printf '%s\n' "ok run-mode domain parity: policy branches, run directives, budget floors, and state-memory focus are synchronized"

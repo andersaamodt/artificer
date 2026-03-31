@@ -340,6 +340,11 @@ EOF
             run_time_budget=900
           fi
           ;;
+        text-perfecter)
+          if [ "$run_time_budget" -lt 900 ]; then
+            run_time_budget=900
+          fi
+          ;;
         gui-testing)
           if [ "$run_time_budget" -lt 1200 ]; then
             run_time_budget=1200
