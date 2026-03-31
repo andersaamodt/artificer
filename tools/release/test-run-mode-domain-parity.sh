@@ -72,6 +72,38 @@ if ! grep -Fq 'programming|teacher|assistant|auto|gui-testing)' "$run_part_file"
   exit 1
 fi
 
+if ! awk '
+  /design_completion_mode=0/ { in_design=1 }
+  in_design && /case "\$active_run_mode" in/ {
+    case_index += 1
+    in_case=1
+    has_parity=0
+    next
+  }
+  in_case && /report\|teacher\|security-audit\|pentest\|text-perfecter\|gui-testing\)/ { has_parity=1 }
+  in_case && /esac/ {
+    if (case_index == 1 && has_parity) {
+      case_one_ok=1
+    }
+    if (case_index == 2 && has_parity) {
+      case_two_ok=1
+    }
+    in_case=0
+    if (case_index >= 2) {
+      in_design=0
+    }
+  }
+  END {
+    if (case_one_ok && case_two_ok) {
+      exit 0
+    }
+    exit 1
+  }
+' "$run_part_file"; then
+  printf '%s\n' "run-part-004 design-gate parity missing pentest in active_run_mode security cohort" >&2
+  exit 1
+fi
+
 for parse_target in "$policy_file" "$run_part_file"; do
   if ! sh -n "$parse_target"; then
     printf '%s\n' "shell parse failed for run-mode parity file: $parse_target" >&2

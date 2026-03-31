@@ -2118,7 +2118,7 @@ $recovery_output"
                   reasoning_completion_preferred=1
                 fi
                 case "$active_run_mode" in
-                  report|teacher|security-audit|text-perfecter|gui-testing)
+                  report|teacher|security-audit|pentest|text-perfecter|gui-testing)
                     design_command_min=3
                     ;;
                   assistant)
@@ -2138,7 +2138,7 @@ $recovery_output"
                   design_completion_mode=1
                 elif [ "$assay_run_profile" -eq 1 ] && [ "$commands_ok" -eq 1 ] && [ "$run_command_success_total" -ge "$design_command_min" ]; then
                   case "$active_run_mode" in
-                    report|teacher|security-audit|text-perfecter|gui-testing)
+                    report|teacher|security-audit|pentest|text-perfecter|gui-testing)
                       design_completion_mode=1
                       ;;
                     assistant)
