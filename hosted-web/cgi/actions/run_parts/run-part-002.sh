@@ -311,6 +311,10 @@ EOF
         run_time_budget=1200
       fi
       case "$run_mode" in
+        auto)
+          # Keep heuristic-derived budget for adaptive mode; compute-budget floors/ceilings
+          # still apply below.
+          ;;
         programming)
           if [ "$programming_quick_bounded_run" -eq 1 ]; then
             if [ "$run_time_budget" -lt 180 ]; then
