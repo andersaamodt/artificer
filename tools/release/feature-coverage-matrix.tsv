@@ -6,7 +6,7 @@ startup_port_resolution	Desktop launcher resolves URL port without command-subst
 splash_status_contract	Splash keeps a stable preparing message until ready or error.	test-splash-status-contract.sh
 run_stream_poll_lifecycle	Run stream polling drains final deltas before stop and avoids lost streamed content.	test-run-stream-poll-lifecycle.sh
 run_event_status_copy	Run status copy remains latest-run scoped and non-contradictory while active runs continue.	test-run-event-status-copy-consistency.sh
-run_mode_domain_parity	Run-mode policy, controller directives, runtime budget floors, and state-memory focus stay synchronized across adaptive, programming, security, reporting, teaching, chat, and instant domains.	test-run-mode-domain-parity.sh
+run_mode_domain_parity	Run-mode tuning, policy, controller directives, runtime budget floors, and state-memory focus stay synchronized across adaptive, programming, security, reporting, teaching, chat, and instant domains.	test-run-mode-domain-parity.sh
 workspace_add_modal_and_tilde	Add Project supports ~/ expansion and modal action order.	test-add-workspace-tilde-and-modal-actions.sh,test-add-workspace-tilde-runtime.sh
 workspace_browse_path_population	Browse and directory picker populate folder path and placeholder.	test-workspace-browse-path-population.sh
 workspace_drag_surface	Project rows drag from row surface (not drag-handle controls).	test-workspace-drag-surface-behavior.sh

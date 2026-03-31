@@ -287,11 +287,7 @@
           fi
           ;;
         security-audit)
-          case "$reasoning_effort" in
-            low|medium)
-              reasoning_effort="high"
-              ;;
-          esac
+          reasoning_effort="extra-high"
           if [ "$max_iterations" -lt 8 ]; then
             max_iterations=8
           fi
