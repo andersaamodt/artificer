@@ -14,23 +14,43 @@ for file_path in "$policy_file" "$run_part_file"; do
   }
 done
 
-for mode_name in \
-  programming \
-  pentest \
-  security-audit \
-  report \
-  text-perfecter \
-  gui-testing \
-  assistant \
-  auto \
-  teacher \
-  chat \
-  instant
-do
+required_modes="
+programming
+pentest
+security-audit
+report
+text-perfecter
+gui-testing
+assistant
+auto
+teacher
+chat
+instant
+"
+
+for mode_name in $required_modes; do
   if ! grep -Fq "    $mode_name)" "$policy_file"; then
     printf '%s\n' "run_mode_policy_instructions missing mode branch: $mode_name" >&2
     exit 1
   fi
+done
+
+policy_mode_list=$(awk '
+  $0 ~ /^run_mode_policy_instructions\(\)/ { in_fn=1; next }
+  in_fn && $0 ~ /^  esac$/ { exit }
+  in_fn && $0 ~ /^    [a-z][a-z-]*\)/ {
+    mode = $0
+    sub(/^    /, "", mode)
+    sub(/\).*/, "", mode)
+    print mode
+  }
+' "$policy_file")
+[ -n "$policy_mode_list" ] || {
+  printf '%s\n' "failed to discover run mode branches in policy file" >&2
+  exit 1
+}
+
+for mode_name in $policy_mode_list; do
   if ! grep -Fq "      $mode_name)" "$run_part_file"; then
     printf '%s\n' "run-part-004 missing run_mode_instruction branch: $mode_name" >&2
     exit 1
