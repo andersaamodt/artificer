@@ -870,8 +870,9 @@
   }
 
   function savePermissionMode(mode) {
-    state.permissionMode = mode;
-    storageSet("artificer.permissionMode", mode);
+    var next = normalizePermissionModeValue(mode) || "default";
+    state.permissionMode = next;
+    storageSet("artificer.permissionMode", next);
   }
 
   function saveCommandExecMode(mode) {

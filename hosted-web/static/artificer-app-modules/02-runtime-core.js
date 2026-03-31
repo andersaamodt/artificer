@@ -1331,8 +1331,6 @@
         return "Project write";
       case "read-only":
         return "Read only";
-      case "full-access":
-        return "Full access";
       default:
         return "Default permissions";
     }
@@ -1344,9 +1342,6 @@
     }
     if (mode === "read-only") {
       return "<svg viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'><path d='M1.8 8s2.3-3.6 6.2-3.6S14.2 8 14.2 8s-2.3 3.6-6.2 3.6S1.8 8 1.8 8z'></path><circle cx='8' cy='8' r='1.7'></circle></svg>";
-    }
-    if (mode === "full-access") {
-      return "<svg viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'><circle cx='8' cy='8' r='1.6'></circle><path d='M8 2.3v1.3'></path><path d='M8 12.4v1.3'></path><path d='M2.3 8h1.3'></path><path d='M12.4 8h1.3'></path><path d='M3.9 3.9l.9.9'></path><path d='M11.2 11.2l.9.9'></path><path d='M12.1 3.9l-.9.9'></path><path d='M4.8 11.2l-.9.9'></path></svg>";
     }
     return "<svg viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'><path d='M8 1.6l4.6 1.8v3.7c0 3-1.7 5.4-4.6 7.2-2.9-1.8-4.6-4.2-4.6-7.2V3.4L8 1.6z'></path></svg>";
   }
@@ -1380,7 +1375,10 @@
 
   function normalizePermissionModeValue(mode) {
     var value = trim(String(mode || "")).toLowerCase();
-    if (value === "workspace-write" || value === "read-only" || value === "default" || value === "full-access") {
+    if (value === "full-access") {
+      return "default";
+    }
+    if (value === "workspace-write" || value === "read-only" || value === "default") {
       return value;
     }
     return "";

@@ -1170,6 +1170,16 @@
   if (state.commandExecMode === "ask") {
     state.commandExecMode = "ask-some";
   }
+  if (state.permissionMode === "full-access") {
+    state.permissionMode = "default";
+  }
+  if (
+    state.permissionMode !== "default" &&
+    state.permissionMode !== "workspace-write" &&
+    state.permissionMode !== "read-only"
+  ) {
+    state.permissionMode = "default";
+  }
   state.reflexiveKnowledge = !!state.reflexiveKnowledge;
   state.selfActuation = !!state.selfActuation;
   state.dictationShortcutHold = normalizeDictationShortcut("hold", state.dictationShortcutHold);
