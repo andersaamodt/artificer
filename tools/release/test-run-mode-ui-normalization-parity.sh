@@ -5,11 +5,12 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 
 backend_modes_file="$repo_root/hosted-web/cgi/lib/runtime/intelligence_core/40e1-model-routing-events.sh"
+run_part_tuning_file="$repo_root/hosted-web/cgi/actions/run_parts/run-part-001.sh"
 frontend_modes_file="$repo_root/hosted-web/static/artificer-app-modules/05-api-and-state-sync.js"
 index_md_file="$repo_root/hosted-web/pages/index.md"
 index_html_file="$repo_root/hosted-web/pages/index.html"
 
-for file_path in "$backend_modes_file" "$frontend_modes_file" "$index_md_file" "$index_html_file"; do
+for file_path in "$backend_modes_file" "$run_part_tuning_file" "$frontend_modes_file" "$index_md_file" "$index_html_file"; do
   [ -f "$file_path" ] || {
     printf '%s\n' "missing run-mode UI/normalization parity dependency: $file_path" >&2
     exit 1
@@ -79,6 +80,46 @@ if ! awk '
   exit 1
 fi
 
+if ! awk '
+  /^[[:space:]]*if[[:space:]]*\(value[[:space:]]*===[[:space:]]*"instant"\)/ { in_branch=1; next }
+  in_branch && /^[[:space:]]*if[[:space:]]*\(value[[:space:]]*===/ { in_branch=0 }
+  in_branch && /maxIterations:[[:space:]]*1/ { branch_ok=1 }
+  END { exit branch_ok ? 0 : 1 }
+' "$frontend_modes_file"; then
+  printf '%s\n' "frontend instant default profile must be single-pass (maxIterations=1)" >&2
+  exit 1
+fi
+
+if ! awk '
+  /^[[:space:]]*if[[:space:]]*\(value[[:space:]]*===[[:space:]]*"text-perfecter"\)/ { in_branch=1; next }
+  in_branch && /^[[:space:]]*if[[:space:]]*\(value[[:space:]]*===/ { in_branch=0 }
+  in_branch && /minIterations:[[:space:]]*9/ { branch_ok=1 }
+  END { exit branch_ok ? 0 : 1 }
+' "$frontend_modes_file"; then
+  printf '%s\n' "frontend text-perfecter default profile must enforce minIterations=9" >&2
+  exit 1
+fi
+
+if ! awk '
+  /^[[:space:]]*instant\)/ { in_branch=1; next }
+  in_branch && /^[[:space:]]*[a-z-]+\)/ { in_branch=0 }
+  in_branch && /max_iterations=1/ { branch_ok=1 }
+  END { exit branch_ok ? 0 : 1 }
+' "$run_part_tuning_file"; then
+  printf '%s\n' "run-part-001 instant branch must enforce max_iterations=1" >&2
+  exit 1
+fi
+
+if ! awk '
+  /^[[:space:]]*text-perfecter\)/ { in_branch=1; next }
+  in_branch && /^[[:space:]]*[a-z-]+\)/ { in_branch=0 }
+  in_branch && /if[[:space:]]*\[[[:space:]]*"\$max_iterations"[[:space:]]*-lt[[:space:]]*9[[:space:]]*]/ { branch_ok=1 }
+  END { exit branch_ok ? 0 : 1 }
+' "$run_part_tuning_file"; then
+  printf '%s\n' "run-part-001 text-perfecter branch must enforce floor max_iterations>=9" >&2
+  exit 1
+fi
+
 for parse_target in "$backend_modes_file"; do
   if ! sh -n "$parse_target"; then
     printf '%s\n' "shell parse failed for run-mode UI/normalization parity file: $parse_target" >&2
@@ -86,4 +127,4 @@ for parse_target in "$backend_modes_file"; do
   fi
 done
 
-printf '%s\n' "ok run-mode UI/normalization parity: canonical modes and security-audit default depth remain synchronized across backend normalization, frontend normalization, and menus"
+printf '%s\n' "ok run-mode UI/normalization parity: canonical modes and default-profile depth contracts remain synchronized across backend normalization, backend tuning, frontend normalization, and menus"

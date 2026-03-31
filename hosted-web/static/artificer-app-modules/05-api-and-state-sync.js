@@ -179,7 +179,7 @@
   function runModeDefaultProfile(mode) {
     var value = normalizeRunMode(mode);
     if (value === "instant") {
-      return { advancedLoop: false, reasoning: "low", minIterations: 1, maxIterations: 2 };
+      return { advancedLoop: false, reasoning: "low", minIterations: 1, maxIterations: 1 };
     }
     if (value === "programming") {
       return { advancedLoop: true, reasoning: "high", minIterations: 6, maxIterations: 12 };
@@ -200,7 +200,7 @@
       return { advancedLoop: true, reasoning: "high", minIterations: 8, maxIterations: 12 };
     }
     if (value === "text-perfecter") {
-      return { advancedLoop: true, reasoning: "extra-high", minIterations: 8, maxIterations: 14 };
+      return { advancedLoop: true, reasoning: "extra-high", minIterations: 9, maxIterations: 14 };
     }
     if (value === "gui-testing") {
       return { advancedLoop: true, reasoning: "extra-high", minIterations: 10, maxIterations: 14 };
