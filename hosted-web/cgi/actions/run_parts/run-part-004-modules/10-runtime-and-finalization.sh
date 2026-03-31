@@ -31,6 +31,14 @@
         run_mode_instruction="Programming mode: prioritize robust implementation quality, architecture integrity on large codebases, verification depth, and safe iterative refinement."
         controller_role_line="You are operating a typed-state programming agent."
         ;;
+      pentest)
+        run_mode_instruction="Pentest mode: prioritize adversarial depth, abuse-path validation, concrete remediation mapping, and safe internal-only testing boundaries."
+        controller_role_line="You are operating a typed-state adversarial security testing agent."
+        ;;
+      security-audit)
+        run_mode_instruction="Security Audit mode: prioritize systematic controls review, severity-ranked findings, evidence anchors, and fail-closed recommendations under uncertainty."
+        controller_role_line="You are operating a typed-state security review and risk assessment agent."
+        ;;
       text-perfecter)
         run_mode_instruction="Text Perfecter mode: iteratively perfect wording and content using broad evidence, resolve contradictions, and stop only when revisions converge and stop thrashing."
         controller_role_line="You are operating a typed-state text perfection and synthesis agent."
@@ -50,6 +58,14 @@
       assistant)
         run_mode_instruction="Team mode: proactively sequence work and take initiative toward full task completion, including multi-phase project execution, while respecting safety policy, legal compliance, and approval gates."
         controller_role_line="You are operating a typed-state autonomous project agent."
+        ;;
+      chat)
+        run_mode_instruction="Chat mode: prioritize concise, context-aware guidance and only invoke tools when they materially improve correctness."
+        controller_role_line="You are operating a typed-state conversational assistance agent."
+        ;;
+      instant)
+        run_mode_instruction="Instant mode: prioritize fast, direct responses with conservative assumptions and minimal loop overhead."
+        controller_role_line="You are operating a typed-state rapid response agent."
         ;;
     esac
 
@@ -488,7 +504,7 @@ EOF
       esac
       context_prompt_budget=$((context_tokens * 62 / 100))
       case "$run_mode" in
-        programming|teacher|report|text-perfecter|assistant|gui-testing)
+        programming|teacher|report|text-perfecter|assistant|gui-testing|security-audit|pentest)
           context_prompt_budget=$((context_tokens * 72 / 100))
           ;;
       esac
@@ -507,6 +523,11 @@ EOF
           fi
           ;;
         text-perfecter)
+          if [ "$context_prompt_budget" -lt 2200 ]; then
+            context_prompt_budget=2200
+          fi
+          ;;
+        security-audit|pentest)
           if [ "$context_prompt_budget" -lt 2200 ]; then
             context_prompt_budget=2200
           fi
