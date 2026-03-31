@@ -188,7 +188,7 @@
       return { advancedLoop: true, reasoning: "extra-high", minIterations: 8, maxIterations: 16 };
     }
     if (value === "security-audit") {
-      return { advancedLoop: true, reasoning: "high", minIterations: 8, maxIterations: 16 };
+      return { advancedLoop: true, reasoning: "extra-high", minIterations: 8, maxIterations: 16 };
     }
     if (value === "chat") {
       return { advancedLoop: false, reasoning: "medium", minIterations: 1, maxIterations: 2 };
