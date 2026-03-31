@@ -22,6 +22,7 @@ for mode_name in \
   text-perfecter \
   gui-testing \
   assistant \
+  auto \
   teacher \
   chat \
   instant
@@ -36,13 +37,18 @@ do
   fi
 done
 
-if ! grep -Fq 'programming|teacher|report|text-perfecter|assistant|gui-testing|security-audit|pentest' "$run_part_file"; then
-  printf '%s\n' "run-part-004 context budget parity missing security/pentest expansion" >&2
+if ! grep -Fq 'programming|teacher|report|text-perfecter|assistant|auto|gui-testing|security-audit|pentest' "$run_part_file"; then
+  printf '%s\n' "run-part-004 context budget parity missing adaptive/security expansion" >&2
   exit 1
 fi
 
 if ! grep -Fq 'security-audit|pentest)' "$run_part_file"; then
   printf '%s\n' "run-part-004 minimum context budget branch missing security-audit|pentest case" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'programming|teacher|assistant|auto|gui-testing)' "$run_part_file"; then
+  printf '%s\n' "run-part-004 minimum context budget branch missing adaptive auto case" >&2
   exit 1
 fi
 
@@ -53,4 +59,4 @@ for parse_target in "$policy_file" "$run_part_file"; do
   fi
 done
 
-printf '%s\n' "ok run-mode domain parity: policy branches, run directives, and security/pentest context budgets are synchronized"
+printf '%s\n' "ok run-mode domain parity: policy branches, run directives, and adaptive/security context budgets are synchronized"

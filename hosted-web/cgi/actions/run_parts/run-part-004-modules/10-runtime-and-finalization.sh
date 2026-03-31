@@ -59,6 +59,10 @@
         run_mode_instruction="Team mode: proactively sequence work and take initiative toward full task completion, including multi-phase project execution, while respecting safety policy, legal compliance, and approval gates."
         controller_role_line="You are operating a typed-state autonomous project agent."
         ;;
+      auto)
+        run_mode_instruction="Auto mode: adapt depth to task risk and scope, preferring complete verified slices with explicit assumption management."
+        controller_role_line="You are operating a typed-state adaptive orchestration agent."
+        ;;
       chat)
         run_mode_instruction="Chat mode: prioritize concise, context-aware guidance and only invoke tools when they materially improve correctness."
         controller_role_line="You are operating a typed-state conversational assistance agent."
@@ -504,7 +508,7 @@ EOF
       esac
       context_prompt_budget=$((context_tokens * 62 / 100))
       case "$run_mode" in
-        programming|teacher|report|text-perfecter|assistant|gui-testing|security-audit|pentest)
+        programming|teacher|report|text-perfecter|assistant|auto|gui-testing|security-audit|pentest)
           context_prompt_budget=$((context_tokens * 72 / 100))
           ;;
       esac
@@ -512,7 +516,7 @@ EOF
         context_prompt_budget=1600
       fi
       case "$run_mode" in
-        programming|teacher|assistant|gui-testing)
+        programming|teacher|assistant|auto|gui-testing)
           if [ "$context_prompt_budget" -lt 2200 ]; then
             context_prompt_budget=2200
           fi

@@ -80,6 +80,16 @@ Run mode policy:
 - for adversarial or ambiguous prompts, include a contradiction check and at least one alternative path in the final output.
 EOF
       ;;
+    auto)
+      cat <<'EOF'
+Run mode policy:
+- default to adaptive orchestration: choose between concise response and deep execution based on task risk and scope.
+- escalate to full typed-state loops for multi-step, high-risk, or high-uncertainty tasks.
+- keep assumptions explicit and revise quickly when evidence changes.
+- prefer one complete, verified slice over broad but weak partial output.
+- when uncertainty remains, include the best next verification step instead of stalling.
+EOF
+      ;;
     chat)
       cat <<'EOF'
 Run mode policy:
@@ -2206,4 +2216,3 @@ assistant_output_is_freeform_reasoning_memo() {
   [ "$sentence_count" -ge 3 ] || return 1
   return 0
 }
-
