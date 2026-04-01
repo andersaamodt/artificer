@@ -11,7 +11,18 @@ fi
 ARTIFICER_API_SCRIPT=${ARTIFICER_API_SCRIPT:-$ARTIFICER_SCRIPT_DIR/../artificer-api}
 export ARTIFICER_API_SCRIPT
 
-http-ok-json
+run_path_command_compat() {
+  cmd_name=$1
+  shift
+  cmd_path=$(command -v "$cmd_name" 2>/dev/null || true)
+  if [ -n "$cmd_path" ] && [ -f "$cmd_path" ]; then
+    sh "$cmd_path" "$@"
+    return $?
+  fi
+  "$cmd_name" "$@"
+}
+
+run_path_command_compat http-ok-json
 
 request_method=${REQUEST_METHOD:-GET}
 query_data=${QUERY_STRING:-}

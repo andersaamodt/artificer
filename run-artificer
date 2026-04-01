@@ -36,10 +36,21 @@ require_backend() {
   }
 }
 
+run_shell_script() {
+  script_path=$1
+  shift
+  exec_path=$script_path
+  [ -f "$exec_path" ] || {
+    printf '%s\n' "artificer: missing shell script at $exec_path" >&2
+    exit 1
+  }
+  sh "$exec_path" "$@"
+}
+
 ensure_site() {
   require_backend
-  "$APP_ROOT/scripts/artificer-backend.sh" ensure-data-root "$APP_ROOT" >/dev/null
-  "$APP_ROOT/scripts/artificer-backend.sh" ensure-site "$APP_ROOT" >/dev/null
+  run_shell_script "$APP_ROOT/scripts/artificer-backend.sh" ensure-data-root "$APP_ROOT" >/dev/null
+  run_shell_script "$APP_ROOT/scripts/artificer-backend.sh" ensure-site "$APP_ROOT" >/dev/null
 }
 
 site_url() {
@@ -47,10 +58,10 @@ site_url() {
   ensure_site
   # Avoid command substitution around start-serve: subshell capture can hang
   # when descendants keep stdout pipes open.
-  "$APP_ROOT/scripts/artificer-backend.sh" start-serve "$APP_ROOT" >/dev/null
-  port=$("$APP_ROOT/scripts/artificer-backend.sh" detect-ready-port "$APP_ROOT")
+  run_shell_script "$APP_ROOT/scripts/artificer-backend.sh" start-serve "$APP_ROOT" >/dev/null
+  port=$(run_shell_script "$APP_ROOT/scripts/artificer-backend.sh" detect-ready-port "$APP_ROOT")
   if [ -z "$port" ]; then
-    port=$("$APP_ROOT/scripts/artificer-backend.sh" get-port "$APP_ROOT")
+    port=$(run_shell_script "$APP_ROOT/scripts/artificer-backend.sh" get-port "$APP_ROOT")
   fi
   [ -n "$port" ] || {
     printf '%s\n' "artificer: unable to determine local port after server start" >&2

@@ -85,6 +85,11 @@ if ! grep -q 'self-actuation' "$registry_module"; then
   exit 1
 fi
 
+if ! grep -q 'capability-roadmap' "$registry_module"; then
+  printf '%s\n' "self-knowledge registry topics missing capability roadmap track" >&2
+  exit 1
+fi
+
 if ! grep -q 'learning_goals' "$state_module" || ! grep -q 'assessment_checks' "$state_module"; then
   printf '%s\n' "self-knowledge teach payload missing curriculum scaffolding fields" >&2
   exit 1

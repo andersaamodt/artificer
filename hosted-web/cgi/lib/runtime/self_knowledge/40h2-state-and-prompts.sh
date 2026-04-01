@@ -91,11 +91,12 @@ self_knowledge_state_json() {
   ollama_runtime_text=$(self_knowledge_ollama_runtime_text)
   ollama_contributing_text=$(self_knowledge_ollama_contributing_text)
   self_actuation_text=$(self_knowledge_self_actuation_text)
+  capability_roadmap_text=$(self_knowledge_capability_roadmap_text)
   selected_text=$(self_knowledge_topic_text "$requested_topic")
   summary_text=$(self_knowledge_summary_text)
   runtime_json=$(self_knowledge_runtime_snapshot_json)
 
-  printf '{"success":true,"registry_version":"%s","summary":"%s","topics":%s,"requested_topic":"%s","selected_content":"%s","sections":{"overview":"%s","gui":"%s","architecture":"%s","llm_foundations":"%s","ollama_runtime":"%s","ollama_contributing":"%s","self_actuation":"%s"},"runtime":%s}' \
+  printf '{"success":true,"registry_version":"%s","summary":"%s","topics":%s,"requested_topic":"%s","selected_content":"%s","sections":{"overview":"%s","gui":"%s","architecture":"%s","llm_foundations":"%s","ollama_runtime":"%s","ollama_contributing":"%s","self_actuation":"%s","capability_roadmap":"%s"},"runtime":%s}' \
     "$(json_escape "$(self_knowledge_registry_version)")" \
     "$(json_escape "$summary_text")" \
     "$(self_knowledge_topics_json)" \
@@ -108,6 +109,7 @@ self_knowledge_state_json() {
     "$(json_escape "$ollama_runtime_text")" \
     "$(json_escape "$ollama_contributing_text")" \
     "$(json_escape "$self_actuation_text")" \
+    "$(json_escape "$capability_roadmap_text")" \
     "$runtime_json"
 }
 
@@ -149,6 +151,7 @@ Grounded knowledge topics (use these exact names):
 - ollama-runtime
 - ollama-contributing
 - self-actuation
+- capability-roadmap
 
 Self-knowledge behavior contract:
 - explain UI using exact labels shown in the GUI (for example: Automations, Threads, Default permissions, Reflexive knowledge, Self-actuation).
@@ -156,11 +159,12 @@ Self-knowledge behavior contract:
 - for LLM/Ollama teaching requests, teach progressively from fundamentals to contributor-level practice tasks.
 - include learning goals, misconceptions, assessment checks, and practice tasks when teaching.
 - for self-actuation teaching requests, explain preview/apply confirmation, policy scope, idempotency behavior, and audit interpretation.
+- for capability-roadmap teaching requests, separate model-limited ceilings from engineering-limited gaps and recommend only measurable next changes.
 - whenever detail confidence is uncertain, explicitly mark it as inferred and suggest verification steps.
 
 Introspection commands available when needed:
 - artificer-appctl knowledge show
-- artificer-appctl knowledge teach --topic <overview|gui|architecture|llm-foundations|ollama-runtime|ollama-contributing|self-actuation>
+- artificer-appctl knowledge teach --topic <overview|gui|architecture|llm-foundations|ollama-runtime|ollama-contributing|self-actuation|capability-roadmap>
 
 Self-actuation command workflow:
 1. read current state first:

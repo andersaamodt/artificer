@@ -39,6 +39,41 @@ resolve_web_cmd() {
   printf '%s\n' "$web_cmd"
 }
 
+resolve_command_path() {
+  cmd_name=${1-}
+  [ -n "$cmd_name" ] || return 1
+  if [ -f "$cmd_name" ]; then
+    printf '%s\n' "$cmd_name"
+    return 0
+  fi
+  resolved=$(command -v "$cmd_name" 2>/dev/null || true)
+  [ -n "$resolved" ] || return 1
+  printf '%s\n' "$resolved"
+}
+
+run_shell_command_compat() {
+  cmd_name=$1
+  shift
+  resolved=$(resolve_command_path "$cmd_name" 2>/dev/null || true)
+  if [ -n "$resolved" ] && [ -f "$resolved" ]; then
+    sh "$resolved" "$@"
+    return $?
+  fi
+  "$cmd_name" "$@"
+}
+
+run_shell_command_compat_bg() {
+  cmd_name=$1
+  log_file=$2
+  shift 2
+  resolved=$(resolve_command_path "$cmd_name" 2>/dev/null || true)
+  if [ -n "$resolved" ] && [ -f "$resolved" ]; then
+    nohup sh "$resolved" "$@" >"$log_file" 2>&1 &
+    return 0
+  fi
+  nohup "$cmd_name" "$@" >"$log_file" 2>&1 &
+}
+
 set_site_port_value() {
   new_port=${1-}
   case "$new_port" in
@@ -192,7 +227,7 @@ cmd_ensure_site() {
   if [ "$needs_build" -eq 0 ] && find "$hosted/pages" "$hosted/static" "$hosted/includes" "$hosted/cgi" -type f -newer "$SITE/build/pages/index.html" 2>/dev/null | read x; then
     needs_build=1
   fi
-  [ "$needs_build" -eq 0 ] || "$web_cmd" build artificer
+  [ "$needs_build" -eq 0 ] || run_shell_command_compat "$web_cmd" build artificer
 
   if [ -n "$APP_DIR" ]; then
     app_root_canonical=$(cd "$APP_DIR" 2>/dev/null && pwd -P || true)
@@ -212,12 +247,12 @@ cmd_start_serve() {
   fi
 
   if [ "$(cmd_is_running)" = "yes" ]; then
-    "$web_cmd" stop artificer >/dev/null 2>&1 || true
+    run_shell_command_compat "$web_cmd" stop artificer >/dev/null 2>&1 || true
   fi
 
   serve_log="$ARTIFICER_STATE_ROOT/logs/backend-serve.log"
   mkdir -p "$SITE" "$(dirname "$serve_log")"
-  nohup "$web_cmd" serve artificer >"$serve_log" 2>&1 &
+  run_shell_command_compat_bg "$web_cmd" "$serve_log" serve artificer
 
   i=0
   while [ "$i" -lt 40 ]; do

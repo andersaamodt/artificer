@@ -2,15 +2,15 @@
 set -eu
 
 self_knowledge_registry_version() {
-  printf '%s' "2026-03-29"
+  printf '%s' "2026-04-01"
 }
 
 self_knowledge_topics_json() {
-  printf '%s' '["overview","gui","architecture","llm-foundations","ollama-runtime","ollama-contributing","self-actuation"]'
+  printf '%s' '["overview","gui","architecture","llm-foundations","ollama-runtime","ollama-contributing","self-actuation","capability-roadmap"]'
 }
 
 self_knowledge_valid_topics_csv() {
-  printf '%s' "overview,gui,architecture,llm-foundations,ollama-runtime,ollama-contributing,self-actuation"
+  printf '%s' "overview,gui,architecture,llm-foundations,ollama-runtime,ollama-contributing,self-actuation,capability-roadmap"
 }
 
 self_knowledge_normalize_topic() {
@@ -43,6 +43,10 @@ self_knowledge_normalize_topic() {
       ;;
     self-actuation|self-actuate|actuation|automation-ops|workflow-ops|workflows|operations)
       printf '%s' "self-actuation"
+      return 0
+      ;;
+    capability-roadmap|capabilities|capability|roadmap|limits|limit|ceiling|ceilings|self-improvement-roadmap|intelligence-roadmap)
+      printf '%s' "capability-roadmap"
       return 0
       ;;
   esac
@@ -261,6 +265,38 @@ Reliability rules:
 EOF
 }
 
+self_knowledge_capability_roadmap_text() {
+  cat <<'EOF'
+Artificer capability roadmap:
+Current strengths:
+- Strong on bounded coding, repo-grounded debugging, and workspace-aware execution where tool use and verification are available.
+- Strong on file-backed state, repeatable automation flows, GUI-to-runtime consistency, and self-actuation guarded by explicit permissions.
+- Strong on teaching its own UI, runtime structure, and operator workflows when grounded in local files and exact labels.
+
+Model-limited ceilings:
+- Local Ollama models can still underperform on broad open-ended research, ambiguous architecture tradeoffs, and cross-domain expert synthesis.
+- Better orchestration improves reliability, but it does not erase the base-model ceiling on abstraction depth, taste, or world knowledge.
+- Long-horizon self-improvement quality is limited when the underlying model cannot reliably generate or critique novel designs at frontier depth.
+
+Engineering-limited gaps:
+- Comparative answer-quality evaluations are still thinner than the contract tests for runtime correctness.
+- Specialist routing, retrieval packs, critic lanes, and scorecard-based plugin promotion can all be pushed further.
+- More measured teaching evaluations are needed if Artificer is expected to teach LLM/Ollama internals at contributor level consistently.
+
+Highest-leverage next changes:
+1. Build capability-family benchmark batteries that compare real outputs, not just system contracts.
+2. Add quality-scored evaluation loops for research, planning, coding, review, and teaching tasks.
+3. Route harder tasks through specialist controllers and verification passes instead of one generic reasoning path.
+4. Improve retrieval and evidence packaging so local models spend more of their context budget on relevant material.
+5. Promote self-improvement ideas only when they improve measured outcomes on holdout tasks.
+
+Proof standard:
+- Do not claim improvement from intuition or one good demo.
+- Require before/after comparisons, task-family transfer checks, and regression guards.
+- Separate model-limited failure from system-limited failure before deciding what to change next.
+EOF
+}
+
 self_knowledge_topic_learning_goals_text() {
   topic_name=$1
   case "$topic_name" in
@@ -285,6 +321,9 @@ self_knowledge_topic_learning_goals_text() {
     self-actuation)
       printf '%s' "- Execute safe preview/apply self-actuation workflows with policy awareness, idempotent retries, and auditable outcomes."
       ;;
+    capability-roadmap)
+      printf '%s' "- Distinguish model-limited ceilings from engineering-limited gaps and choose the highest-leverage next improvements with measurable proof."
+      ;;
     *)
       printf '%s' "- Deliver accurate, grounded explanations with explicit uncertainty boundaries."
       ;;
@@ -305,6 +344,9 @@ self_knowledge_topic_misconceptions_text() {
       ;;
     self-actuation)
       printf '%s' "- A valid-looking id string is enough without checking live state.\n- Confirmation tokens can be reused after changing operation payload.\n- Policy gates only matter for destructive operations."
+      ;;
+    capability-roadmap)
+      printf '%s' "- Better prompts or orchestration can fully erase the underlying model ceiling.\n- One impressive demo proves general improvement.\n- Runtime contract tests alone prove answer quality."
       ;;
     *)
       printf '%s' "- Confident wording is equivalent to grounded evidence."
@@ -327,6 +369,9 @@ self_knowledge_topic_assessment_checks_text() {
     self-actuation)
       printf '%s' "1. Given a requested mutation, produce preview command, explain confirm token purpose, and provide a safe apply command.\n2. Diagnose blocked-policy vs confirm-token mismatch from API error text and prescribe exact recovery steps."
       ;;
+    capability-roadmap)
+      printf '%s' "1. Given a failed capability area, separate model-limited causes from system-limited causes and justify that split.\n2. Propose a measurable evaluation plan that can prove whether retrieval, routing, or verification changes improved results."
+      ;;
     *)
       printf '%s' "1. Explain the subsystem with concrete artifacts.\n2. Separate known facts from inferred details."
       ;;
@@ -347,6 +392,9 @@ self_knowledge_topic_practice_tasks_text() {
       ;;
     self-actuation)
       printf '%s' "- Execute a complete orchestrated lifecycle: ensure_workspace -> ensure_thread -> ensure_automation -> run_automation_now, then verify via list/audit and perform one policy-set rollback."
+      ;;
+    capability-roadmap)
+      printf '%s' "- Design a benchmark battery across research, planning, coding, review, and teaching; define score criteria, holdout tasks, and promotion thresholds for any self-improvement proposal."
       ;;
     *)
       printf '%s' "- Teach this topic to a beginner, then validate with two concrete comprehension checks."
@@ -378,6 +426,9 @@ self_knowledge_topic_reference_paths_json() {
     self-actuation)
       printf '%s' '["hosted-web/scripts/artificer-appctl","hosted-web/cgi/actions/self_actuation_orchestrate.sh","hosted-web/cgi/actions/self_actuation_policy_get.sh","hosted-web/cgi/actions/self_actuation_policy_set.sh","hosted-web/cgi/actions/self_actuation_audit_state.sh","hosted-web/cgi/lib/runtime/40i-self-actuation.sh","hosted-web/cgi/lib/runtime/intelligence_core/40e1-model-routing-events.sh"]'
       ;;
+    capability-roadmap)
+      printf '%s' '["docs/CAPABILITY_ROADMAP.md","docs/HOW_ARTIFICER_LLMS_WORK.md","docs/INTELLIGENCE_MENTORING_EXPLAINED.md","hosted-web/cgi/lib/10-self-improve.sh","hosted-web/cgi/mode-runtime-lib-modules","tools/release/feature-coverage-matrix.tsv"]'
+      ;;
     *)
       printf '%s' '[]'
       ;;
@@ -408,6 +459,9 @@ self_knowledge_topic_text() {
     self-actuation)
       self_knowledge_self_actuation_text
       ;;
+    capability-roadmap)
+      self_knowledge_capability_roadmap_text
+      ;;
     *)
       return 1
       ;;
@@ -416,7 +470,7 @@ self_knowledge_topic_text() {
 
 self_knowledge_summary_text() {
   cat <<'EOF'
-Artificer can teach and explain itself through seven grounded topics: overview, gui, architecture, llm-foundations, ollama-runtime, ollama-contributing, and self-actuation.
+Artificer can teach and explain itself through eight grounded topics: overview, gui, architecture, llm-foundations, ollama-runtime, ollama-contributing, self-actuation, and capability-roadmap.
 Use the exact GUI labels, file paths, and runtime boundaries in explanations, and mark unknown details as inferred when evidence is missing.
 EOF
 }

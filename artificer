@@ -37,16 +37,27 @@ require_backend() {
   }
 }
 
+run_shell_script() {
+  script_path=$1
+  shift
+  exec_path=$script_path
+  [ -f "$exec_path" ] || {
+    printf '%s\n' "artificer: missing shell script at $exec_path" >&2
+    exit 1
+  }
+  sh "$exec_path" "$@"
+}
+
 ensure_site() {
   require_backend
-  "$APP_ROOT/scripts/artificer-backend.sh" ensure-data-root "$APP_ROOT" >/dev/null
-  "$APP_ROOT/scripts/artificer-backend.sh" ensure-site "$APP_ROOT" >/dev/null
+  run_shell_script "$APP_ROOT/scripts/artificer-backend.sh" ensure-data-root "$APP_ROOT" >/dev/null
+  run_shell_script "$APP_ROOT/scripts/artificer-backend.sh" ensure-site "$APP_ROOT" >/dev/null
 }
 
 site_url() {
   require_backend
   ensure_site
-  port=$("$APP_ROOT/scripts/artificer-backend.sh" start-serve "$APP_ROOT")
+  port=$(run_shell_script "$APP_ROOT/scripts/artificer-backend.sh" start-serve "$APP_ROOT")
   printf 'http://127.0.0.1:%s/pages/index.html\n' "$port"
 }
 
@@ -73,27 +84,27 @@ case "$cmd" in
     case "$subcmd" in
       tick)
         shift 2
-        exec "$automations_script" tick "$@"
+        exec sh "$automations_script" tick "$@"
         ;;
       loop)
         shift 2
-        exec "$automations_script" loop "$@"
+        exec sh "$automations_script" loop "$@"
         ;;
       status)
         shift 2
-        exec "$automations_script" status "$@"
+        exec sh "$automations_script" status "$@"
         ;;
       status-json)
         shift 2
-        exec "$automations_script" status-json "$@"
+        exec sh "$automations_script" status-json "$@"
         ;;
       enable|enable-daemon|daemon-enable)
         shift 2
-        exec "$automations_script" enable "$@"
+        exec sh "$automations_script" enable "$@"
         ;;
       disable|disable-daemon|daemon-disable)
         shift 2
-        exec "$automations_script" disable "$@"
+        exec sh "$automations_script" disable "$@"
         ;;
       --help|-h|help)
         cat <<'USAGE'

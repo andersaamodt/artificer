@@ -59,6 +59,7 @@ expect_allowed "artificer-appctl self-actuation audit --limit 50 --json"
 # Allowed reflexive command forms.
 expect_allowed "artificer-appctl knowledge show --topic gui --json"
 expect_allowed "artificer-appctl knowledge teach --topic self-actuation --json"
+expect_allowed "artificer-appctl knowledge teach --topic capability-roadmap --json"
 
 # Reject malformed, unsafe, or underspecified variants.
 expect_blocked "artificer-appctl project rename --workspace-id ws_1"

@@ -168,7 +168,7 @@ do
   fi
 done
 
-if ! grep -Fq 'overview|gui|architecture|llm-foundations|ollama-runtime|ollama-contributing|self-actuation' "$prompt_file"; then
+if ! grep -Fq 'overview|gui|architecture|llm-foundations|ollama-runtime|ollama-contributing|self-actuation|capability-roadmap' "$prompt_file"; then
   printf '%s\n' "knowledge teach topic guidance drift: prompt topic list is not synchronized" >&2
   exit 1
 fi

@@ -763,7 +763,7 @@ EOF
         if [ "$REFLEXIVE_KNOWLEDGE" = "1" ]; then
           printf '%s\n' "- for reflexive system introspection tasks, you may use:"
           printf '%s\n' "  - artificer-appctl knowledge show"
-          printf '%s\n' "  - artificer-appctl knowledge teach --topic <overview|gui|architecture|llm-foundations|ollama-runtime|ollama-contributing|self-actuation>"
+          printf '%s\n' "  - artificer-appctl knowledge teach --topic <overview|gui|architecture|llm-foundations|ollama-runtime|ollama-contributing|self-actuation|capability-roadmap>"
         fi
         if [ "$SELF_ACTUATION" = "1" ]; then
           printf '%s\n' "- for self-actuation, inspect current resources before mutating them:"
