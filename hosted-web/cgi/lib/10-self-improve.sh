@@ -818,7 +818,7 @@ self_improve_runtime_signals_json() {
     fi
   fi
 
-  capability_benchmark_json=$(self_improve_capability_benchmark_summary_json)
+  capability_benchmark_json=$(self_improve_capability_benchmark_summary_cached_json)
 
   RUNTIME_CONTROLLER_JSON=$controller_json RUNTIME_BENCHMARK_JSON=$capability_benchmark_json python3 - "$mode_runtime_root" "$failure_summary" "$quality_summary" "$proposal_summary" <<'PY'
 import json
@@ -902,11 +902,19 @@ print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 PY
 }
 
+self_improve_capability_benchmark_summary_cached_json() {
+  if [ -n "${self_improve_capability_benchmark_summary_cache-}" ]; then
+    printf '%s' "$self_improve_capability_benchmark_summary_cache"
+    return 0
+  fi
+  self_improve_capability_benchmark_summary_cache=$(self_improve_capability_benchmark_summary_json)
+  printf '%s' "$self_improve_capability_benchmark_summary_cache"
+}
+
 self_improve_capability_benchmark_summary_json() {
   manifest_path="$ARTIFICER_SCRIPT_DIR/../tests/fixtures/artificer-capability-benchmark-manifest-v1.tsv"
   external_registry_path="$ARTIFICER_SCRIPT_DIR/../tests/fixtures/artificer-capability-external-adapters-v1.tsv"
   python3 - "$ARTIFICER_ASSAY_REPORTS_DIR" "$manifest_path" "$external_registry_path" <<'PY'
-import csv
 import json
 import pathlib
 import sys
@@ -925,6 +933,29 @@ def parse_json(path):
     return payload if isinstance(payload, dict) else {}
 
 
+def parse_tsv_rows(path):
+    rows = []
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+    except Exception:
+        return rows
+    lines = [line.rstrip("\n") for line in raw_text.splitlines() if line.strip()]
+    if not lines:
+        return rows
+    header = [cell.strip() for cell in lines[0].split("\t")]
+    if not header:
+        return rows
+    for raw_line in lines[1:]:
+        cells = [cell.strip() for cell in raw_line.split("\t")]
+        row = {}
+        for index, key in enumerate(header):
+            if not key:
+                continue
+            row[key] = cells[index] if index < len(cells) else ""
+        rows.append(row)
+    return rows
+
+
 def latest(paths):
     if not paths:
         return None
@@ -935,23 +966,21 @@ def load_external_adapters(path):
     adapters = []
     if not path.is_file():
         return adapters
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle, delimiter="\t")
-        for row in reader:
-            if not row:
-                continue
-            adapter_id = str(row.get("adapter_id", "")).strip()
-            if not adapter_id or adapter_id.startswith("#"):
-                continue
-            adapters.append(
-                {
-                    "adapter_id": adapter_id,
-                    "name": " ".join(str(row.get("name", adapter_id)).split()).strip() or adapter_id,
-                    "kind": " ".join(str(row.get("kind", "")).split()).strip(),
-                    "model": " ".join(str(row.get("model", "")).split()).strip(),
-                    "notes": " ".join(str(row.get("notes", "")).split()).strip(),
-                }
-            )
+    for row in parse_tsv_rows(path):
+        if not row:
+            continue
+        adapter_id = str(row.get("adapter_id", "")).strip()
+        if not adapter_id or adapter_id.startswith("#"):
+            continue
+        adapters.append(
+            {
+                "adapter_id": adapter_id,
+                "name": " ".join(str(row.get("name", adapter_id)).split()).strip() or adapter_id,
+                "kind": " ".join(str(row.get("kind", "")).split()).strip(),
+                "model": " ".join(str(row.get("model", "")).split()).strip(),
+                "notes": " ".join(str(row.get("notes", "")).split()).strip(),
+            }
+        )
     return adapters
 
 
@@ -1156,6 +1185,345 @@ payload = {
 }
 payload["external_adapter_count"] = len(payload["external_adapters"])
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+PY
+}
+
+self_improve_capability_guidance_prompt_block() {
+  run_mode=$1
+  prompt_text=${2-}
+  capability_benchmark_json=$(self_improve_capability_benchmark_summary_cached_json)
+  SELF_IMPROVE_GUIDANCE_RUN_MODE=$run_mode \
+  SELF_IMPROVE_GUIDANCE_PROMPT=$prompt_text \
+  SELF_IMPROVE_GUIDANCE_BENCHMARK_JSON=$capability_benchmark_json \
+  python3 - <<'PY'
+import json
+import os
+import re
+
+run_mode = " ".join(str(os.environ.get("SELF_IMPROVE_GUIDANCE_RUN_MODE", "")).split()).strip().lower()
+prompt_text = str(os.environ.get("SELF_IMPROVE_GUIDANCE_PROMPT", ""))
+prompt_text_lower = prompt_text.lower()
+
+try:
+    capability_benchmark = json.loads(os.environ.get("SELF_IMPROVE_GUIDANCE_BENCHMARK_JSON", "") or "{}")
+except Exception:
+    capability_benchmark = {}
+if not isinstance(capability_benchmark, dict):
+    capability_benchmark = {}
+
+
+def normalize_family_id(value):
+    token = re.sub(r"[^a-z0-9-]+", "_", str(value).strip().lower()).strip("_")
+    if token in {"research", "research_integration", "knowledge_integration"}:
+        return "research_integration"
+    if token in {"planning", "planning_architecture", "architecture"}:
+        return "planning_architecture"
+    if token in {"coding", "coding_mutation", "programming"}:
+        return "coding_mutation"
+    if token in {"review", "review_document", "document"}:
+        return "review_document"
+    if token in {"teaching", "teaching_reassessment", "reassessment"}:
+        return "teaching_reassessment"
+    if token in {"admin", "admin_env_repair", "env_repair"}:
+        return "admin_env_repair"
+    return ""
+
+
+family_catalog = {
+    "research_integration": {
+        "modes": {"assistant", "auto", "report", "text-perfecter", "security-audit", "pentest"},
+        "keywords": {
+            "research",
+            "search",
+            "source",
+            "sources",
+            "citation",
+            "citations",
+            "evidence",
+            "quote",
+            "quotes",
+            "web",
+            "online",
+            "browse",
+            "fresh",
+            "freshness",
+            "compare",
+            "overview",
+            "synthesis",
+            "synthesize",
+        },
+        "guidance": "Separate evidence from inference, cross-check sources before synthesis, and call out freshness or conflicts explicitly.",
+    },
+    "planning_architecture": {
+        "modes": {"programming", "assistant", "auto", "report", "security-audit", "pentest", "gui-testing"},
+        "keywords": {
+            "plan",
+            "planning",
+            "architecture",
+            "architect",
+            "design",
+            "tradeoff",
+            "trade-off",
+            "module",
+            "modularize",
+            "refactor",
+            "workflow",
+            "system",
+            "structure",
+        },
+        "guidance": "Make tradeoffs explicit, reject alternatives concretely, and tie design choices to verification checkpoints.",
+    },
+    "coding_mutation": {
+        "modes": {"programming", "assistant", "auto", "gui-testing", "security-audit", "pentest"},
+        "keywords": {
+            "code",
+            "coding",
+            "patch",
+            "fix",
+            "refactor",
+            "implement",
+            "implementation",
+            "test",
+            "tests",
+            "regression",
+            "module",
+            "function",
+            "compile",
+            "stream",
+        },
+        "guidance": "Work in bounded verifiable slices, keep the project runnable between changes, and only claim completion with executed verification evidence.",
+    },
+    "review_document": {
+        "modes": {"report", "text-perfecter", "assistant", "auto", "teacher", "security-audit"},
+        "keywords": {
+            "review",
+            "document",
+            "rewrite",
+            "memo",
+            "runbook",
+            "report",
+            "summary",
+            "postmortem",
+            "edit",
+            "wording",
+            "guide",
+            "docs",
+            "documentation",
+        },
+        "guidance": "Anchor findings and edits to concrete evidence, keep severity and residual risk explicit, and avoid unsupported polish-only rewrites.",
+    },
+    "teaching_reassessment": {
+        "modes": {"teacher", "assistant", "auto", "chat", "report"},
+        "keywords": {
+            "teach",
+            "teaching",
+            "learn",
+            "learner",
+            "explain",
+            "tutorial",
+            "curriculum",
+            "understand",
+            "understanding",
+            "misconception",
+            "reassess",
+            "reassessment",
+            "contribute",
+        },
+        "guidance": "Scaffold concepts before abstraction, check for misconceptions, and end with a brief reassessment or diagnostic confirmation.",
+    },
+    "admin_env_repair": {
+        "modes": {"programming", "assistant", "auto", "gui-testing"},
+        "keywords": {
+            "install",
+            "setup",
+            "environment",
+            "env",
+            "dependency",
+            "runtime",
+            "bootstrap",
+            "launch",
+            "start",
+            "splash",
+            "broken",
+            "repair",
+            "ollama",
+        },
+        "guidance": "Probe the environment before mutating it, repair one dependency at a time, and verify closure with direct runtime checks.",
+    },
+}
+
+weak_family_map = {}
+for source_items in [capability_benchmark.get("high_leverage_gaps", []), capability_benchmark.get("latest_scorecard", {}).get("weak_families", [])]:
+    if not isinstance(source_items, list):
+        continue
+    for item in source_items:
+        if not isinstance(item, dict):
+            continue
+        family_id = normalize_family_id(item.get("id", ""))
+        if not family_id:
+            continue
+        existing = weak_family_map.get(family_id, {"id": family_id, "critical": False})
+        existing["critical"] = bool(existing.get("critical", False) or item.get("critical", False))
+        weak_family_map[family_id] = existing
+
+external_gap_map = {}
+for source_items in [capability_benchmark.get("external_gap_families", []), capability_benchmark.get("latest_external_compare", {}).get("candidate_gap_families", [])]:
+    if not isinstance(source_items, list):
+        continue
+    for item in source_items:
+        if not isinstance(item, dict):
+            continue
+        family_id = normalize_family_id(item.get("id", ""))
+        if not family_id:
+            continue
+        existing = external_gap_map.get(family_id, {"id": family_id, "critical": False})
+        existing["critical"] = bool(existing.get("critical", False) or item.get("critical", False) or item.get("candidate_critical", False))
+        external_gap_map[family_id] = existing
+
+persistent_external_gap_map = {}
+for item in capability_benchmark.get("persistent_external_gaps", []):
+    if not isinstance(item, dict):
+        continue
+    family_id = normalize_family_id(item.get("id", ""))
+    if not family_id:
+        continue
+    persistent_external_gap_map[family_id] = {
+        "id": family_id,
+        "critical": bool(item.get("critical", False)),
+        "occurrence_count": int(item.get("occurrence_count", 0) or 0),
+        "trend_direction": " ".join(str(item.get("trend_direction", "flat")).split()).strip().lower(),
+        "trend_compare_streak": int(item.get("trend_compare_streak", 0) or 0),
+    }
+
+
+def prompt_hits(meta):
+    return any(keyword in prompt_text_lower for keyword in meta.get("keywords", set()))
+
+
+def benchmark_weight(family_id):
+    weight = 0.0
+    weak_item = weak_family_map.get(family_id, {})
+    if weak_item:
+        weight += 5.0
+        if weak_item.get("critical"):
+            weight += 2.0
+    external_item = external_gap_map.get(family_id, {})
+    if external_item:
+        weight += 3.5
+        if external_item.get("critical"):
+            weight += 1.0
+    persistent_item = persistent_external_gap_map.get(family_id, {})
+    if persistent_item:
+        weight += 4.0 + min(3.0, float(persistent_item.get("occurrence_count", 0) or 0))
+        direction = persistent_item.get("trend_direction", "flat")
+        streak = int(persistent_item.get("trend_compare_streak", 0) or 0)
+        if direction == "worsening":
+            weight += 3.0
+            if streak >= 2:
+                weight += 2.0
+        elif direction == "flat":
+            weight += 1.5
+            if streak >= 2:
+                weight += 1.0
+        elif direction == "new":
+            weight += 1.0
+        elif direction == "closing":
+            weight += 0.5
+            if streak >= 2:
+                weight += 0.25
+    return weight
+
+
+def relevance_weight(meta):
+    weight = 0.0
+    if run_mode in meta.get("modes", set()):
+        weight += 4.0
+    elif run_mode in {"assistant", "auto"}:
+        weight += 1.0
+    if prompt_hits(meta):
+        weight += 4.0
+    return weight
+
+
+def status_reason(family_id):
+    persistent_item = persistent_external_gap_map.get(family_id, {})
+    weak_item = weak_family_map.get(family_id, {})
+    external_item = external_gap_map.get(family_id, {})
+    reason_parts = []
+    if persistent_item:
+        direction = persistent_item.get("trend_direction", "flat")
+        streak = int(persistent_item.get("trend_compare_streak", 0) or 0)
+        if direction == "worsening" and streak >= 2:
+            reason_parts.append("sustained worsening external-baseline gap")
+        elif direction == "flat" and streak >= 2:
+            reason_parts.append("sustained flat external-baseline gap")
+        elif direction == "closing" and streak >= 2:
+            reason_parts.append("closing external-baseline gap with sustained recovery")
+        elif direction == "worsening":
+            reason_parts.append("worsening external-baseline gap")
+        elif direction == "flat":
+            reason_parts.append("flat external-baseline gap")
+        elif direction == "closing":
+            reason_parts.append("closing external-baseline gap")
+        elif direction == "new":
+            reason_parts.append("new external-baseline gap")
+    elif external_item:
+        reason_parts.append("external-baseline gap")
+    if weak_item:
+        reason_parts.append("measured weak family")
+    critical = bool(
+        weak_item.get("critical")
+        or external_item.get("critical")
+        or persistent_item.get("critical")
+    )
+    if critical:
+        reason_parts.append("critical")
+    if not reason_parts:
+        return "measured benchmark focus family"
+    return "; ".join(reason_parts)
+
+
+def direction_rank(family_id):
+    direction = str(persistent_external_gap_map.get(family_id, {}).get("trend_direction", "")).strip().lower()
+    return {"worsening": 0, "flat": 1, "new": 2, "closing": 3}.get(direction, 4)
+
+
+candidates = []
+for family_id, meta in family_catalog.items():
+    family_benchmark_weight = benchmark_weight(family_id)
+    if family_benchmark_weight <= 0:
+        continue
+    family_relevance_weight = relevance_weight(meta)
+    if family_relevance_weight <= 0 and not (run_mode in {"assistant", "auto", "report"} and family_benchmark_weight >= 7.0):
+        continue
+    candidates.append(
+        {
+            "id": family_id,
+            "guidance": meta.get("guidance", ""),
+            "total_weight": round(family_benchmark_weight + family_relevance_weight, 2),
+            "reason": status_reason(family_id),
+            "direction_rank": direction_rank(family_id),
+            "critical": "critical" in status_reason(family_id),
+        }
+    )
+
+candidates.sort(
+    key=lambda item: (
+        -float(item.get("total_weight", 0.0) or 0.0),
+        int(item.get("direction_rank", 4) or 4),
+        not bool(item.get("critical", False)),
+        item.get("id", ""),
+    )
+)
+
+selected = candidates[:3]
+if not selected:
+    print("NONE")
+else:
+    lines = []
+    for item in selected:
+        lines.append(f"- {item['id']}: {item['reason']}; {item['guidance']}")
+    print("\n".join(lines))
 PY
 }
 

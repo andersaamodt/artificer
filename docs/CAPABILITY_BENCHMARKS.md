@@ -79,6 +79,25 @@ This is the intended loop:
 3. measure them against the battery
 4. keep only the changes that improve holdout performance
 
+## How This Connects To Ordinary Runs
+
+Capability benchmarks no longer only steer self-improvement proposals.
+
+Artificer's ordinary controller prompt now receives a bounded capability-guidance block derived from the latest benchmark evidence.
+
+That means measured deficits can shape normal behavior in the moment:
+
+- research tasks can be pushed toward stricter source-grounding when research integration is weak
+- programming tasks can be pushed toward tighter bounded verification when coding mutation is weak
+- teaching tasks can be pushed toward misconception checks and reassessment when teaching remains behind
+- repair tasks can be pushed toward stricter probe-then-fix behavior when admin environment repair is weak
+
+The important constraint is boundedness.
+
+Artificer does not dump the whole benchmark battery into every run.
+
+It selects only the families that are both measured as weak and relevant to the current task or run mode, so benchmark evidence changes ordinary behavior without turning the controller prompt into generic noise.
+
 ## External Baseline Lane
 
 Internal compare results answer:

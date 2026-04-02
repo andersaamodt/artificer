@@ -41,7 +41,6 @@ PROJECT_ROOT_ENV=$PROJECT_ROOT
 MANIFEST_DEFAULT=$MANIFEST_DEFAULT EXTERNAL_REGISTRY_DEFAULT=$EXTERNAL_REGISTRY_DEFAULT REPORTS_DIR_DEFAULT=$REPORTS_DIR_DEFAULT SITE_ROOT_ENV=$SITE_ROOT_ENV PROJECT_ROOT_ENV=$PROJECT_ROOT_ENV \
 python3 - "$command_name" "$@" <<'PY'
 import argparse
-import csv
 import datetime as dt
 import json
 import math
@@ -87,6 +86,29 @@ def parse_json_file(path, fallback):
     return payload
 
 
+def parse_tsv_rows(path):
+    rows = []
+    try:
+        raw_text = pathlib.Path(path).read_text(encoding="utf-8")
+    except Exception:
+        return rows
+    lines = [line.rstrip("\n") for line in raw_text.splitlines() if line.strip()]
+    if not lines:
+        return rows
+    header = [cell.strip() for cell in lines[0].split("\t")]
+    if not header:
+        return rows
+    for raw_line in lines[1:]:
+        cells = [cell.strip() for cell in raw_line.split("\t")]
+        row = {}
+        for index, key in enumerate(header):
+            if not key:
+                continue
+            row[key] = cells[index] if index < len(cells) else ""
+        rows.append(row)
+    return rows
+
+
 def resolve_path(raw_path, project_root, site_root):
     text = str(raw_path or "").strip()
     if not text:
@@ -106,28 +128,26 @@ def load_manifest(path, project_root, site_root):
     if not manifest_path.is_file():
         fail(f"Manifest not found: {manifest_path}")
     families = []
-    with manifest_path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle, delimiter="\t")
-        for row in reader:
-            if not row:
-                continue
-            family_id = str(row.get("family_id", "")).strip()
-            if not family_id or family_id.startswith("#"):
-                continue
-            family = {
-                "family_id": family_id,
-                "name": " ".join(str(row.get("name", family_id)).split()).strip() or family_id,
-                "axis": " ".join(str(row.get("axis", "")).split()).strip(),
-                "weight": float(str(row.get("weight", "1") or "1").strip()),
-                "critical": normalize_bool(row.get("critical", "0")),
-                "run_style": str(row.get("run_style", "profile")).strip() or "profile",
-                "transfer_style": str(row.get("transfer_style", "simple")).strip() or "simple",
-                "score_style": str(row.get("score_style", "simple")).strip() or "simple",
-                "cycle_script": resolve_path(row.get("cycle_script", ""), project_root, site_root),
-                "regressions_fixture": resolve_path(row.get("regressions_fixture", ""), project_root, site_root),
-                "holdout_fixture": resolve_path(row.get("holdout_fixture", ""), project_root, site_root),
-            }
-            families.append(family)
+    for row in parse_tsv_rows(manifest_path):
+        if not row:
+            continue
+        family_id = str(row.get("family_id", "")).strip()
+        if not family_id or family_id.startswith("#"):
+            continue
+        family = {
+            "family_id": family_id,
+            "name": " ".join(str(row.get("name", family_id)).split()).strip() or family_id,
+            "axis": " ".join(str(row.get("axis", "")).split()).strip(),
+            "weight": float(str(row.get("weight", "1") or "1").strip()),
+            "critical": normalize_bool(row.get("critical", "0")),
+            "run_style": str(row.get("run_style", "profile")).strip() or "profile",
+            "transfer_style": str(row.get("transfer_style", "simple")).strip() or "simple",
+            "score_style": str(row.get("score_style", "simple")).strip() or "simple",
+            "cycle_script": resolve_path(row.get("cycle_script", ""), project_root, site_root),
+            "regressions_fixture": resolve_path(row.get("regressions_fixture", ""), project_root, site_root),
+            "holdout_fixture": resolve_path(row.get("holdout_fixture", ""), project_root, site_root),
+        }
+        families.append(family)
     return manifest_path, families
 
 
@@ -136,27 +156,25 @@ def load_external_registry(path):
     if not registry_path.is_file():
         fail(f"External registry not found: {registry_path}")
     adapters = []
-    with registry_path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle, delimiter="\t")
-        for row in reader:
-            if not row:
-                continue
-            adapter_id = str(row.get("adapter_id", "")).strip()
-            if not adapter_id or adapter_id.startswith("#"):
-                continue
-            command_template = " ".join(str(row.get("command_template", "")).split()).strip()
-            if not command_template:
-                fail(f"External adapter missing command_template: {adapter_id}")
-            adapters.append(
-                {
-                    "adapter_id": adapter_id,
-                    "name": " ".join(str(row.get("name", adapter_id)).split()).strip() or adapter_id,
-                    "kind": " ".join(str(row.get("kind", "")).split()).strip(),
-                    "model": " ".join(str(row.get("model", "")).split()).strip(),
-                    "notes": " ".join(str(row.get("notes", "")).split()).strip(),
-                    "command_template": command_template,
-                }
-            )
+    for row in parse_tsv_rows(registry_path):
+        if not row:
+            continue
+        adapter_id = str(row.get("adapter_id", "")).strip()
+        if not adapter_id or adapter_id.startswith("#"):
+            continue
+        command_template = " ".join(str(row.get("command_template", "")).split()).strip()
+        if not command_template:
+            fail(f"External adapter missing command_template: {adapter_id}")
+        adapters.append(
+            {
+                "adapter_id": adapter_id,
+                "name": " ".join(str(row.get("name", adapter_id)).split()).strip() or adapter_id,
+                "kind": " ".join(str(row.get("kind", "")).split()).strip(),
+                "model": " ".join(str(row.get("model", "")).split()).strip(),
+                "notes": " ".join(str(row.get("notes", "")).split()).strip(),
+                "command_template": command_template,
+            }
+        )
     return registry_path, adapters
 
 

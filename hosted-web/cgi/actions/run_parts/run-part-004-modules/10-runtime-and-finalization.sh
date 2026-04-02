@@ -751,10 +751,20 @@ EOF
           reflexive_context_block=$(cat <<'EOF'
 Reflexive knowledge is enabled.
 - explain Artificer with concrete UI labels and file paths
-- mark inferred details explicitly
+          - mark inferred details explicitly
 EOF
 )
         fi
+      fi
+      runtime_capability_guidance_block="NONE"
+      if command -v self_improve_capability_guidance_prompt_block >/dev/null 2>&1; then
+        runtime_capability_guidance_block=$(self_improve_capability_guidance_prompt_block "$run_mode" "$augmented_user_prompt")
+      fi
+      if [ -n "$(trim "$runtime_capability_guidance_block")" ] && [ "$runtime_capability_guidance_block" != "NONE" ]; then
+        runtime_capability_guidance_block=$(compact_text_block "Runtime capability guidance" "$runtime_capability_guidance_block" 180)
+      fi
+      if [ -z "$(trim "$runtime_capability_guidance_block")" ]; then
+        runtime_capability_guidance_block="NONE"
       fi
       command_slot_guidance_file=$(mktemp)
       {
@@ -825,6 +835,9 @@ Runtime learning signals:
 
 Runtime adaptation guardrails:
 - $runtime_guardrails
+
+Runtime capability guidance:
+$runtime_capability_guidance_block
 
 Explicit skill actuator context:
 $explicit_skill_prompt_text
