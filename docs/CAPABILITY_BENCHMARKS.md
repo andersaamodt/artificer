@@ -112,6 +112,19 @@ Archived plugins move into the self-improvement archive under the plugin state d
 
 The settings surface now reports active plugin count plus archived stale-plugin count so the pruning is inspectable instead of silent.
 
+## Archived Plugin Recovery
+
+Pruning is not destructive by default.
+
+Artificer now exposes archived plugins back through the self-improvement settings surface:
+
+- archived plugins are listed separately from the active set
+- each archive entry keeps its prior rationale, benchmark families, archived state, and archive reason
+- restore is conservative and refuses to revive a lineage that is already active
+- restored plugins come back disabled in locked `review` so they can be reconsidered without immediately re-entering automation
+- restored plugins reset stale compare-cycle age against the latest benchmark compare count
+- archive entries can also be removed permanently when they are no longer useful
+
 ## Why This Matters
 
 This is the difference between:

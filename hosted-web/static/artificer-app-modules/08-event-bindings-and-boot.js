@@ -1183,6 +1183,37 @@
         }, { spinner: false }).catch(showError);
         return;
       }
+      var selfImproveArchivedRestoreBtn = event.target && event.target.closest
+        ? event.target.closest("button[data-action='self-improve-archived-plugin-restore'][data-archive-entry-id]")
+        : null;
+      if (selfImproveArchivedRestoreBtn) {
+        var archivedRestoreId = trim(String(selfImproveArchivedRestoreBtn.getAttribute("data-archive-entry-id") || ""));
+        if (!archivedRestoreId) {
+          return;
+        }
+        runWithControlPending(selfImproveArchivedRestoreBtn, function () {
+          return restoreSelfImproveArchivedPlugin(archivedRestoreId).then(function () {
+            showTransientNotice("Archived plugin restored for review");
+          });
+        }, { spinner: false }).catch(showError);
+        return;
+      }
+      var selfImproveArchivedDeleteBtn = event.target && event.target.closest
+        ? event.target.closest("button[data-action='self-improve-archived-plugin-delete'][data-archive-entry-id]")
+        : null;
+      if (selfImproveArchivedDeleteBtn) {
+        var archivedDeleteId = trim(String(selfImproveArchivedDeleteBtn.getAttribute("data-archive-entry-id") || ""));
+        if (!archivedDeleteId) {
+          return;
+        }
+        if (!window.confirm("Remove this archived self-improvement plugin?")) {
+          return;
+        }
+        runWithControlPending(selfImproveArchivedDeleteBtn, function () {
+          return deleteSelfImproveArchivedPlugin(archivedDeleteId);
+        }, { spinner: false }).catch(showError);
+        return;
+      }
       var modeToggleBtn = event.target && event.target.closest
         ? event.target.closest("button[data-action='mode-runtime-toggle'][data-mode-id][data-enabled]")
         : null;

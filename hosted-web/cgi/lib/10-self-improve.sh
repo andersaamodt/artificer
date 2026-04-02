@@ -414,6 +414,62 @@ print(json.dumps(inventory, ensure_ascii=False, separators=(",", ":")))
 PY
 }
 
+self_improve_archived_plugins_json() {
+  python3 - "$self_improve_plugins_dir" <<'PY'
+import json
+import os
+import sys
+
+plugins_dir = sys.argv[1]
+archive_dir = os.path.join(plugins_dir, "archive")
+items = []
+
+if os.path.isdir(archive_dir):
+    for name in sorted(os.listdir(archive_dir)):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(archive_dir, name)
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        archive_entry_id = os.path.splitext(name)[0]
+        item = {
+            "archive_entry_id": archive_entry_id,
+            "id": " ".join(str(payload.get("id", archive_entry_id)).split()).strip() or archive_entry_id,
+            "name": " ".join(str(payload.get("name", payload.get("id", archive_entry_id))).split()).strip() or archive_entry_id,
+            "description": " ".join(str(payload.get("description", "")).split()).strip(),
+            "rationale": " ".join(str(payload.get("rationale", "")).split()).strip(),
+            "instructions": " ".join(str(payload.get("instructions", "")).split()).strip(),
+            "implementation_plan": " ".join(str(payload.get("implementation_plan", "")).split()).strip(),
+            "source_model": " ".join(str(payload.get("source_model", "")).split()).strip(),
+            "source_lane": " ".join(str(payload.get("source_lane", "")).split()).strip(),
+            "risk_level": " ".join(str(payload.get("risk_level", "medium")).split()).strip() or "medium",
+            "lineage_key": " ".join(str(payload.get("lineage_key", "")).split()).strip(),
+            "benchmark_family_targets": payload.get("benchmark_family_targets", []) if isinstance(payload.get("benchmark_family_targets", []), list) else [],
+            "targeted_capability_gaps": payload.get("targeted_capability_gaps", []) if isinstance(payload.get("targeted_capability_gaps", []), list) else [],
+            "archived_at": " ".join(str(payload.get("archived_at", "")).split()).strip(),
+            "archived_via": " ".join(str(payload.get("archived_via", "")).split()).strip(),
+            "archived_reason": " ".join(str(payload.get("archived_reason", "")).split()).strip(),
+            "archived_from_state": " ".join(str(payload.get("archived_from_state", payload.get("adoption_state", ""))).split()).strip().lower(),
+            "archived_after_compare_cycles": int(payload.get("archived_after_compare_cycles", 0) or 0),
+        }
+        items.append(item)
+
+items.sort(
+    key=lambda item: (
+        item.get("archived_at", ""),
+        item.get("name", "").lower(),
+    ),
+    reverse=True,
+)
+print(json.dumps(items, ensure_ascii=False, separators=(",", ":")))
+PY
+}
+
 self_improve_last_run_json() {
   if [ ! -f "$self_improve_last_run_file" ]; then
     printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[],"capability_benchmark":{"latest_recommendation":"","compare_recommendation":"","candidate_promotable":false,"weak_family_ids":[],"recovered_families":[],"new_weak_families":[],"scorecard_count":0,"compare_count":0}}'
@@ -463,13 +519,15 @@ PY
 self_improve_settings_json() {
   selected_model=$(self_improve_selected_model)
   plugins_json=$(self_improve_plugins_json)
+  archived_plugins_json=$(self_improve_archived_plugins_json)
   plugin_inventory_json=$(self_improve_plugin_inventory_json)
   last_run_json=$(self_improve_last_run_json)
   run_options_json=$(self_improve_run_options_json)
-  printf '{"success":true,"selected_model":"%s","run_options":%s,"plugins":%s,"plugin_inventory":%s,"last_run":%s}\n' \
+  printf '{"success":true,"selected_model":"%s","run_options":%s,"plugins":%s,"archived_plugins":%s,"plugin_inventory":%s,"last_run":%s}\n' \
     "$(json_escape "$selected_model")" \
     "$run_options_json" \
     "$plugins_json" \
+    "$archived_plugins_json" \
     "$plugin_inventory_json" \
     "$last_run_json"
 }
@@ -2428,6 +2486,145 @@ self_improve_plugin_delete_json() {
   fi
   rm -f "$target_file"
   printf '{"success":true,"deleted_id":"%s"}\n' "$(json_escape "$plugin_id")"
+}
+
+self_improve_archived_plugin_restore_json() {
+  archive_entry_id=$1
+  python3 - "$self_improve_plugins_dir" "$self_improve_last_run_file" "$archive_entry_id" <<'PY'
+import datetime as dt
+import json
+import os
+import re
+import sys
+
+plugins_dir, last_run_file, archive_entry_id = sys.argv[1:4]
+archive_dir = os.path.join(plugins_dir, "archive")
+archive_path = os.path.join(archive_dir, archive_entry_id + ".json")
+
+if not os.path.isfile(archive_path):
+    print(json.dumps({"success": False, "error": "archived plugin not found"}))
+    sys.exit(0)
+
+try:
+    with open(archive_path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+except Exception:
+    print(json.dumps({"success": False, "error": "archived plugin is unreadable"}))
+    sys.exit(0)
+
+if not isinstance(payload, dict):
+    print(json.dumps({"success": False, "error": "archived plugin is invalid"}))
+    sys.exit(0)
+
+
+def current_timestamp():
+    return dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def normalize_lineage_key(value):
+    text = " ".join(str(value or "").split()).strip().lower()
+    if not text:
+        return ""
+    text = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", text)
+    text = re.sub(r"[^a-z0-9-]+", "-", text).strip("-")
+    return text
+
+
+def lineage_key_for_payload(item):
+    if not isinstance(item, dict):
+        return ""
+    for value in [item.get("lineage_key", ""), item.get("name", ""), item.get("id", "")]:
+        key = normalize_lineage_key(value)
+        if key:
+            return key
+    return ""
+
+
+lineage_key = lineage_key_for_payload(payload)
+if not lineage_key:
+    lineage_key = normalize_lineage_key(archive_entry_id) or archive_entry_id
+
+for name in sorted(os.listdir(plugins_dir)) if os.path.isdir(plugins_dir) else []:
+    if not name.endswith(".json"):
+        continue
+    path = os.path.join(plugins_dir, name)
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            active_payload = json.load(handle)
+    except Exception:
+        continue
+    if lineage_key_for_payload(active_payload) == lineage_key:
+        print(json.dumps({"success": False, "error": "an active plugin with this lineage already exists"}))
+        sys.exit(0)
+
+current_compare_count = 0
+if os.path.isfile(last_run_file):
+    try:
+        with open(last_run_file, "r", encoding="utf-8") as handle:
+            last_run_payload = json.load(handle)
+    except Exception:
+        last_run_payload = {}
+    if isinstance(last_run_payload, dict):
+        benchmark_payload = last_run_payload.get("capability_benchmark", {})
+        if isinstance(benchmark_payload, dict):
+            current_compare_count = int(benchmark_payload.get("compare_count", 0) or 0)
+
+generated_at = current_timestamp()
+restored = dict(payload)
+base_id = lineage_key or normalize_lineage_key(restored.get("id", "")) or archive_entry_id
+final_id = f"{generated_at[:10]}-{base_id}-restored"
+suffix = 2
+while os.path.exists(os.path.join(plugins_dir, final_id + ".json")):
+    final_id = f"{generated_at[:10]}-{base_id}-restored-{suffix}"
+    suffix += 1
+
+for key in [
+    "archived",
+    "archived_at",
+    "archived_via",
+    "archived_from_state",
+    "archived_after_compare_cycles",
+    "archived_reason",
+]:
+    restored.pop(key, None)
+
+restored["id"] = final_id
+restored["lineage_key"] = lineage_key
+restored["generated_at"] = generated_at
+restored["enabled"] = False
+restored["stale_compare_cycles"] = 0
+restored["last_benchmark_compare_count"] = current_compare_count
+restored["operator_policy"] = "force-review"
+restored["operator_lock"] = True
+restored["operator_updated_at"] = generated_at
+restored["adoption_state"] = "review"
+restored["adoption_reason"] = "Restored from archive for manual re-evaluation."
+restored["restored_from_archive_entry_id"] = archive_entry_id
+restored["restored_at"] = generated_at
+
+automatic_state = " ".join(str(restored.get("automatic_adoption_state", "")).split()).strip().lower()
+if automatic_state not in {"adopted", "trial", "review", "rejected"}:
+    automatic_state = " ".join(str(payload.get("archived_from_state", "")).split()).strip().lower() or "review"
+restored["automatic_adoption_state"] = automatic_state
+restored["automatic_adoption_reason"] = " ".join(str(restored.get("automatic_adoption_reason", "")).split()).strip() or "Previously archived benchmark state preserved for reference."
+
+with open(os.path.join(plugins_dir, final_id + ".json"), "w", encoding="utf-8") as handle:
+    json.dump(restored, handle, ensure_ascii=False, indent=2)
+os.remove(archive_path)
+
+print(json.dumps({"success": True, "plugin": restored}, ensure_ascii=False, separators=(",", ":")))
+PY
+}
+
+self_improve_archived_plugin_delete_json() {
+  archive_entry_id=$1
+  archive_file="$self_improve_plugins_dir/archive/$archive_entry_id.json"
+  if [ ! -f "$archive_file" ]; then
+    printf '{"success":false,"error":"archived plugin not found"}\n'
+    return 0
+  fi
+  rm -f "$archive_file"
+  printf '{"success":true,"deleted_archive_entry_id":"%s"}\n' "$(json_escape "$archive_entry_id")"
 }
 
 active_self_improve_plugin_guidance() {

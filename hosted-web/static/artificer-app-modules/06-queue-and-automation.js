@@ -1311,13 +1311,54 @@
     };
   }
 
+  function normalizeSelfImproveArchivedPlugins(value) {
+    var list = Array.isArray(value) ? value : [];
+    var clean = [];
+    for (var i = 0; i < list.length; i += 1) {
+      var item = list[i] || {};
+      var archiveEntryId = trim(String(item.archive_entry_id || ""));
+      if (!archiveEntryId) {
+        continue;
+      }
+      clean.push({
+        archive_entry_id: archiveEntryId,
+        id: trim(String(item.id || archiveEntryId)),
+        name: trim(String(item.name || item.id || archiveEntryId)),
+        description: trim(String(item.description || "")),
+        rationale: trim(String(item.rationale || "")),
+        instructions: trim(String(item.instructions || "")),
+        implementation_plan: trim(String(item.implementation_plan || "")),
+        source_model: trim(String(item.source_model || "")),
+        source_lane: trim(String(item.source_lane || "")),
+        risk_level: trim(String(item.risk_level || "medium")),
+        lineage_key: trim(String(item.lineage_key || "")),
+        benchmark_family_targets: Array.isArray(item.benchmark_family_targets) ? item.benchmark_family_targets : [],
+        targeted_capability_gaps: Array.isArray(item.targeted_capability_gaps) ? item.targeted_capability_gaps : [],
+        archived_at: trim(String(item.archived_at || "")),
+        archived_via: trim(String(item.archived_via || "")),
+        archived_reason: trim(String(item.archived_reason || "")),
+        archived_from_state: trim(String(item.archived_from_state || "")),
+        archived_after_compare_cycles: Number(item.archived_after_compare_cycles || 0)
+      });
+    }
+    clean.sort(function (a, b) {
+      if (a.archived_at && b.archived_at && a.archived_at !== b.archived_at) {
+        return String(b.archived_at).localeCompare(String(a.archived_at));
+      }
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
+    return clean;
+  }
+
   function renderSelfImproveSettings() {
     if (!el.selfImproveModelSelect || !el.selfImprovePluginsList || !el.selfImproveStatus || !el.selfImproveSummary) {
       return;
     }
     var runOptions = normalizeSelfImproveRunOptions(state.selfImproveRunOptions);
+    var archivedPlugins = normalizeSelfImproveArchivedPlugins(state.selfImproveArchivedPlugins);
     var pluginInventory = normalizeSelfImprovePluginInventory(state.selfImprovePluginInventory);
     state.selfImproveRunOptions = runOptions;
+    state.selfImproveArchivedPlugins = archivedPlugins;
     state.selfImprovePluginInventory = pluginInventory;
 
     var optionsHtml = "";
@@ -1484,9 +1525,12 @@
 
     var html = "";
     var plugins = normalizeSelfImprovePlugins(state.selfImprovePlugins);
-    if (!plugins.length) {
+    if (!plugins.length && !archivedPlugins.length) {
       html = "<p class='empty-state'>No self-improvement plugins generated yet.</p>";
     } else {
+      if (!plugins.length) {
+        html += "<p class='empty-state'>No active self-improvement plugins. Archived plugins remain available below.</p>";
+      }
       for (var j = 0; j < plugins.length; j += 1) {
         var plugin = plugins[j];
         html += "<article class='mode-runtime-skill' data-plugin-id='" + escAttr(plugin.id) + "'>";
@@ -1587,6 +1631,63 @@
         html += "</div>";
         html += "</article>";
       }
+      if (archivedPlugins.length) {
+        html += "<details class='mode-runtime-skill'><summary><strong>Archived plugins</strong> (" + escHtml(String(archivedPlugins.length)) + ")</summary>";
+        for (var ai = 0; ai < archivedPlugins.length; ai += 1) {
+          var archived = archivedPlugins[ai];
+          html += "<article class='mode-runtime-skill' data-archive-entry-id='" + escAttr(archived.archive_entry_id) + "' style='margin-top:0.7rem;'>";
+          html += "<div class='mode-runtime-mode-head'><strong>" + escHtml(archived.name) + "</strong></div>";
+          if (archived.description) {
+            html += "<p class='settings-hint'>" + escHtml(archived.description) + "</p>";
+          }
+          if (archived.instructions) {
+            html += "<p class='settings-hint'><strong>Enabled behavior:</strong> " + escHtml(archived.instructions) + "</p>";
+          }
+          if (archived.implementation_plan) {
+            html += "<p class='settings-hint'><strong>Plan:</strong> " + escHtml(archived.implementation_plan) + "</p>";
+          }
+          if (archived.rationale) {
+            html += "<p class='settings-hint'><strong>Why:</strong> " + escHtml(archived.rationale) + "</p>";
+          }
+          if (archived.benchmark_family_targets && archived.benchmark_family_targets.length) {
+            html += "<p class='settings-hint'><strong>Benchmark families:</strong> " + escHtml(archived.benchmark_family_targets.join(" | ")) + "</p>";
+          }
+          if (archived.targeted_capability_gaps && archived.targeted_capability_gaps.length) {
+            html += "<p class='settings-hint'><strong>Active benchmark gaps:</strong> " + escHtml(archived.targeted_capability_gaps.join(" | ")) + "</p>";
+          }
+          if (archived.archived_reason) {
+            html += "<p class='settings-hint'><strong>Archive rationale:</strong> " + escHtml(archived.archived_reason) + "</p>";
+          }
+          var archivedBits = [];
+          if (archived.archived_from_state) {
+            archivedBits.push("from " + archived.archived_from_state);
+          }
+          if (archived.archived_after_compare_cycles > 0) {
+            archivedBits.push("after " + String(archived.archived_after_compare_cycles) + " compare cycles");
+          }
+          if (archived.archived_at) {
+            archivedBits.push("archived " + archived.archived_at);
+          }
+          if (archived.source_model) {
+            archivedBits.push("model " + archived.source_model);
+          }
+          if (archived.source_lane) {
+            archivedBits.push("lane " + archived.source_lane);
+          }
+          if (archived.risk_level) {
+            archivedBits.push("risk " + archived.risk_level);
+          }
+          if (archivedBits.length) {
+            html += "<p class='settings-hint'>" + escHtml(archivedBits.join(" | ")) + "</p>";
+          }
+          html += "<div class='mode-runtime-actions'>";
+          html += "<button type='button' class='ghost' data-action='self-improve-archived-plugin-restore' data-archive-entry-id='" + escAttr(archived.archive_entry_id) + "'>Restore</button>";
+          html += "<button type='button' class='ghost' data-action='self-improve-archived-plugin-delete' data-archive-entry-id='" + escAttr(archived.archive_entry_id) + "'>Remove archive</button>";
+          html += "</div>";
+          html += "</article>";
+        }
+        html += "</details>";
+      }
     }
     el.selfImprovePluginsList.innerHTML = html;
   }
@@ -1599,6 +1700,7 @@
       state.selfImproveModel = trim(String(response.selected_model || ""));
       state.selfImproveRunOptions = normalizeSelfImproveRunOptions(response.run_options);
       state.selfImprovePlugins = normalizeSelfImprovePlugins(response.plugins);
+      state.selfImproveArchivedPlugins = normalizeSelfImproveArchivedPlugins(response.archived_plugins);
       state.selfImprovePluginInventory = normalizeSelfImprovePluginInventory(response.plugin_inventory);
       state.selfImproveLastRun = normalizeSelfImproveLastRun(response.last_run);
       state.selfImproveError = "";
@@ -1635,6 +1737,7 @@
         state.selfImproveModel = trim(String(response.selected_model || state.selfImproveModel || ""));
         state.selfImproveRunOptions = normalizeSelfImproveRunOptions(response.run_options || state.selfImproveRunOptions);
         state.selfImprovePlugins = normalizeSelfImprovePlugins(response.plugins);
+        state.selfImproveArchivedPlugins = normalizeSelfImproveArchivedPlugins(response.archived_plugins || state.selfImproveArchivedPlugins);
         state.selfImprovePluginInventory = normalizeSelfImprovePluginInventory(response.plugin_inventory || state.selfImprovePluginInventory);
         state.selfImproveLastRun = normalizeSelfImproveLastRun(response.last_run);
         showTransientNotice(state.selfImproveRunOptions.competition_enabled ? "Self-improvement match complete" : "Self-improvement plugins generated");
@@ -1721,6 +1824,28 @@
     }, { timeoutMs: 12000 }).then(function (response) {
       if (!response || !response.success) {
         throw new Error((response && response.error) || "Failed to delete plugin");
+      }
+      return loadSelfImproveSettings();
+    });
+  }
+
+  function restoreSelfImproveArchivedPlugin(archiveEntryId) {
+    return apiPost("self_improve_archived_plugin_restore", {
+      archive_entry_id: trim(String(archiveEntryId || ""))
+    }, { timeoutMs: 12000 }).then(function (response) {
+      if (!response || !response.success) {
+        throw new Error((response && response.error) || "Failed to restore archived plugin");
+      }
+      return loadSelfImproveSettings();
+    });
+  }
+
+  function deleteSelfImproveArchivedPlugin(archiveEntryId) {
+    return apiPost("self_improve_archived_plugin_delete", {
+      archive_entry_id: trim(String(archiveEntryId || ""))
+    }, { timeoutMs: 12000 }).then(function (response) {
+      if (!response || !response.success) {
+        throw new Error((response && response.error) || "Failed to remove archived plugin");
       }
       return loadSelfImproveSettings();
     });
