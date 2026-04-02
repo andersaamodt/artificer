@@ -65,6 +65,16 @@ if ! grep -q "<strong>Weak compare hits:</strong>" "$render_file"; then
   exit 1
 fi
 
+if ! grep -q "<strong>Operator policy:</strong>" "$render_file"; then
+  printf '%s\n' "self-improvement plugin cards are missing operator-policy rendering" >&2
+  exit 1
+fi
+
+if ! grep -q "<strong>Automatic benchmark state:</strong>" "$render_file"; then
+  printf '%s\n' "self-improvement plugin cards are missing automatic benchmark-state rendering" >&2
+  exit 1
+fi
+
 if ! grep -q "<strong>Benchmark history:</strong>" "$render_file"; then
   printf '%s\n' "self-improvement plugin cards are missing benchmark history rendering" >&2
   exit 1
@@ -77,6 +87,16 @@ fi
 
 if ! grep -q 'metadataBits.push("streak " + String(plugin.benchmark_success_streak));' "$render_file"; then
   printf '%s\n' "self-improvement plugin cards are missing benchmark streak metadata" >&2
+  exit 1
+fi
+
+if ! grep -q "data-action='self-improve-plugin-policy'" "$render_file"; then
+  printf '%s\n' "self-improvement plugin cards are missing manual policy control" >&2
+  exit 1
+fi
+
+if ! grep -q "data-action='self-improve-plugin-lock'" "$render_file"; then
+  printf '%s\n' "self-improvement plugin cards are missing lock control" >&2
   exit 1
 fi
 
@@ -97,6 +117,11 @@ fi
 
 if ! grep -q "<strong>Adoption rationale:</strong>" "$render_file"; then
   printf '%s\n' "self-improvement plugin cards are missing adoption rationale copy" >&2
+  exit 1
+fi
+
+if ! grep -q "<strong>Automatic benchmark rationale:</strong>" "$render_file"; then
+  printf '%s\n' "self-improvement plugin cards are missing automatic benchmark rationale copy" >&2
   exit 1
 fi
 

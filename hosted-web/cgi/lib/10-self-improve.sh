@@ -267,6 +267,13 @@ import sys
 plugins_dir = sys.argv[1]
 adoption_rank = {"adopted": 0, "trial": 1, "review": 2, "rejected": 3}
 promotion_rank = {"priority": 0, "candidate": 1, "hold": 2}
+operator_policy_set = {
+    "auto",
+    "force-adopted",
+    "force-trial",
+    "force-review",
+    "force-rejected",
+}
 
 
 def safe_number(value):
@@ -288,6 +295,23 @@ def normalize_adoption_state(payload):
     if payload.get("benchmark_family_targets"):
         return "review"
     return "rejected"
+
+
+def normalize_operator_policy(value):
+    policy = str(value or "").strip().lower()
+    if policy in operator_policy_set:
+        return policy
+    return "auto"
+
+
+def operator_policy_target(policy):
+    mapping = {
+        "force-adopted": "adopted",
+        "force-trial": "trial",
+        "force-review": "review",
+        "force-rejected": "rejected",
+    }
+    return mapping.get(normalize_operator_policy(policy), "")
 
 
 items = []
@@ -323,12 +347,17 @@ if os.path.isdir(plugins_dir):
         payload.setdefault("benchmark_recovered_family_hits", [])
         payload.setdefault("benchmark_improved_family_hits", [])
         payload.setdefault("benchmark_new_weak_family_hits", [])
+        payload.setdefault("automatic_adoption_state", "")
+        payload.setdefault("automatic_adoption_reason", "")
         payload["benchmark_compare_count"] = int(payload.get("benchmark_compare_count", 0) or 0)
         payload["benchmark_promotable_hit_count"] = int(payload.get("benchmark_promotable_hit_count", 0) or 0)
         payload["benchmark_hold_count"] = int(payload.get("benchmark_hold_count", 0) or 0)
         payload["benchmark_success_streak"] = int(payload.get("benchmark_success_streak", 0) or 0)
         payload["benchmark_hold_streak"] = int(payload.get("benchmark_hold_streak", 0) or 0)
         payload.setdefault("lineage_key", "")
+        payload["operator_policy"] = normalize_operator_policy(payload.get("operator_policy", "auto"))
+        payload["operator_lock"] = bool(payload.get("operator_lock", False)) and payload["operator_policy"] != "auto"
+        payload.setdefault("operator_updated_at", "")
         payload["adoption_state"] = normalize_adoption_state(payload)
         payload.setdefault("adoption_reason", "")
         items.append(payload)
@@ -1889,6 +1918,13 @@ if not isinstance(benchmark_runtime, dict):
 latest_compare = benchmark_runtime.get("latest_compare", {})
 if not isinstance(latest_compare, dict):
     latest_compare = {}
+operator_policy_set = {
+    "auto",
+    "force-adopted",
+    "force-trial",
+    "force-review",
+    "force-rejected",
+}
 weak_family_ids = capability_benchmark_focus.get("weak_family_ids", [])
 if not isinstance(weak_family_ids, list):
     weak_family_ids = []
@@ -1913,6 +1949,23 @@ def clean_family_ids(values):
     return clean
 
 
+def normalize_operator_policy(value):
+    policy = str(value or "").strip().lower()
+    if policy in operator_policy_set:
+        return policy
+    return "auto"
+
+
+def operator_policy_target(policy):
+    mapping = {
+        "force-adopted": "adopted",
+        "force-trial": "trial",
+        "force-review": "review",
+        "force-rejected": "rejected",
+    }
+    return mapping.get(normalize_operator_policy(policy), "")
+
+
 def normalize_lineage_key(value):
     text = " ".join(str(value or "").split()).strip().lower()
     if not text:
@@ -1930,6 +1983,10 @@ def lineage_key_for_payload(payload):
         if line:
             return line
     return ""
+
+
+def current_timestamp():
+    return dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 
 def prior_lineage_records(plugins_dir, lineage_key):
@@ -1957,7 +2014,7 @@ recovered_families = clean_family_ids(latest_compare.get("recovered_families", [
 improved_families = clean_family_ids(latest_compare.get("improved_families", []))
 new_weak_families = clean_family_ids(latest_compare.get("new_weak_families", []))
 
-generated_at = dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+generated_at = current_timestamp()
 saved_ids = []
 for index, plugin in enumerate(plugins, 1):
     if not isinstance(plugin, dict):
@@ -2092,9 +2149,20 @@ for index, plugin in enumerate(plugins, 1):
         else:
             adoption_state = "rejected"
             adoption_reason = "No measurable benchmark family mapping."
-    payload["adoption_state"] = adoption_state
-    payload["adoption_reason"] = adoption_reason
-    payload["enabled"] = adoption_state in {"adopted", "trial"}
+    payload["automatic_adoption_state"] = adoption_state
+    payload["automatic_adoption_reason"] = adoption_reason
+    payload["operator_policy"] = normalize_operator_policy(prior_payload.get("operator_policy", "auto") if isinstance(prior_payload, dict) and bool(prior_payload.get("operator_lock", False)) else "auto")
+    payload["operator_lock"] = bool(prior_payload.get("operator_lock", False)) and payload["operator_policy"] != "auto"
+    payload["operator_updated_at"] = " ".join(str(prior_payload.get("operator_updated_at", "")).split()).strip() if payload["operator_lock"] else ""
+    operator_target = operator_policy_target(payload["operator_policy"])
+    if operator_target:
+        payload["adoption_state"] = operator_target
+        payload["adoption_reason"] = f"Operator override forced {operator_target} state while benchmark automation remains available for reference."
+        payload["enabled"] = operator_target in {"adopted", "trial"}
+    else:
+        payload["adoption_state"] = adoption_state
+        payload["adoption_reason"] = adoption_reason
+        payload["enabled"] = adoption_state in {"adopted", "trial"}
     payload["capability_benchmark"] = {
         "latest_recommendation": " ".join(str(benchmark_runtime.get("latest_scorecard", {}).get("recommendation", "")).split()).strip() if isinstance(benchmark_runtime.get("latest_scorecard", {}), dict) else "",
         "compare_recommendation": compare_recommendation,
@@ -2145,15 +2213,43 @@ print(json.dumps(last_run, ensure_ascii=False, separators=(",", ":")))
 PY
 }
 
-self_improve_plugin_set_enabled_json() {
+self_improve_plugin_set_json() {
   plugin_id=$1
   enabled_value=$2
-  python3 - "$self_improve_plugins_dir" "$plugin_id" "$enabled_value" <<'PY'
+  operator_policy_value=${3-}
+  operator_lock_value=${4-}
+  python3 - "$self_improve_plugins_dir" "$plugin_id" "$enabled_value" "$operator_policy_value" "$operator_lock_value" <<'PY'
 import json
 import os
 import sys
 
-plugins_dir, plugin_id, enabled_value = sys.argv[1:4]
+plugins_dir, plugin_id, enabled_value, operator_policy_value, operator_lock_value = sys.argv[1:6]
+operator_policy_set = {
+    "auto",
+    "force-adopted",
+    "force-trial",
+    "force-review",
+    "force-rejected",
+}
+
+
+def normalize_operator_policy(value):
+    policy = str(value or "").strip().lower()
+    if policy in operator_policy_set:
+        return policy
+    return "auto"
+
+
+def operator_policy_target(policy):
+    mapping = {
+        "force-adopted": "adopted",
+        "force-trial": "trial",
+        "force-review": "review",
+        "force-rejected": "rejected",
+    }
+    return mapping.get(normalize_operator_policy(policy), "")
+
+
 path = os.path.join(plugins_dir, plugin_id + ".json")
 if not os.path.isfile(path):
     print(json.dumps({"success": False, "error": "plugin not found"}))
@@ -2161,6 +2257,21 @@ if not os.path.isfile(path):
 with open(path, "r", encoding="utf-8") as handle:
     payload = json.load(handle)
 payload["enabled"] = str(enabled_value).strip() in {"1", "true", "True", "TRUE", "yes", "on"}
+operator_policy = normalize_operator_policy(operator_policy_value)
+operator_lock = str(operator_lock_value).strip() in {"1", "true", "True", "TRUE", "yes", "on"}
+if operator_policy == "auto":
+    operator_lock = False
+payload["operator_policy"] = operator_policy
+payload["operator_lock"] = operator_lock
+payload["operator_updated_at"] = current_timestamp = __import__("datetime").datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+operator_target = operator_policy_target(operator_policy)
+if operator_target:
+    payload["adoption_state"] = operator_target
+    payload["adoption_reason"] = f"Operator override forced {operator_target} state while benchmark automation remains available for reference."
+    payload["enabled"] = operator_target in {"adopted", "trial"}
+elif payload.get("automatic_adoption_state"):
+    payload["adoption_state"] = str(payload.get("automatic_adoption_state", "")).strip().lower() or str(payload.get("adoption_state", "")).strip().lower()
+    payload["adoption_reason"] = " ".join(str(payload.get("automatic_adoption_reason", payload.get("adoption_reason", ""))).split()).strip()
 with open(path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, ensure_ascii=False, indent=2)
 print(json.dumps({"success": True, "plugin": payload}, ensure_ascii=False, separators=(",", ":")))

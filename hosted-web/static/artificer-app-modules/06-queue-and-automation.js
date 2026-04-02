@@ -1189,6 +1189,7 @@
       var targetedCapabilityGaps = Array.isArray(item.targeted_capability_gaps) ? item.targeted_capability_gaps : [];
       var promotionState = trim(String(item.promotion_state || "candidate")).toLowerCase();
       var adoptionState = trim(String(item.adoption_state || "")).toLowerCase();
+      var operatorPolicy = trim(String(item.operator_policy || "auto")).toLowerCase();
       if (!pluginId) {
         continue;
       }
@@ -1207,6 +1208,9 @@
         } else {
           adoptionState = "rejected";
         }
+      }
+      if (operatorPolicy !== "force-adopted" && operatorPolicy !== "force-trial" && operatorPolicy !== "force-review" && operatorPolicy !== "force-rejected") {
+        operatorPolicy = "auto";
       }
       clean.push({
         id: pluginId,
@@ -1236,11 +1240,16 @@
         benchmark_recovered_family_hits: Array.isArray(item.benchmark_recovered_family_hits) ? item.benchmark_recovered_family_hits : [],
         benchmark_improved_family_hits: Array.isArray(item.benchmark_improved_family_hits) ? item.benchmark_improved_family_hits : [],
         benchmark_new_weak_family_hits: Array.isArray(item.benchmark_new_weak_family_hits) ? item.benchmark_new_weak_family_hits : [],
+        automatic_adoption_state: trim(String(item.automatic_adoption_state || "")),
+        automatic_adoption_reason: trim(String(item.automatic_adoption_reason || "")),
         benchmark_compare_count: Number(item.benchmark_compare_count || 0),
         benchmark_promotable_hit_count: Number(item.benchmark_promotable_hit_count || 0),
         benchmark_hold_count: Number(item.benchmark_hold_count || 0),
         benchmark_success_streak: Number(item.benchmark_success_streak || 0),
         benchmark_hold_streak: Number(item.benchmark_hold_streak || 0),
+        operator_policy: operatorPolicy,
+        operator_lock: !!item.operator_lock && operatorPolicy !== "auto",
+        operator_updated_at: trim(String(item.operator_updated_at || "")),
         adoption_state: adoptionState,
         adoption_reason: trim(String(item.adoption_reason || ""))
       });
@@ -1486,6 +1495,12 @@
         if (plugin.benchmark_new_weak_family_hits && plugin.benchmark_new_weak_family_hits.length) {
           html += "<p class='settings-hint'><strong>Weak compare hits:</strong> " + escHtml(plugin.benchmark_new_weak_family_hits.join(" | ")) + "</p>";
         }
+        if (plugin.operator_policy && plugin.operator_policy !== "auto") {
+          html += "<p class='settings-hint'><strong>Operator policy:</strong> " + escHtml(plugin.operator_policy + (plugin.operator_lock ? " (locked)" : " (temporary)")) + "</p>";
+        }
+        if (plugin.automatic_adoption_state) {
+          html += "<p class='settings-hint'><strong>Automatic benchmark state:</strong> " + escHtml(plugin.automatic_adoption_state) + "</p>";
+        }
         if (plugin.benchmark_compare_count > 0 || plugin.benchmark_promotable_hit_count > 0 || plugin.benchmark_hold_count > 0) {
           html += "<p class='settings-hint'><strong>Benchmark history:</strong> compares " + escHtml(String(plugin.benchmark_compare_count)) + " | promotable hits " + escHtml(String(plugin.benchmark_promotable_hit_count)) + " | holds " + escHtml(String(plugin.benchmark_hold_count)) + " | success streak " + escHtml(String(plugin.benchmark_success_streak)) + " | hold streak " + escHtml(String(plugin.benchmark_hold_streak)) + "</p>";
         }
@@ -1520,16 +1535,24 @@
         if (plugin.benchmark_success_streak > 0) {
           metadataBits.push("streak " + String(plugin.benchmark_success_streak));
         }
+        if (plugin.operator_policy && plugin.operator_policy !== "auto") {
+          metadataBits.push("manual " + plugin.operator_policy);
+        }
         if (metadataBits.length) {
           html += "<p class='settings-hint'>" + escHtml(metadataBits.join(" | ")) + "</p>";
         }
         if (plugin.promotion_reason) {
           html += "<p class='settings-hint'><strong>Benchmark rationale:</strong> " + escHtml(plugin.promotion_reason) + "</p>";
         }
+        if (plugin.automatic_adoption_reason && plugin.operator_policy && plugin.operator_policy !== "auto") {
+          html += "<p class='settings-hint'><strong>Automatic benchmark rationale:</strong> " + escHtml(plugin.automatic_adoption_reason) + "</p>";
+        }
         if (plugin.adoption_reason) {
           html += "<p class='settings-hint'><strong>Adoption rationale:</strong> " + escHtml(plugin.adoption_reason) + "</p>";
         }
         html += "<div class='mode-runtime-actions'>";
+        html += "<label class='settings-hint' style='display:flex;align-items:center;gap:0.45rem;margin:0;'><span>Policy</span><select data-action='self-improve-plugin-policy' data-plugin-id='" + escAttr(plugin.id) + "' style='width:auto;max-width:14rem;'><option value='auto'" + (plugin.operator_policy === "auto" ? " selected" : "") + ">Automatic</option><option value='force-adopted'" + (plugin.operator_policy === "force-adopted" ? " selected" : "") + ">Force adopted</option><option value='force-trial'" + (plugin.operator_policy === "force-trial" ? " selected" : "") + ">Force trial</option><option value='force-review'" + (plugin.operator_policy === "force-review" ? " selected" : "") + ">Force review</option><option value='force-rejected'" + (plugin.operator_policy === "force-rejected" ? " selected" : "") + ">Force rejected</option></select></label>";
+        html += "<label class='toggle-row' style='margin:0;'><input type='checkbox' data-action='self-improve-plugin-lock' data-plugin-id='" + escAttr(plugin.id) + "' " + (plugin.operator_lock ? "checked " : "") + (plugin.operator_policy === "auto" ? "disabled " : "") + "/> Lock override</label>";
         html += "<label class='toggle-row' style='margin:0;'><input type='checkbox' data-action='self-improve-plugin-toggle' data-plugin-id='" + escAttr(plugin.id) + "' " + (plugin.enabled ? "checked" : "") + " /> Enabled</label>";
         html += "<button type='button' class='ghost' data-action='self-improve-plugin-delete' data-plugin-id='" + escAttr(plugin.id) + "'>Delete</button>";
         html += "</div>";
@@ -1611,12 +1634,51 @@
   }
 
   function saveSelfImprovePluginEnabled(pluginId, enabled) {
+    var plugins = normalizeSelfImprovePlugins(state.selfImprovePlugins);
+    var plugin = null;
+    for (var i = 0; i < plugins.length; i += 1) {
+      if (plugins[i] && plugins[i].id === pluginId) {
+        plugin = plugins[i];
+        break;
+      }
+    }
     return apiPost("self_improve_plugin_set", {
       plugin_id: trim(String(pluginId || "")),
-      enabled: enabled ? "1" : "0"
+      enabled: enabled ? "1" : "0",
+      operator_policy: trim(String(plugin && plugin.operator_policy ? plugin.operator_policy : "auto")),
+      operator_lock: plugin && plugin.operator_lock ? "1" : "0"
     }, { timeoutMs: 12000 }).then(function (response) {
       if (!response || !response.success) {
         throw new Error((response && response.error) || "Failed to update plugin");
+      }
+      return loadSelfImproveSettings();
+    });
+  }
+
+  function saveSelfImprovePluginOverride(pluginId, operatorPolicy, operatorLock) {
+    var plugins = normalizeSelfImprovePlugins(state.selfImprovePlugins);
+    var plugin = null;
+    for (var i = 0; i < plugins.length; i += 1) {
+      if (plugins[i] && plugins[i].id === pluginId) {
+        plugin = plugins[i];
+        break;
+      }
+    }
+    var normalizedPolicy = trim(String(operatorPolicy || "auto")).toLowerCase();
+    if (!normalizedPolicy) {
+      normalizedPolicy = "auto";
+    }
+    if (normalizedPolicy === "auto") {
+      operatorLock = false;
+    }
+    return apiPost("self_improve_plugin_set", {
+      plugin_id: trim(String(pluginId || "")),
+      enabled: plugin && plugin.enabled ? "1" : "0",
+      operator_policy: normalizedPolicy,
+      operator_lock: operatorLock ? "1" : "0"
+    }, { timeoutMs: 12000 }).then(function (response) {
+      if (!response || !response.success) {
+        throw new Error((response && response.error) || "Failed to update plugin override");
       }
       return loadSelfImproveSettings();
     });

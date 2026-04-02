@@ -83,6 +83,20 @@ Artificer now stores an explicit adoption state for each plugin and keeps one cu
 
 This keeps the self-improvement loop aligned with the standard above: measured transfer beats plausibility, and repeated evidence beats one lucky run.
 
+## Operator Override And Lock
+
+Artificer now exposes a separate operator policy layer for self-improvement plugins:
+
+- `Automatic`: follow the benchmark-derived state
+- `Force adopted`
+- `Force trial`
+- `Force review`
+- `Force rejected`
+
+If the operator also enables `Lock override`, that manual policy survives future lineage replacement when new benchmark runs refresh the plugin.
+
+The automatic benchmark judgment is still stored and shown alongside the effective forced state, so manual intervention does not erase the evidence that automation would have used on its own.
+
 ## Why This Matters
 
 This is the difference between:

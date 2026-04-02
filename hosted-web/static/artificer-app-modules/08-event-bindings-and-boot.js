@@ -1342,14 +1342,58 @@
       var selfImproveToggle = event.target && event.target.closest
         ? event.target.closest("input[type='checkbox'][data-action='self-improve-plugin-toggle'][data-plugin-id]")
         : null;
-      if (!selfImproveToggle) {
+      if (selfImproveToggle) {
+        var pluginToggleId = trim(String(selfImproveToggle.getAttribute("data-plugin-id") || ""));
+        if (!pluginToggleId) {
+          return;
+        }
+        saveSelfImprovePluginEnabled(pluginToggleId, !!selfImproveToggle.checked).catch(showError);
         return;
       }
-      var pluginToggleId = trim(String(selfImproveToggle.getAttribute("data-plugin-id") || ""));
-      if (!pluginToggleId) {
+      var selfImprovePolicySelect = event.target && event.target.closest
+        ? event.target.closest("select[data-action='self-improve-plugin-policy'][data-plugin-id]")
+        : null;
+      if (selfImprovePolicySelect) {
+        var pluginPolicyId = trim(String(selfImprovePolicySelect.getAttribute("data-plugin-id") || ""));
+        var pluginPolicyValue = trim(String(selfImprovePolicySelect.value || "auto")).toLowerCase();
+        if (!pluginPolicyId) {
+          return;
+        }
+        if (pluginPolicyValue === "auto") {
+          var lockBoxForPolicy = el.settingsModal.querySelector("input[type='checkbox'][data-action='self-improve-plugin-lock'][data-plugin-id='" + pluginPolicyId + "']");
+          if (lockBoxForPolicy) {
+            lockBoxForPolicy.checked = false;
+            lockBoxForPolicy.disabled = true;
+          }
+          saveSelfImprovePluginOverride(pluginPolicyId, pluginPolicyValue, false).catch(showError);
+        } else {
+          var currentLockBox = el.settingsModal.querySelector("input[type='checkbox'][data-action='self-improve-plugin-lock'][data-plugin-id='" + pluginPolicyId + "']");
+          var useLock = !!(currentLockBox && currentLockBox.checked);
+          if (currentLockBox) {
+            currentLockBox.disabled = false;
+          }
+          saveSelfImprovePluginOverride(pluginPolicyId, pluginPolicyValue, useLock).catch(showError);
+        }
         return;
       }
-      saveSelfImprovePluginEnabled(pluginToggleId, !!selfImproveToggle.checked).catch(showError);
+      var selfImproveLockToggle = event.target && event.target.closest
+        ? event.target.closest("input[type='checkbox'][data-action='self-improve-plugin-lock'][data-plugin-id]")
+        : null;
+      if (!selfImproveLockToggle) {
+        return;
+      }
+      var pluginLockId = trim(String(selfImproveLockToggle.getAttribute("data-plugin-id") || ""));
+      if (!pluginLockId) {
+        return;
+      }
+      var linkedPolicySelect = el.settingsModal.querySelector("select[data-action='self-improve-plugin-policy'][data-plugin-id='" + pluginLockId + "']");
+      var linkedPolicyValue = trim(String(linkedPolicySelect && linkedPolicySelect.value ? linkedPolicySelect.value : "auto")).toLowerCase();
+      if (linkedPolicyValue === "auto") {
+        selfImproveLockToggle.checked = false;
+        selfImproveLockToggle.disabled = true;
+        return;
+      }
+      saveSelfImprovePluginOverride(pluginLockId, linkedPolicyValue, !!selfImproveLockToggle.checked).catch(showError);
     });
 
     if (el.multi_agentModal) {
