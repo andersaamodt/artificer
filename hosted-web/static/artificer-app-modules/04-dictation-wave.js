@@ -2198,8 +2198,8 @@
       automationViewHtml += "<div class='automations-main-head'>";
       automationViewHtml += "<h3>Automations</h3>";
       automationViewHtml += "<div class='automations-main-actions'>";
-      automationViewHtml += "<button type='button' data-action='open-threads'>Threads</button>";
-      automationViewHtml += "<button type='button' data-action='automation-new'" + (state.workspaces.length ? "" : " disabled") + ">New automation</button>";
+      automationViewHtml += "<button type='button' class='toolbar-btn automation-toolbar-btn' data-action='open-threads'>Threads</button>";
+      automationViewHtml += "<button type='button' class='toolbar-btn automation-toolbar-btn' data-action='automation-new'" + (state.workspaces.length ? "" : " disabled") + ">New automation</button>";
       automationViewHtml += "</div>";
       automationViewHtml += "</div>";
       if (!state.automations || !Array.isArray(state.automations.items) || !state.automations.items.length) {

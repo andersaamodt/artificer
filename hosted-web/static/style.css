@@ -4430,10 +4430,8 @@ textarea::-webkit-scrollbar-thumb {
   flex-wrap: wrap;
 }
 
-.automations-main-actions button {
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 8px;
+.automations-main-actions .automation-toolbar-btn {
+  min-height: 32px;
 }
 
 .automations-main-empty {

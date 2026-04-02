@@ -37,6 +37,16 @@ if ! grep -q "automations-main-view" "$render_file"; then
   exit 1
 fi
 
+if ! grep -q "class='toolbar-btn automation-toolbar-btn' data-action='open-threads'" "$render_file"; then
+  printf '%s\n' "automations Threads action is not using themed toolbar button styling" >&2
+  exit 1
+fi
+
+if ! grep -q "class='toolbar-btn automation-toolbar-btn' data-action='automation-new'" "$render_file"; then
+  printf '%s\n' "automations New automation action is not using themed toolbar button styling" >&2
+  exit 1
+fi
+
 if grep -q "function renderAutomationsTree" "$tree_file"; then
   printf '%s\n' "legacy automations-in-workspace-tree renderer still present" >&2
   exit 1
@@ -54,6 +64,11 @@ fi
 
 if ! grep -q '^\s*\.sidebar-nav-item' "$style_file"; then
   printf '%s\n' "sidebar nav item styles missing" >&2
+  exit 1
+fi
+
+if ! grep -q '^\s*\.automations-main-actions \.automation-toolbar-btn' "$style_file"; then
+  printf '%s\n' "automations toolbar button styling hook missing" >&2
   exit 1
 fi
 
