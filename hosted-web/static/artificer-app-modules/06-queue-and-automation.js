@@ -1148,6 +1148,9 @@
 
   function normalizeSelfImproveLastRun(value) {
     var data = value && typeof value === "object" ? value : {};
+    var capabilityBenchmark = data.capability_benchmark && typeof data.capability_benchmark === "object"
+      ? data.capability_benchmark
+      : {};
     return {
       summary: trim(String(data.summary || "")),
       generated_at: trim(String(data.generated_at || "")),
@@ -1162,7 +1165,13 @@
       evidence_counts: data.evidence_counts && typeof data.evidence_counts === "object" ? data.evidence_counts : {},
       run_options: data.run_options && typeof data.run_options === "object" ? data.run_options : {},
       lanes: Array.isArray(data.lanes) ? data.lanes : [],
-      plugin_ids: Array.isArray(data.plugin_ids) ? data.plugin_ids : []
+      plugin_ids: Array.isArray(data.plugin_ids) ? data.plugin_ids : [],
+      capability_benchmark: {
+        latest_recommendation: trim(String(capabilityBenchmark.latest_recommendation || "")),
+        weak_family_ids: Array.isArray(capabilityBenchmark.weak_family_ids) ? capabilityBenchmark.weak_family_ids : [],
+        scorecard_count: Number(capabilityBenchmark.scorecard_count || 0),
+        compare_count: Number(capabilityBenchmark.compare_count || 0)
+      }
     };
   }
 
@@ -1172,8 +1181,16 @@
     for (var i = 0; i < list.length; i += 1) {
       var item = list[i] || {};
       var pluginId = trim(String(item.id || ""));
+      var benchmarkFamilyTargets = Array.isArray(item.benchmark_family_targets) ? item.benchmark_family_targets : [];
+      var targetedCapabilityGaps = Array.isArray(item.targeted_capability_gaps) ? item.targeted_capability_gaps : [];
+      var promotionState = trim(String(item.promotion_state || "candidate")).toLowerCase();
       if (!pluginId) {
         continue;
+      }
+      if (promotionState !== "priority" && promotionState !== "candidate" && promotionState !== "hold") {
+        promotionState = targetedCapabilityGaps.length
+          ? "priority"
+          : (benchmarkFamilyTargets.length ? "candidate" : "hold");
       }
       clean.push({
         id: pluginId,
@@ -1192,9 +1209,33 @@
         evidence_refs: Array.isArray(item.evidence_refs) ? item.evidence_refs : [],
         admin_actions: Array.isArray(item.admin_actions) ? item.admin_actions : [],
         competition_score: Number(item.competition_score || 0),
-        papers: Array.isArray(item.papers) ? item.papers : []
+        papers: Array.isArray(item.papers) ? item.papers : [],
+        benchmark_family_targets: benchmarkFamilyTargets,
+        targeted_capability_gaps: targetedCapabilityGaps,
+        benchmark_alignment_score: Number(item.benchmark_alignment_score || 0),
+        promotion_state: promotionState,
+        promotion_reason: trim(String(item.promotion_reason || ""))
       });
     }
+    clean.sort(function (a, b) {
+      var stateRank = {
+        priority: 0,
+        candidate: 1,
+        hold: 2
+      };
+      var aRank = stateRank.hasOwnProperty(a.promotion_state) ? stateRank[a.promotion_state] : 3;
+      var bRank = stateRank.hasOwnProperty(b.promotion_state) ? stateRank[b.promotion_state] : 3;
+      if (aRank !== bRank) {
+        return aRank - bRank;
+      }
+      if (a.benchmark_alignment_score !== b.benchmark_alignment_score) {
+        return b.benchmark_alignment_score - a.benchmark_alignment_score;
+      }
+      if (a.competition_score !== b.competition_score) {
+        return b.competition_score - a.competition_score;
+      }
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
     return clean;
   }
 
@@ -1335,6 +1376,16 @@
     if (failureCount > 0 || qualityCount > 0) {
       summaryParts.push("Runtime traces: failures " + String(failureCount) + ", score entries " + String(qualityCount));
     }
+    var benchmarkSummary = state.selfImproveLastRun && state.selfImproveLastRun.capability_benchmark && typeof state.selfImproveLastRun.capability_benchmark === "object"
+      ? state.selfImproveLastRun.capability_benchmark
+      : {};
+    var weakFamilies = Array.isArray(benchmarkSummary.weak_family_ids) ? benchmarkSummary.weak_family_ids : [];
+    if (benchmarkSummary.latest_recommendation) {
+      summaryParts.push("Capability benchmark: " + benchmarkSummary.latest_recommendation);
+    }
+    if (weakFamilies.length) {
+      summaryParts.push("Weak families: " + weakFamilies.join(" | "));
+    }
     el.selfImproveSummary.textContent = summaryParts.join(" ");
 
     var html = "";
@@ -1364,6 +1415,12 @@
         if (plugin.domain_tags && plugin.domain_tags.length) {
           html += "<p class='settings-hint'><strong>Domains:</strong> " + escHtml(plugin.domain_tags.join(" | ")) + "</p>";
         }
+        if (plugin.benchmark_family_targets && plugin.benchmark_family_targets.length) {
+          html += "<p class='settings-hint'><strong>Benchmark families:</strong> " + escHtml(plugin.benchmark_family_targets.join(" | ")) + "</p>";
+        }
+        if (plugin.targeted_capability_gaps && plugin.targeted_capability_gaps.length) {
+          html += "<p class='settings-hint'><strong>Active benchmark gaps:</strong> " + escHtml(plugin.targeted_capability_gaps.join(" | ")) + "</p>";
+        }
         if (plugin.evidence_refs && plugin.evidence_refs.length) {
           html += "<p class='settings-hint'><strong>Evidence refs:</strong> " + escHtml(plugin.evidence_refs.join(" | ")) + "</p>";
         }
@@ -1380,11 +1437,20 @@
         if (plugin.risk_level) {
           metadataBits.push("risk " + plugin.risk_level);
         }
+        if (plugin.promotion_state) {
+          metadataBits.push("benchmark " + plugin.promotion_state);
+        }
         if (isFinite(plugin.competition_score) && plugin.competition_score > 0) {
           metadataBits.push("score " + String(plugin.competition_score));
         }
+        if (isFinite(plugin.benchmark_alignment_score) && plugin.benchmark_alignment_score > 0) {
+          metadataBits.push("alignment " + String(plugin.benchmark_alignment_score));
+        }
         if (metadataBits.length) {
           html += "<p class='settings-hint'>" + escHtml(metadataBits.join(" | ")) + "</p>";
+        }
+        if (plugin.promotion_reason) {
+          html += "<p class='settings-hint'><strong>Benchmark rationale:</strong> " + escHtml(plugin.promotion_reason) + "</p>";
         }
         html += "<div class='mode-runtime-actions'>";
         html += "<label class='toggle-row' style='margin:0;'><input type='checkbox' data-action='self-improve-plugin-toggle' data-plugin-id='" + escAttr(plugin.id) + "' " + (plugin.enabled ? "checked" : "") + " /> Enabled</label>";

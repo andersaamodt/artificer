@@ -265,6 +265,16 @@ import os
 import sys
 
 plugins_dir = sys.argv[1]
+promotion_rank = {"priority": 0, "candidate": 1, "hold": 2}
+
+
+def safe_number(value):
+    try:
+        return float(value or 0)
+    except Exception:
+        return 0.0
+
+
 items = []
 if os.path.isdir(plugins_dir):
     for name in sorted(os.listdir(plugins_dir)):
@@ -285,14 +295,30 @@ if os.path.isdir(plugins_dir):
         payload.setdefault("domain_tags", [])
         payload.setdefault("evidence_refs", [])
         payload.setdefault("admin_actions", [])
+        payload.setdefault("benchmark_family_targets", [])
+        payload.setdefault("targeted_capability_gaps", [])
+        payload.setdefault("benchmark_alignment_score", 0.0)
+        promotion_state = str(payload.get("promotion_state", "candidate")).strip().lower()
+        if promotion_state not in promotion_rank:
+            promotion_state = "candidate"
+        payload["promotion_state"] = promotion_state
+        payload.setdefault("promotion_reason", "")
         items.append(payload)
+items.sort(
+    key=lambda payload: (
+        promotion_rank.get(payload.get("promotion_state", "candidate"), 3),
+        -safe_number(payload.get("benchmark_alignment_score", 0)),
+        -safe_number(payload.get("competition_score", 0)),
+        str(payload.get("name", payload.get("id", ""))).strip().lower(),
+    )
+)
 print(json.dumps(items, ensure_ascii=False, separators=(",", ":")))
 PY
 }
 
 self_improve_last_run_json() {
   if [ ! -f "$self_improve_last_run_file" ]; then
-    printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[]}'
+    printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[],"capability_benchmark":{}}'
     return 0
   fi
   python3 - "$self_improve_last_run_file" <<'PY'
@@ -320,6 +346,7 @@ payload.setdefault("lane_scores", {})
 payload.setdefault("evidence_counts", {})
 payload.setdefault("run_options", {})
 payload.setdefault("lanes", [])
+payload.setdefault("capability_benchmark", {})
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 PY
 }
@@ -1045,6 +1072,7 @@ Rules:
 - Plugins must be safe to toggle on/off at runtime.
 - Every plugin must include specific instructions plus an implementation plan.
 - Include domain tags from: web-research, knowledge-integration, planning, architecture, programming, verification, admin-setup
+- Include benchmark_family_targets from: research_integration, planning_architecture, coding_mutation, review_document, teaching_reassessment, admin_env_repair when you can identify which benchmark family the plugin is meant to improve.
 - Include concise evidence references and any admin/setup actions needed.
 - If runtime_signals.capability_benchmark is present, prioritize weak critical families and propose changes that can be measured against those benchmark families.
 - Return strict JSON only.
@@ -1062,6 +1090,7 @@ JSON schema:
       "implementation_plan": "how Artificer should implement/use it",
       "rationale": "why this helps",
       "domain_tags": ["planning", "verification"],
+      "benchmark_family_targets": ["coding_mutation"],
       "evidence_refs": ["short evidence reference"],
       "admin_actions": ["concrete setup action if needed"],
       "risk_level": "low|medium|high"
@@ -1205,6 +1234,31 @@ for index, item in enumerate(plugins[:8], 1):
         evidence_refs = []
     evidence_refs = [" ".join(str(ref).split()).strip() for ref in evidence_refs[:6] if str(ref).strip()]
 
+    benchmark_family_targets = item.get("benchmark_family_targets", [])
+    if not isinstance(benchmark_family_targets, list):
+        benchmark_family_targets = []
+    clean_targets = []
+    for target in benchmark_family_targets:
+        token = re.sub(r"[^a-z0-9-]+", "_", str(target).strip().lower()).strip("_")
+        if not token:
+            continue
+        if token in {"research", "research_integration", "knowledge_integration"}:
+            token = "research_integration"
+        elif token in {"planning", "planning_architecture", "architecture"}:
+            token = "planning_architecture"
+        elif token in {"coding", "coding_mutation", "programming"}:
+            token = "coding_mutation"
+        elif token in {"review", "review_document", "document"}:
+            token = "review_document"
+        elif token in {"teaching", "teaching_reassessment", "reassessment"}:
+            token = "teaching_reassessment"
+        elif token in {"admin", "admin_env_repair", "env_repair"}:
+            token = "admin_env_repair"
+        if token not in {"research_integration", "planning_architecture", "coding_mutation", "review_document", "teaching_reassessment", "admin_env_repair"}:
+            continue
+        if token not in clean_targets:
+            clean_targets.append(token)
+
     admin_actions = item.get("admin_actions", [])
     if not isinstance(admin_actions, list):
         admin_actions = []
@@ -1223,6 +1277,7 @@ for index, item in enumerate(plugins[:8], 1):
             "implementation_plan": implementation_plan,
             "rationale": rationale,
             "domain_tags": domains,
+            "benchmark_family_targets": clean_targets[:4],
             "evidence_refs": evidence_refs,
             "admin_actions": admin_actions,
             "risk_level": risk_level,
@@ -1287,6 +1342,16 @@ domain_aliases = {
     "ops": "admin-setup",
     "setup": "admin-setup",
 }
+benchmark_family_ids = [
+    "research_integration",
+    "planning_architecture",
+    "coding_mutation",
+    "review_document",
+    "teaching_reassessment",
+    "admin_env_repair",
+]
+doc_review_keywords = ["document", "review", "runbook", "postmortem", "rewrite", "edit", "guide", "report"]
+teaching_keywords = ["teach", "teaching", "mentor", "mentoring", "curriculum", "explain", "reassess", "reassessment", "long-context"]
 
 
 def parse_json(raw, fallback):
@@ -1308,6 +1373,109 @@ def infer_domains(text):
         if token in text_l and mapped not in found:
             found.append(mapped)
     return found
+
+
+def normalize_benchmark_family_id(value):
+    token = re.sub(r"[^a-z0-9-]+", "_", str(value).strip().lower()).strip("_")
+    if token in {"research", "research_integration", "knowledge_integration"}:
+        return "research_integration"
+    if token in {"planning", "planning_architecture", "architecture"}:
+        return "planning_architecture"
+    if token in {"coding", "coding_mutation", "programming"}:
+        return "coding_mutation"
+    if token in {"review", "review_document", "document"}:
+        return "review_document"
+    if token in {"teaching", "teaching_reassessment", "reassessment"}:
+        return "teaching_reassessment"
+    if token in {"admin", "admin_env_repair", "env_repair"}:
+        return "admin_env_repair"
+    return ""
+
+
+evidence = parse_json(evidence_json, {})
+runtime_signals = evidence.get("runtime_signals", {}) if isinstance(evidence, dict) else {}
+if not isinstance(runtime_signals, dict):
+    runtime_signals = {}
+capability_benchmark = runtime_signals.get("capability_benchmark", {})
+if not isinstance(capability_benchmark, dict):
+    capability_benchmark = {}
+latest_scorecard = capability_benchmark.get("latest_scorecard", {})
+if not isinstance(latest_scorecard, dict):
+    latest_scorecard = {}
+weak_family_map = {}
+for source_items in [capability_benchmark.get("high_leverage_gaps", []), latest_scorecard.get("weak_families", [])]:
+    if not isinstance(source_items, list):
+        continue
+    for item in source_items:
+        if not isinstance(item, dict):
+            continue
+        family_id = normalize_benchmark_family_id(item.get("id", ""))
+        if not family_id:
+            continue
+        existing = weak_family_map.get(family_id, {"id": family_id, "critical": False, "reason": "", "score": 0})
+        existing["critical"] = bool(existing.get("critical", False) or item.get("critical", False))
+        reason_text = " ".join(str(item.get("reason", "")).split()).strip()
+        if reason_text:
+            existing["reason"] = reason_text
+        try:
+            score_value = float(item.get("score", existing.get("score", 0)) or 0)
+        except Exception:
+            score_value = float(existing.get("score", 0) or 0)
+        existing["score"] = score_value
+        weak_family_map[family_id] = existing
+weak_family_ids = sorted(weak_family_map.keys())
+
+
+def infer_benchmark_targets(plugin_copy):
+    combined = " ".join([
+        str(plugin_copy.get("name", "")),
+        str(plugin_copy.get("description", "")),
+        str(plugin_copy.get("instructions", "")),
+        str(plugin_copy.get("implementation_plan", "")),
+        str(plugin_copy.get("rationale", "")),
+    ]).lower()
+    domains = plugin_copy.get("domain_tags", [])
+    if not isinstance(domains, list):
+        domains = []
+    domain_set = {str(item).strip() for item in domains if str(item).strip()}
+    targets = []
+
+    raw_targets = plugin_copy.get("benchmark_family_targets", [])
+    if isinstance(raw_targets, list):
+        for raw_target in raw_targets:
+            token = normalize_benchmark_family_id(raw_target)
+            if token and token not in targets:
+                targets.append(token)
+
+    if ("web-research" in domain_set or "knowledge-integration" in domain_set) and "research_integration" not in targets:
+        targets.append("research_integration")
+    if ("planning" in domain_set or "architecture" in domain_set) and "planning_architecture" not in targets:
+        targets.append("planning_architecture")
+    if "programming" in domain_set and "coding_mutation" not in targets:
+        targets.append("coding_mutation")
+    if "admin-setup" in domain_set and "admin_env_repair" not in targets:
+        targets.append("admin_env_repair")
+    if any(keyword in combined for keyword in teaching_keywords) and "teaching_reassessment" not in targets:
+        targets.append("teaching_reassessment")
+    if "verification" in domain_set:
+        if any(keyword in combined for keyword in doc_review_keywords):
+            if "review_document" not in targets:
+                targets.append("review_document")
+        elif "coding_mutation" not in targets:
+            targets.append("coding_mutation")
+
+    if any(keyword in combined for keyword in ["benchmark", "web research", "retrieval", "source quality", "search"]) and "research_integration" not in targets:
+        targets.append("research_integration")
+    if any(keyword in combined for keyword in ["architecture", "tradeoff", "design review", "planning gate", "decision checkpoint"]) and "planning_architecture" not in targets:
+        targets.append("planning_architecture")
+    if any(keyword in combined for keyword in ["mutation", "patch", "regression", "bounded coding", "verification pass"]) and "coding_mutation" not in targets:
+        targets.append("coding_mutation")
+    if any(keyword in combined for keyword in doc_review_keywords) and "review_document" not in targets:
+        targets.append("review_document")
+    if any(keyword in combined for keyword in ["install", "dependency", "environment repair", "bootstrap", "ollama runtime"]) and "admin_env_repair" not in targets:
+        targets.append("admin_env_repair")
+
+    return [target for target in targets if target in benchmark_family_ids][:4]
 
 
 def normalize_report(raw_json, lane_name, model_name):
@@ -1354,6 +1522,28 @@ def normalize_report(raw_json, lane_name, model_name):
         if risk_level not in {"low", "medium", "high"}:
             risk_level = "medium"
         plugin_copy["risk_level"] = risk_level
+        benchmark_targets = infer_benchmark_targets(plugin_copy)
+        targeted_gaps = [family_id for family_id in benchmark_targets if family_id in weak_family_map]
+        critical_hits = [family_id for family_id in targeted_gaps if weak_family_map.get(family_id, {}).get("critical")]
+        alignment_score = (len(benchmark_targets) * 1.5) + (len(targeted_gaps) * 5.0) + (len(critical_hits) * 3.0)
+        if risk_level == "high":
+            alignment_score -= 2.0
+        if alignment_score < 0:
+            alignment_score = 0.0
+        if targeted_gaps:
+            promotion_state = "priority"
+            promotion_reason = "Targets current benchmark weak families."
+        elif benchmark_targets:
+            promotion_state = "candidate"
+            promotion_reason = "Maps to benchmark families but not the current weak-gap set."
+        else:
+            promotion_state = "hold"
+            promotion_reason = "Does not map cleanly to a measured benchmark family yet."
+        plugin_copy["benchmark_family_targets"] = benchmark_targets
+        plugin_copy["targeted_capability_gaps"] = targeted_gaps
+        plugin_copy["benchmark_alignment_score"] = round(alignment_score, 2)
+        plugin_copy["promotion_state"] = promotion_state
+        plugin_copy["promotion_reason"] = promotion_reason
         plugin_copy["source_lane"] = lane_name
         plugin_copy["source_model"] = model_name
         clean_plugins.append(plugin_copy)
@@ -1378,6 +1568,10 @@ def score_report(report):
     admin_action_count = 0
     plan_count = 0
     rationale_count = 0
+    benchmark_target_coverage = []
+    targeted_weak_gaps = []
+    critical_weak_gap_hits = 0
+    benchmark_alignment_sum = 0.0
     risk_balance = {"low": 0, "medium": 0, "high": 0}
     fingerprints = set()
     duplicate_penalty = 0
@@ -1388,6 +1582,18 @@ def score_report(report):
             for domain in domain_tags:
                 if domain in target_domains and domain not in domain_coverage:
                     domain_coverage.append(domain)
+        benchmark_targets = plugin.get("benchmark_family_targets", [])
+        if isinstance(benchmark_targets, list):
+            for family_id in benchmark_targets:
+                if family_id in benchmark_family_ids and family_id not in benchmark_target_coverage:
+                    benchmark_target_coverage.append(family_id)
+        targeted_gaps = plugin.get("targeted_capability_gaps", [])
+        if isinstance(targeted_gaps, list):
+            for family_id in targeted_gaps:
+                if family_id in weak_family_map and family_id not in targeted_weak_gaps:
+                    targeted_weak_gaps.append(family_id)
+                    if weak_family_map.get(family_id, {}).get("critical"):
+                        critical_weak_gap_hits += 1
         refs = plugin.get("evidence_refs", [])
         if isinstance(refs, list):
             evidence_ref_count += len(refs)
@@ -1404,6 +1610,10 @@ def score_report(report):
         risk_balance[risk] += 1
         instructions = str(plugin.get("instructions", ""))
         instruction_word_total += len(instructions.split())
+        try:
+            benchmark_alignment_sum += float(plugin.get("benchmark_alignment_score", 0) or 0)
+        except Exception:
+            benchmark_alignment_sum += 0.0
         fingerprint = (str(plugin.get("name", "")).strip().lower(), instructions.strip().lower())
         if fingerprint in fingerprints:
             duplicate_penalty += 1
@@ -1415,14 +1625,18 @@ def score_report(report):
     evidence_score = min(18.0, evidence_ref_count * 1.5 + admin_action_count * 1.1)
     implementation_score = min(16.0, plan_count * 2.0 + rationale_count * 1.2)
     avg_instruction_words = (instruction_word_total / plugin_count) if plugin_count else 0.0
+    benchmark_focus_score = min(18.0, len(targeted_weak_gaps) * 6.0 + critical_weak_gap_hits * 2.5 + len(benchmark_target_coverage) * 1.2)
     instruction_quality = 0.0
     if avg_instruction_words >= 14:
         instruction_quality = min(10.0, avg_instruction_words / 2.0)
     risk_penalty = max(0, risk_balance["high"] - max(1, plugin_count // 3)) * 1.5
     duplicate_penalty_score = duplicate_penalty * 3.0
+    weak_gap_miss_penalty = 0.0
+    if weak_family_ids and not targeted_weak_gaps:
+        weak_gap_miss_penalty = 8.0
 
-    total_score = coverage_score + plugin_count_score + evidence_score + implementation_score + instruction_quality
-    total_score -= (risk_penalty + duplicate_penalty_score)
+    total_score = coverage_score + plugin_count_score + evidence_score + implementation_score + benchmark_focus_score + instruction_quality
+    total_score -= (risk_penalty + duplicate_penalty_score + weak_gap_miss_penalty)
     if total_score < 0:
         total_score = 0.0
     if total_score > 100:
@@ -1435,6 +1649,11 @@ def score_report(report):
         "evidence_ref_count": evidence_ref_count,
         "admin_action_count": admin_action_count,
         "avg_instruction_words": round(avg_instruction_words, 2),
+        "benchmark_target_coverage": sorted(benchmark_target_coverage),
+        "targeted_weak_gaps": sorted(targeted_weak_gaps),
+        "critical_weak_gap_hits": critical_weak_gap_hits,
+        "benchmark_alignment_score": round(benchmark_alignment_sum, 2),
+        "weak_gap_miss": bool(weak_gap_miss_penalty > 0),
         "risk_balance": risk_balance,
         "has_error": bool(report.get("error")),
     }
@@ -1480,13 +1699,25 @@ def append_plugins(report, score_value):
         payload = dict(plugin)
         payload["competition_score"] = score_value
         merged_plugins.append(payload)
-        if len(merged_plugins) >= 8:
-            return
 
 
 append_plugins(winner, winner_score["score"])
-if len(merged_plugins) < 8:
-    append_plugins(loser, loser_score["score"])
+append_plugins(loser, loser_score["score"])
+
+promotion_rank = {"priority": 0, "candidate": 1, "hold": 2}
+risk_rank = {"low": 0, "medium": 1, "high": 2}
+merged_plugins.sort(
+    key=lambda payload: (
+        promotion_rank.get(str(payload.get("promotion_state", "candidate")).strip().lower(), 3),
+        -len(payload.get("targeted_capability_gaps", []) if isinstance(payload.get("targeted_capability_gaps", []), list) else []),
+        -sum(1 for family_id in (payload.get("targeted_capability_gaps", []) if isinstance(payload.get("targeted_capability_gaps", []), list) else []) if weak_family_map.get(family_id, {}).get("critical")),
+        -float(payload.get("benchmark_alignment_score", 0) or 0),
+        -float(payload.get("competition_score", 0) or 0),
+        risk_rank.get(str(payload.get("risk_level", "medium")).strip().lower(), 3),
+        str(payload.get("name", "")).strip().lower(),
+    )
+)
+merged_plugins = merged_plugins[:8]
 
 objective_text = " ".join(str(objective_text).split()).strip()
 if not objective_text:
@@ -1496,19 +1727,15 @@ winner_lane = winner.get("lane", "artificer")
 winner_model = winner.get("model", primary_model)
 winner_domains = ", ".join(winner_score["domain_coverage"]) if winner_score["domain_coverage"] else "none"
 opponent_score = challenger_score["score"] if winner_lane == "artificer" else primary_score["score"]
+weak_family_text = ", ".join(weak_family_ids) if weak_family_ids else "none"
 summary = (
     f"{winner_lane} lane won ({winner_score['score']:.2f} vs {opponent_score:.2f}). "
     f"Objective: {objective_text}. Covered domains: {winner_domains}. "
+    f"Benchmark weak families: {weak_family_text}. "
     f"Merged plugins: {len(merged_plugins)}."
 )
 summary = " ".join(summary.split())
 
-try:
-    evidence = json.loads(evidence_json) if evidence_json else {}
-except Exception:
-    evidence = {}
-if not isinstance(evidence, dict):
-    evidence = {}
 counts = evidence.get("counts", {})
 if not isinstance(counts, dict):
     counts = {}
@@ -1543,6 +1770,11 @@ result = {
     "plugins": merged_plugins,
     "objective": objective_text,
     "evidence_counts": counts,
+    "capability_benchmark_focus": {
+        "latest_recommendation": str(latest_scorecard.get("recommendation", "")).strip(),
+        "weak_family_ids": weak_family_ids,
+        "weak_families": [weak_family_map[family_id] for family_id in weak_family_ids],
+    },
 }
 print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
 PY
@@ -1605,6 +1837,19 @@ if not isinstance(lane_scores, dict):
 lanes = report.get("lanes", []) if isinstance(report, dict) else []
 if not isinstance(lanes, list):
     lanes = []
+capability_benchmark_focus = report.get("capability_benchmark_focus", {}) if isinstance(report, dict) else {}
+if not isinstance(capability_benchmark_focus, dict):
+    capability_benchmark_focus = {}
+runtime_signals = evidence.get("runtime_signals", {}) if isinstance(evidence, dict) else {}
+if not isinstance(runtime_signals, dict):
+    runtime_signals = {}
+benchmark_runtime = runtime_signals.get("capability_benchmark", {})
+if not isinstance(benchmark_runtime, dict):
+    benchmark_runtime = {}
+weak_family_ids = capability_benchmark_focus.get("weak_family_ids", [])
+if not isinstance(weak_family_ids, list):
+    weak_family_ids = []
+weak_family_ids = [" ".join(str(item).split()).strip() for item in weak_family_ids if str(item).strip()]
 
 generated_at = dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 saved_ids = []
@@ -1625,7 +1870,6 @@ for index, plugin in enumerate(plugins, 1):
 
     payload = dict(plugin)
     payload["id"] = final_id
-    payload["enabled"] = True
     payload["generated_at"] = generated_at
     payload["source_model"] = str(payload.get("source_model", "")).strip() or model_name
     payload["source_lane"] = str(payload.get("source_lane", "")).strip()
@@ -1636,6 +1880,29 @@ for index, plugin in enumerate(plugins, 1):
     if not isinstance(domain_tags, list):
         domain_tags = []
     payload["domain_tags"] = [" ".join(str(tag).split()).strip() for tag in domain_tags[:6] if str(tag).strip()]
+    benchmark_family_targets = payload.get("benchmark_family_targets", [])
+    if not isinstance(benchmark_family_targets, list):
+        benchmark_family_targets = []
+    payload["benchmark_family_targets"] = [" ".join(str(tag).split()).strip() for tag in benchmark_family_targets[:6] if str(tag).strip()]
+    targeted_capability_gaps = payload.get("targeted_capability_gaps", [])
+    if not isinstance(targeted_capability_gaps, list):
+        targeted_capability_gaps = []
+    payload["targeted_capability_gaps"] = [" ".join(str(tag).split()).strip() for tag in targeted_capability_gaps[:6] if str(tag).strip()]
+    try:
+        payload["benchmark_alignment_score"] = round(float(payload.get("benchmark_alignment_score", 0) or 0), 2)
+    except Exception:
+        payload["benchmark_alignment_score"] = 0.0
+    promotion_state = " ".join(str(payload.get("promotion_state", "")).split()).strip().lower()
+    if promotion_state not in {"priority", "candidate", "hold"}:
+        if payload["targeted_capability_gaps"]:
+            promotion_state = "priority"
+        elif payload["benchmark_family_targets"]:
+            promotion_state = "candidate"
+        else:
+            promotion_state = "hold"
+    payload["promotion_state"] = promotion_state
+    payload["promotion_reason"] = " ".join(str(payload.get("promotion_reason", "")).split()).strip()
+    payload["enabled"] = promotion_state != "hold"
     evidence_refs = payload.get("evidence_refs", [])
     if not isinstance(evidence_refs, list):
         evidence_refs = []
@@ -1648,6 +1915,10 @@ for index, plugin in enumerate(plugins, 1):
     payload["papers"] = papers
     payload["web_signals"] = web_signals
     payload["evidence_counts"] = evidence_counts
+    payload["capability_benchmark"] = {
+        "latest_recommendation": " ".join(str(benchmark_runtime.get("latest_scorecard", {}).get("recommendation", "")).split()).strip() if isinstance(benchmark_runtime.get("latest_scorecard", {}), dict) else "",
+        "weak_family_ids": weak_family_ids,
+    }
 
     with open(os.path.join(plugins_dir, final_id + ".json"), "w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
@@ -1668,6 +1939,12 @@ last_run = {
     "evidence_counts": evidence_counts,
     "run_options": run_options,
     "plugin_ids": saved_ids,
+    "capability_benchmark": {
+        "latest_recommendation": " ".join(str(benchmark_runtime.get("latest_scorecard", {}).get("recommendation", "")).split()).strip() if isinstance(benchmark_runtime.get("latest_scorecard", {}), dict) else "",
+        "weak_family_ids": weak_family_ids,
+        "scorecard_count": int(benchmark_runtime.get("scorecard_count", 0) or 0),
+        "compare_count": int(benchmark_runtime.get("compare_count", 0) or 0),
+    },
 }
 with open(report_path, "w", encoding="utf-8") as handle:
     json.dump(last_run, handle, ensure_ascii=False, indent=2)
@@ -1719,6 +1996,17 @@ import sys
 
 plugins_dir = sys.argv[1]
 lines = []
+items = []
+promotion_rank = {"priority": 0, "candidate": 1, "hold": 2}
+
+
+def safe_number(value):
+    try:
+        return float(value or 0)
+    except Exception:
+        return 0.0
+
+
 if os.path.isdir(plugins_dir):
     for name in sorted(os.listdir(plugins_dir)):
         if not name.endswith(".json"):
@@ -1731,10 +2019,34 @@ if os.path.isdir(plugins_dir):
             continue
         if not isinstance(payload, dict) or not payload.get("enabled", True):
             continue
-        title = " ".join(str(payload.get("name", payload.get("id", ""))).split()).strip()
-        instructions = " ".join(str(payload.get("instructions", "")).split()).strip()
-        if title and instructions:
-            lines.append(f"- {title}: {instructions}")
+        promotion_state = str(payload.get("promotion_state", "candidate")).strip().lower()
+        if promotion_state not in promotion_rank:
+            promotion_state = "candidate"
+        payload["promotion_state"] = promotion_state
+        items.append(payload)
+items.sort(
+    key=lambda payload: (
+        promotion_rank.get(payload.get("promotion_state", "candidate"), 3),
+        -safe_number(payload.get("benchmark_alignment_score", 0)),
+        str(payload.get("name", payload.get("id", ""))).strip().lower(),
+    )
+)
+for payload in items:
+    title = " ".join(str(payload.get("name", payload.get("id", ""))).split()).strip()
+    instructions = " ".join(str(payload.get("instructions", "")).split()).strip()
+    if not title or not instructions:
+        continue
+    targets = payload.get("benchmark_family_targets", [])
+    if not isinstance(targets, list):
+        targets = []
+    target_text = ", ".join([" ".join(str(target).split()).strip() for target in targets if str(target).strip()][:3])
+    promotion_state = " ".join(str(payload.get("promotion_state", "")).split()).strip()
+    if target_text and promotion_state:
+        lines.append(f"- {title} [{promotion_state}; targets {target_text}]: {instructions}")
+    elif promotion_state:
+        lines.append(f"- {title} [{promotion_state}]: {instructions}")
+    else:
+        lines.append(f"- {title}: {instructions}")
 for line in lines[:8]:
     print(line)
 PY
