@@ -20,7 +20,7 @@ Each surface is exposed as one CGI action under `hosted-web/cgi/actions/`.
 - `control_plane_projects`
   - `list`, `get`, `add`, `rename`, `delete`
 - `control_plane_sessions`
-  - `list`, `get`, `create`, `archive`, `message`, `events`, `stream`
+  - `list`, `get`, `create`, `archive`, `message`, `run-next`, `events`, `stream`
 - `control_plane_attention`
   - `list`, `approval-answer`, `decision-answer`
 - `control_plane_automations`
@@ -50,6 +50,7 @@ hosted-web/scripts/artificer-runtime-client health
 hosted-web/scripts/artificer-runtime-client project add --path "$PWD" --name "Current Repo"
 hosted-web/scripts/artificer-runtime-client session create --workspace-id "$workspace_id" --title "Refactor Plan"
 hosted-web/scripts/artificer-runtime-client session message --workspace-id "$workspace_id" --conversation-id "$conversation_id" --prompt "Audit the repo" --run-mode assistant
+hosted-web/scripts/artificer-runtime-client session run-next --workspace-id "$workspace_id" --conversation-id "$conversation_id" --stream-session "embed-$(date +%s)"
 ```
 
 ## Sessions, Events, And Streams
@@ -58,6 +59,10 @@ hosted-web/scripts/artificer-runtime-client session message --workspace-id "$wor
 
 - `get`
   - full session envelope, including queue state, attention state, messages, and trace
+- `run-next`
+  - dequeues the next queued session item and executes it through the same backend `run` action the GUI uses
+  - returns the refreshed session envelope plus nested run result JSON
+  - accepts optional `stream_session` so embedding clients can poll `stream` concurrently or after completion
 - `events`
   - run/event trace only
 - `stream`
@@ -86,6 +91,14 @@ Approvals and decisions are first-class runtime objects.
   - submits user decisions back into the runtime
 
 This is the same durable workflow used by Artificer itself when runs need user confirmation.
+
+For a fully headless lifecycle:
+
+1. `session message`
+2. `session run-next`
+3. `session stream` while active
+4. `attention list` and `approval-answer` / `decision-answer` when blocked
+5. `session run-next` again to resume after an answered gate
 
 ## Self-Actuation Through The Control Plane
 

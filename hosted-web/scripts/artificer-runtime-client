@@ -17,7 +17,7 @@ Usage:
   artificer-runtime-client describe
   artificer-runtime-client health
   artificer-runtime-client project list|get|add|rename|delete [options]
-  artificer-runtime-client session list|get|create|archive|message|events|stream [options]
+  artificer-runtime-client session list|get|create|archive|message|run-next|events|stream [options]
   artificer-runtime-client attention list|approval-answer|decision-answer [options]
   artificer-runtime-client automation list|get|upsert|toggle|run-now|delete [options]
   artificer-runtime-client self-actuation preview|apply|policy-get|policy-set|audit [options]
@@ -268,7 +268,7 @@ case "$resource" in
           "stream_session" "$stream_session" \
           "offset" "$offset_value"
         ;;
-      create|archive|message)
+      create|archive|message|run-next)
         call_action_post "control_plane_sessions" \
           "op" "$operation" \
           "workspace_id" "$workspace_id" \
@@ -288,7 +288,8 @@ case "$resource" in
           "programmer_review" "$programmer_review" \
           "programmer_review_rounds" "$programmer_review_rounds" \
           "explicit_skill_ids" "$explicit_skill_ids" \
-          "assay_task_id" "$assay_task_id"
+          "assay_task_id" "$assay_task_id" \
+          "stream_session" "$stream_session"
         ;;
       *)
         usage >&2

@@ -114,6 +114,92 @@ PY
   printf '%s' "$payload" | sed -n 's/.*"'"$expression"'":"\([^"]*\)".*/\1/p' | sed -n '1p'
 }
 
+control_plane_json_array_csv() {
+  payload=$1
+  expression=$2
+  if command -v python3 >/dev/null 2>&1; then
+    JSON_PAYLOAD=$payload JSON_EXPR=$expression python3 - <<'PY'
+import json
+import os
+
+payload = os.environ.get("JSON_PAYLOAD", "")
+expr = os.environ.get("JSON_EXPR", "")
+try:
+    data = json.loads(payload)
+except Exception:
+    print("")
+    raise SystemExit(0)
+try:
+    value = eval(expr, {"__builtins__": {"len": len}}, {"data": data})
+except Exception:
+    print("")
+    raise SystemExit(0)
+if value is None:
+    print("")
+elif isinstance(value, list):
+    print(",".join(str(item).strip() for item in value if str(item).strip()))
+else:
+    print(str(value))
+PY
+    return 0
+  fi
+  printf '%s' ''
+}
+
+control_plane_stream_session_id() {
+  now_epoch=$(date +%s 2>/dev/null || printf '0')
+  nanos=$(date +%N 2>/dev/null || printf '0')
+  case "$now_epoch" in
+    ""|*[!0-9]*)
+      now_epoch=0
+      ;;
+  esac
+  case "$nanos" in
+    ""|*[!0-9]*)
+      nanos=0
+      ;;
+  esac
+  printf '%s-%s-%s' "$now_epoch" "$$" "$nanos"
+}
+
+control_plane_session_run_finalize_if_stuck() {
+  workspace_id=$1
+  conversation_id=$2
+  item_id=$3
+  error_text=$4
+
+  if ! valid_workspace_id "$workspace_id" || ! valid_id "$conversation_id"; then
+    return 0
+  fi
+
+  conv_dir=$(conversation_dir_for "$workspace_id" "$conversation_id")
+  if [ ! -d "$conv_dir" ]; then
+    return 0
+  fi
+
+  queue_info=$(queue_state_for_conversation "$conv_dir")
+  queue_running=$(kv_get "running" "$queue_info")
+  queue_last_status=$(kv_get "last_status" "$queue_info")
+  [ -n "$queue_running" ] || queue_running=0
+  case "$queue_last_status" in
+    done|error|cancelled|awaiting_decision|awaiting_approval)
+      return 0
+      ;;
+  esac
+  if [ "$queue_running" != "1" ]; then
+    return 0
+  fi
+  if [ -z "$(trim "$error_text")" ]; then
+    error_text="headless control-plane run-next failed before queue finalization"
+  fi
+  control_plane_call_action_post_json "queue_finish" \
+    "workspace_id" "$workspace_id" \
+    "conversation_id" "$conversation_id" \
+    "item_id" "$item_id" \
+    "status" "error" \
+    "error" "$error_text" >/dev/null
+}
+
 control_plane_queue_json_for_conversation() {
   conv_dir=$1
   queue_info=$(queue_state_for_conversation "$conv_dir")
@@ -380,7 +466,7 @@ control_plane_health_json() {
 control_plane_describe_json() {
   printf '{"success":true,"api_version":"%s","resources":[' "$(json_escape "$(control_plane_api_version)")"
   printf '{"name":"projects","action":"control_plane_projects","operations":["list","get","add","rename","delete"]},'
-  printf '{"name":"sessions","action":"control_plane_sessions","operations":["list","get","create","archive","message","events","stream"]},'
+  printf '{"name":"sessions","action":"control_plane_sessions","operations":["list","get","create","archive","message","run-next","events","stream"]},'
   printf '{"name":"attention","action":"control_plane_attention","operations":["list","approval-answer","decision-answer"]},'
   printf '{"name":"automations","action":"control_plane_automations","operations":["list","get","upsert","toggle","run-now","delete"]},'
   printf '{"name":"self_actuation","action":"control_plane_self_actuation","operations":["preview","apply","policy-get","policy-set","audit"]},'

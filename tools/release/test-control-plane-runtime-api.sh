@@ -58,6 +58,7 @@ describe_json=$(run_client describe)
 [ "$(json_query "$describe_json" 'data.get("api_version")')" = "v1" ] || fail "control-plane describe should expose api_version v1"
 [ "$(json_query "$describe_json" 'len(data.get("resources") or []) >= 7')" = "true" ] || fail "control-plane describe should expose resource catalog"
 [ "$(json_query "$describe_json" 'len([item for item in (data.get("resources") or []) if item.get("name") == "sessions"])')" = "1" ] || fail "control-plane describe missing sessions resource"
+[ "$(json_query "$describe_json" 'len([item for item in (data.get("resources") or []) if item.get("name") == "sessions" and "run-next" in (item.get("operations") or [])])')" = "1" ] || fail "control-plane describe should advertise headless session run-next"
 
 health_json=$(run_client health)
 [ "$(json_query "$health_json" 'data.get("runtime", {}).get("runtime_client_exists")')" = "1" ] || fail "control-plane health should expose runtime client availability"
