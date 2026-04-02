@@ -342,6 +342,9 @@ if os.path.isdir(plugins_dir):
         payload.setdefault("targeted_flat_persistent_external_capability_gaps", [])
         payload.setdefault("targeted_closing_persistent_external_capability_gaps", [])
         payload.setdefault("targeted_new_persistent_external_capability_gaps", [])
+        payload.setdefault("targeted_sustained_worsening_persistent_external_capability_gaps", [])
+        payload.setdefault("targeted_sustained_flat_persistent_external_capability_gaps", [])
+        payload.setdefault("targeted_sustained_closing_persistent_external_capability_gaps", [])
         payload.setdefault("persistent_external_gap_trends", [])
         payload.setdefault("benchmark_alignment_score", 0.0)
         promotion_state = str(payload.get("promotion_state", "candidate")).strip().lower()
@@ -464,6 +467,9 @@ if os.path.isdir(archive_dir):
             "targeted_flat_persistent_external_capability_gaps": payload.get("targeted_flat_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_flat_persistent_external_capability_gaps", []), list) else [],
             "targeted_closing_persistent_external_capability_gaps": payload.get("targeted_closing_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_closing_persistent_external_capability_gaps", []), list) else [],
             "targeted_new_persistent_external_capability_gaps": payload.get("targeted_new_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_new_persistent_external_capability_gaps", []), list) else [],
+            "targeted_sustained_worsening_persistent_external_capability_gaps": payload.get("targeted_sustained_worsening_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_sustained_worsening_persistent_external_capability_gaps", []), list) else [],
+            "targeted_sustained_flat_persistent_external_capability_gaps": payload.get("targeted_sustained_flat_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_sustained_flat_persistent_external_capability_gaps", []), list) else [],
+            "targeted_sustained_closing_persistent_external_capability_gaps": payload.get("targeted_sustained_closing_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_sustained_closing_persistent_external_capability_gaps", []), list) else [],
             "persistent_external_gap_trends": payload.get("persistent_external_gap_trends", []) if isinstance(payload.get("persistent_external_gap_trends", []), list) else [],
             "archived_at": " ".join(str(payload.get("archived_at", "")).split()).strip(),
             "archived_via": " ".join(str(payload.get("archived_via", "")).split()).strip(),
@@ -486,7 +492,7 @@ PY
 
 self_improve_last_run_json() {
   if [ ! -f "$self_improve_last_run_file" ]; then
-    printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[],"capability_benchmark":{"latest_recommendation":"","compare_recommendation":"","candidate_promotable":false,"weak_family_ids":[],"recovered_families":[],"new_weak_families":[],"scorecard_count":0,"compare_count":0,"external_compare_count":0,"external_compare_recommendation":"","candidate_beats_external":false,"external_gap_family_ids":[],"persistent_external_gap_family_ids":[],"worsening_persistent_external_gap_family_ids":[],"flat_persistent_external_gap_family_ids":[],"closing_persistent_external_gap_family_ids":[],"new_persistent_external_gap_family_ids":[],"external_baseline_name":"","external_adapter_count":0,"external_adapters":[]}}'
+    printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[],"capability_benchmark":{"latest_recommendation":"","compare_recommendation":"","candidate_promotable":false,"weak_family_ids":[],"recovered_families":[],"new_weak_families":[],"scorecard_count":0,"compare_count":0,"external_compare_count":0,"external_compare_recommendation":"","candidate_beats_external":false,"external_gap_family_ids":[],"persistent_external_gap_family_ids":[],"worsening_persistent_external_gap_family_ids":[],"flat_persistent_external_gap_family_ids":[],"closing_persistent_external_gap_family_ids":[],"new_persistent_external_gap_family_ids":[],"sustained_worsening_persistent_external_gap_family_ids":[],"sustained_flat_persistent_external_gap_family_ids":[],"sustained_closing_persistent_external_gap_family_ids":[],"external_baseline_name":"","external_adapter_count":0,"external_adapters":[]}}'
     return 0
   fi
   python3 - "$self_improve_last_run_file" <<'PY'
@@ -535,6 +541,9 @@ payload["capability_benchmark"].setdefault("worsening_persistent_external_gap_fa
 payload["capability_benchmark"].setdefault("flat_persistent_external_gap_family_ids", [])
 payload["capability_benchmark"].setdefault("closing_persistent_external_gap_family_ids", [])
 payload["capability_benchmark"].setdefault("new_persistent_external_gap_family_ids", [])
+payload["capability_benchmark"].setdefault("sustained_worsening_persistent_external_gap_family_ids", [])
+payload["capability_benchmark"].setdefault("sustained_flat_persistent_external_gap_family_ids", [])
+payload["capability_benchmark"].setdefault("sustained_closing_persistent_external_gap_family_ids", [])
 payload["capability_benchmark"].setdefault("external_baseline_name", "")
 payload["capability_benchmark"].setdefault("external_adapter_count", 0)
 payload["capability_benchmark"].setdefault("external_adapters", [])
@@ -791,7 +800,7 @@ self_improve_runtime_signals_json() {
   quality_summary="none"
   proposal_summary="none"
   controller_json="{}"
-  capability_benchmark_json='{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[],"persistent_external_gaps":[],"worsening_persistent_external_gap_family_ids":[],"flat_persistent_external_gap_family_ids":[],"closing_persistent_external_gap_family_ids":[],"new_persistent_external_gap_family_ids":[],"external_registry_path":"","external_adapter_count":0,"external_adapters":[]}'
+  capability_benchmark_json='{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[],"persistent_external_gaps":[],"worsening_persistent_external_gap_family_ids":[],"flat_persistent_external_gap_family_ids":[],"closing_persistent_external_gap_family_ids":[],"new_persistent_external_gap_family_ids":[],"sustained_worsening_persistent_external_gap_family_ids":[],"sustained_flat_persistent_external_gap_family_ids":[],"sustained_closing_persistent_external_gap_family_ids":[],"external_registry_path":"","external_adapter_count":0,"external_adapters":[]}'
 
   if [ "$mode_runtime_lib_loaded" = "1" ]; then
     ensure_mode_runtime_bootstrap
@@ -1048,14 +1057,51 @@ for family_id, item in gap_history.items():
     close_rate_per_compare = 0.0
     if occurrence_count > 1:
         close_rate_per_compare = round(trend_score_delta / float(occurrence_count - 1), 2)
-    if occurrence_count <= 1:
-        trend_direction = "new"
-    elif trend_score_delta >= 1.0:
-        trend_direction = "closing"
-    elif trend_score_delta <= -1.0:
-        trend_direction = "worsening"
+    score_deltas = item.get("score_deltas", [])
+    if not isinstance(score_deltas, list):
+        score_deltas = []
+    trend_segments = []
+    for index in range(len(score_deltas) - 1):
+        try:
+            segment_delta = round(float(score_deltas[index] or 0) - float(score_deltas[index + 1] or 0), 2)
+        except Exception:
+            segment_delta = 0.0
+        if segment_delta >= 1.0:
+            segment_direction = "closing"
+        elif segment_delta <= -1.0:
+            segment_direction = "worsening"
+        else:
+            segment_direction = "flat"
+        trend_segments.append(
+            {
+                "direction": segment_direction,
+                "score_delta": segment_delta,
+            }
+        )
+    if trend_segments:
+        trend_direction = trend_segments[0]["direction"]
+        trend_compare_streak = 1
+        for segment in trend_segments[1:]:
+            if segment.get("direction") != trend_direction:
+                break
+            trend_compare_streak += 1
     else:
-        trend_direction = "flat"
+        trend_direction = "new"
+        trend_compare_streak = 0
+    if occurrence_count <= 1:
+        window_trend_direction = "new"
+    elif trend_score_delta >= 1.0:
+        window_trend_direction = "closing"
+    elif trend_score_delta <= -1.0:
+        window_trend_direction = "worsening"
+    else:
+        window_trend_direction = "flat"
+    if trend_direction == "new":
+        trajectory_summary = "new external gap"
+    elif trend_compare_streak == 1:
+        trajectory_summary = f"{trend_direction} for 1 compare cycle"
+    else:
+        trajectory_summary = f"{trend_direction} for {trend_compare_streak} compare cycles"
     persistent_external_gaps.append(
         {
             "id": family_id,
@@ -1067,6 +1113,9 @@ for family_id, item in gap_history.items():
             "trend_score_delta": trend_score_delta,
             "close_rate_per_compare": close_rate_per_compare,
             "trend_direction": trend_direction,
+            "trend_compare_streak": trend_compare_streak,
+            "window_trend_direction": window_trend_direction,
+            "trajectory_summary": trajectory_summary,
             "reason": "persistent-external-baseline-gap",
         }
     )
@@ -1076,6 +1125,7 @@ persistent_external_gaps.sort(
         -int(item.get("occurrence_count", 0) or 0),
         not item.get("critical", False),
         {"worsening": 0, "flat": 1, "new": 2, "closing": 3}.get(str(item.get("trend_direction", "")).strip().lower(), 4),
+        -int(item.get("trend_compare_streak", 0) or 0),
         float(item.get("avg_score_delta", 0) or 0),
         item.get("id", ""),
     )
@@ -1098,6 +1148,9 @@ payload = {
     "flat_persistent_external_gap_family_ids": [item["id"] for item in persistent_external_gaps if item.get("trend_direction") == "flat"],
     "closing_persistent_external_gap_family_ids": [item["id"] for item in persistent_external_gaps if item.get("trend_direction") == "closing"],
     "new_persistent_external_gap_family_ids": [item["id"] for item in persistent_external_gaps if item.get("trend_direction") == "new"],
+    "sustained_worsening_persistent_external_gap_family_ids": [item["id"] for item in persistent_external_gaps if item.get("trend_direction") == "worsening" and int(item.get("trend_compare_streak", 0) or 0) >= 2],
+    "sustained_flat_persistent_external_gap_family_ids": [item["id"] for item in persistent_external_gaps if item.get("trend_direction") == "flat" and int(item.get("trend_compare_streak", 0) or 0) >= 2],
+    "sustained_closing_persistent_external_gap_family_ids": [item["id"] for item in persistent_external_gaps if item.get("trend_direction") == "closing" and int(item.get("trend_compare_streak", 0) or 0) >= 2],
     "external_registry_path": str(external_registry_path) if external_registry_path.is_file() else "",
     "external_adapters": load_external_adapters(external_registry_path)[:8],
 }
@@ -1309,7 +1362,7 @@ PY
 
   papers_json='{"papers":[]}'
   web_json='{"web_signals":[]}'
-  runtime_json='{"failure_summary":"none","quality_summary":"none","proposal_summary":"none","controller_variants":{},"capability_benchmark":{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[],"persistent_external_gaps":[],"worsening_persistent_external_gap_family_ids":[],"flat_persistent_external_gap_family_ids":[],"closing_persistent_external_gap_family_ids":[],"new_persistent_external_gap_family_ids":[],"external_registry_path":"","external_adapter_count":0,"external_adapters":[]},"counts":{"failure_events":0,"quality_entries":0,"proposal_items":0,"capability_benchmark_scorecards":0,"capability_benchmark_compares":0,"capability_benchmark_external_compares":0}}'
+  runtime_json='{"failure_summary":"none","quality_summary":"none","proposal_summary":"none","controller_variants":{},"capability_benchmark":{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[],"persistent_external_gaps":[],"worsening_persistent_external_gap_family_ids":[],"flat_persistent_external_gap_family_ids":[],"closing_persistent_external_gap_family_ids":[],"new_persistent_external_gap_family_ids":[],"sustained_worsening_persistent_external_gap_family_ids":[],"sustained_flat_persistent_external_gap_family_ids":[],"sustained_closing_persistent_external_gap_family_ids":[],"external_registry_path":"","external_adapter_count":0,"external_adapters":[]},"counts":{"failure_events":0,"quality_entries":0,"proposal_items":0,"capability_benchmark_scorecards":0,"capability_benchmark_compares":0,"capability_benchmark_external_compares":0}}'
   repo_json='{"repo_root":"","worktree":{"tracked_changes":0,"untracked_changes":0},"top_extensions":[],"todo_hotspots":[],"workflows":[],"release_scripts":[]}'
   platform_json='{"os":"","arch":"","commands":{},"scheduler_support":{"launchd":false,"systemd_user":false,"cron":false}}'
 
@@ -1428,6 +1481,7 @@ Rules:
 - If runtime_signals.capability_benchmark.external_gap_families is present, also prioritize families where an external baseline still outperforms Artificer.
 - If runtime_signals.capability_benchmark.persistent_external_gaps is present, treat those recurring external deficits as especially high-leverage targets.
 - If those persistent external gaps carry trend_direction fields, prioritize families that are worsening or flat before ones already closing.
+- If those persistent external gaps also carry trend_compare_streak or sustained_* family ids, prioritize families that have been worsening or flat across multiple compare cycles before one-step or already-closing deficits.
 - If runtime_signals.capability_benchmark.external_adapters is present, prefer improvements that can be checked directly against those named external adapters.
 - Return strict JSON only.
 
@@ -1824,6 +1878,9 @@ for source_items in [capability_benchmark.get("persistent_external_gaps", [])]:
                 "trend_score_delta": 0.0,
                 "close_rate_per_compare": 0.0,
                 "trend_direction": "flat",
+                "trend_compare_streak": 0,
+                "window_trend_direction": "flat",
+                "trajectory_summary": "",
                 "reason": "persistent-external-baseline-gap",
             },
         )
@@ -1862,6 +1919,17 @@ for source_items in [capability_benchmark.get("persistent_external_gaps", [])]:
         if trend_direction not in {"closing", "flat", "worsening", "new"}:
             trend_direction = "flat"
         existing["trend_direction"] = trend_direction
+        try:
+            trend_compare_streak = int(item.get("trend_compare_streak", existing.get("trend_compare_streak", 0)) or 0)
+        except Exception:
+            trend_compare_streak = int(existing.get("trend_compare_streak", 0) or 0)
+        existing["trend_compare_streak"] = trend_compare_streak
+        window_trend_direction = " ".join(str(item.get("window_trend_direction", existing.get("window_trend_direction", "flat"))).split()).strip().lower()
+        if window_trend_direction not in {"closing", "flat", "worsening", "new"}:
+            window_trend_direction = "flat"
+        existing["window_trend_direction"] = window_trend_direction
+        trajectory_summary = " ".join(str(item.get("trajectory_summary", existing.get("trajectory_summary", ""))).split()).strip()
+        existing["trajectory_summary"] = trajectory_summary
         reason_text = " ".join(str(item.get("reason", "")).split()).strip() or "persistent-external-baseline-gap"
         existing["reason"] = reason_text
         persistent_external_gap_map[family_id] = existing
@@ -1870,10 +1938,12 @@ persistent_external_gap_ids = sorted(persistent_external_gap_map.keys())
 
 def persistent_gap_trend_weight(family_id):
     direction = str(persistent_external_gap_map.get(family_id, {}).get("trend_direction", "")).strip().lower()
+    streak = int(persistent_external_gap_map.get(family_id, {}).get("trend_compare_streak", 0) or 0)
+    sustained_bonus = min(2.5, max(0, streak - 1) * 1.25)
     if direction == "worsening":
-        return 3.0
+        return 3.0 + sustained_bonus
     if direction == "flat":
-        return 1.75
+        return 1.75 + min(1.5, max(0, streak - 1) * 0.75)
     if direction == "new":
         return 1.25
     if direction == "closing":
@@ -1988,6 +2058,9 @@ def normalize_report(raw_json, lane_name, model_name):
         flat_persistent_external_hits = [family_id for family_id in targeted_persistent_external_gaps if persistent_external_gap_map.get(family_id, {}).get("trend_direction") == "flat"]
         closing_persistent_external_hits = [family_id for family_id in targeted_persistent_external_gaps if persistent_external_gap_map.get(family_id, {}).get("trend_direction") == "closing"]
         new_persistent_external_hits = [family_id for family_id in targeted_persistent_external_gaps if persistent_external_gap_map.get(family_id, {}).get("trend_direction") == "new"]
+        sustained_worsening_persistent_external_hits = [family_id for family_id in worsening_persistent_external_hits if int(persistent_external_gap_map.get(family_id, {}).get("trend_compare_streak", 0) or 0) >= 2]
+        sustained_flat_persistent_external_hits = [family_id for family_id in flat_persistent_external_hits if int(persistent_external_gap_map.get(family_id, {}).get("trend_compare_streak", 0) or 0) >= 2]
+        sustained_closing_persistent_external_hits = [family_id for family_id in closing_persistent_external_hits if int(persistent_external_gap_map.get(family_id, {}).get("trend_compare_streak", 0) or 0) >= 2]
         persistence_bonus = sum(min(3.0, float(persistent_external_gap_map.get(family_id, {}).get("occurrence_count", 0) or 0)) for family_id in targeted_persistent_external_gaps)
         trend_urgency_bonus = sum(persistent_gap_trend_weight(family_id) for family_id in targeted_persistent_external_gaps)
         alignment_score = (len(benchmark_targets) * 1.5) + (len(targeted_gaps) * 5.0) + (len(critical_hits) * 3.0) + (len(targeted_external_gaps) * 3.5) + (len(critical_external_hits) * 2.0) + (len(targeted_persistent_external_gaps) * 4.5) + (len(critical_persistent_external_hits) * 2.0) + persistence_bonus + trend_urgency_bonus
@@ -1995,7 +2068,13 @@ def normalize_report(raw_json, lane_name, model_name):
             alignment_score -= 2.0
         if alignment_score < 0:
             alignment_score = 0.0
-        if targeted_gaps and worsening_persistent_external_hits:
+        if targeted_gaps and sustained_worsening_persistent_external_hits:
+            promotion_state = "priority"
+            promotion_reason = "Targets current benchmark weak families and sustained worsening external-baseline gaps."
+        elif sustained_worsening_persistent_external_hits:
+            promotion_state = "priority"
+            promotion_reason = "Targets families with sustained worsening external-baseline gaps across multiple compare cycles."
+        elif targeted_gaps and worsening_persistent_external_hits:
             promotion_state = "priority"
             promotion_reason = "Targets current benchmark weak families and worsening persistent external-baseline gaps."
         elif worsening_persistent_external_hits:
@@ -2032,6 +2111,9 @@ def normalize_report(raw_json, lane_name, model_name):
                 "trend_direction": persistent_external_gap_map.get(family_id, {}).get("trend_direction", "flat"),
                 "close_rate_per_compare": round(float(persistent_external_gap_map.get(family_id, {}).get("close_rate_per_compare", 0) or 0), 2),
                 "trend_score_delta": round(float(persistent_external_gap_map.get(family_id, {}).get("trend_score_delta", 0) or 0), 2),
+                "trend_compare_streak": int(persistent_external_gap_map.get(family_id, {}).get("trend_compare_streak", 0) or 0),
+                "window_trend_direction": persistent_external_gap_map.get(family_id, {}).get("window_trend_direction", "flat"),
+                "trajectory_summary": persistent_external_gap_map.get(family_id, {}).get("trajectory_summary", ""),
             }
             for family_id in targeted_persistent_external_gaps
         ]
@@ -2039,6 +2121,9 @@ def normalize_report(raw_json, lane_name, model_name):
         plugin_copy["targeted_flat_persistent_external_capability_gaps"] = flat_persistent_external_hits
         plugin_copy["targeted_closing_persistent_external_capability_gaps"] = closing_persistent_external_hits
         plugin_copy["targeted_new_persistent_external_capability_gaps"] = new_persistent_external_hits
+        plugin_copy["targeted_sustained_worsening_persistent_external_capability_gaps"] = sustained_worsening_persistent_external_hits
+        plugin_copy["targeted_sustained_flat_persistent_external_capability_gaps"] = sustained_flat_persistent_external_hits
+        plugin_copy["targeted_sustained_closing_persistent_external_capability_gaps"] = sustained_closing_persistent_external_hits
         plugin_copy["benchmark_alignment_score"] = round(alignment_score, 2)
         plugin_copy["promotion_state"] = promotion_state
         plugin_copy["promotion_reason"] = promotion_reason
@@ -2077,6 +2162,9 @@ def score_report(report):
     flat_persistent_external_gap_hits = 0
     closing_persistent_external_gap_hits = 0
     new_persistent_external_gap_hits = 0
+    sustained_worsening_persistent_external_gap_hits = 0
+    sustained_flat_persistent_external_gap_hits = 0
+    sustained_closing_persistent_external_gap_hits = 0
     benchmark_alignment_sum = 0.0
     risk_balance = {"low": 0, "medium": 0, "high": 0}
     fingerprints = set()
@@ -2115,12 +2203,19 @@ def score_report(report):
                     if persistent_external_gap_map.get(family_id, {}).get("critical"):
                         critical_persistent_external_gap_hits += 1
                     trend_direction = str(persistent_external_gap_map.get(family_id, {}).get("trend_direction", "")).strip().lower()
+                    trend_compare_streak = int(persistent_external_gap_map.get(family_id, {}).get("trend_compare_streak", 0) or 0)
                     if trend_direction == "worsening":
                         worsening_persistent_external_gap_hits += 1
+                        if trend_compare_streak >= 2:
+                            sustained_worsening_persistent_external_gap_hits += 1
                     elif trend_direction == "flat":
                         flat_persistent_external_gap_hits += 1
+                        if trend_compare_streak >= 2:
+                            sustained_flat_persistent_external_gap_hits += 1
                     elif trend_direction == "closing":
                         closing_persistent_external_gap_hits += 1
+                        if trend_compare_streak >= 2:
+                            sustained_closing_persistent_external_gap_hits += 1
                     elif trend_direction == "new":
                         new_persistent_external_gap_hits += 1
         refs = plugin.get("evidence_refs", [])
@@ -2155,7 +2250,7 @@ def score_report(report):
     implementation_score = min(16.0, plan_count * 2.0 + rationale_count * 1.2)
     avg_instruction_words = (instruction_word_total / plugin_count) if plugin_count else 0.0
     persistent_external_focus_bonus = sum(min(2.5, float(persistent_external_gap_map.get(family_id, {}).get("occurrence_count", 0) or 0)) for family_id in targeted_persistent_external_gaps)
-    persistent_external_trend_bonus = (worsening_persistent_external_gap_hits * 3.0) + (flat_persistent_external_gap_hits * 1.5) + (new_persistent_external_gap_hits * 1.0) + (closing_persistent_external_gap_hits * 0.5)
+    persistent_external_trend_bonus = (worsening_persistent_external_gap_hits * 3.0) + (flat_persistent_external_gap_hits * 1.5) + (new_persistent_external_gap_hits * 1.0) + (closing_persistent_external_gap_hits * 0.5) + (sustained_worsening_persistent_external_gap_hits * 2.0) + (sustained_flat_persistent_external_gap_hits * 1.0) + (sustained_closing_persistent_external_gap_hits * 0.25)
     benchmark_focus_score = min(24.0, len(targeted_weak_gaps) * 6.0 + critical_weak_gap_hits * 2.5 + len(targeted_external_gaps) * 4.0 + critical_external_gap_hits * 1.5 + len(targeted_persistent_external_gaps) * 5.0 + critical_persistent_external_gap_hits * 1.5 + persistent_external_focus_bonus + persistent_external_trend_bonus + len(benchmark_target_coverage) * 1.2)
     instruction_quality = 0.0
     if avg_instruction_words >= 14:
@@ -2197,6 +2292,9 @@ def score_report(report):
         "flat_persistent_external_gap_hits": flat_persistent_external_gap_hits,
         "closing_persistent_external_gap_hits": closing_persistent_external_gap_hits,
         "new_persistent_external_gap_hits": new_persistent_external_gap_hits,
+        "sustained_worsening_persistent_external_gap_hits": sustained_worsening_persistent_external_gap_hits,
+        "sustained_flat_persistent_external_gap_hits": sustained_flat_persistent_external_gap_hits,
+        "sustained_closing_persistent_external_gap_hits": sustained_closing_persistent_external_gap_hits,
         "benchmark_alignment_score": round(benchmark_alignment_sum, 2),
         "weak_gap_miss": bool(weak_gap_miss_penalty > 0),
         "external_gap_miss": bool(external_gap_miss_penalty > 0),
@@ -2227,6 +2325,9 @@ challenger_score = score_report(challenger) if competition_enabled else {
     "flat_persistent_external_gap_hits": 0,
     "closing_persistent_external_gap_hits": 0,
     "new_persistent_external_gap_hits": 0,
+    "sustained_worsening_persistent_external_gap_hits": 0,
+    "sustained_flat_persistent_external_gap_hits": 0,
+    "sustained_closing_persistent_external_gap_hits": 0,
     "benchmark_alignment_score": 0.0,
     "weak_gap_miss": False,
     "external_gap_miss": False,
@@ -2273,6 +2374,7 @@ merged_plugins.sort(
         promotion_rank.get(str(payload.get("promotion_state", "candidate")).strip().lower(), 3),
         -len(payload.get("targeted_capability_gaps", []) if isinstance(payload.get("targeted_capability_gaps", []), list) else []),
         -sum(1 for family_id in (payload.get("targeted_capability_gaps", []) if isinstance(payload.get("targeted_capability_gaps", []), list) else []) if weak_family_map.get(family_id, {}).get("critical")),
+        -len(payload.get("targeted_sustained_worsening_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_sustained_worsening_persistent_external_capability_gaps", []), list) else []),
         -len(payload.get("targeted_worsening_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_worsening_persistent_external_capability_gaps", []), list) else []),
         -len(payload.get("targeted_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_persistent_external_capability_gaps", []), list) else []),
         -sum(1 for family_id in (payload.get("targeted_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_persistent_external_capability_gaps", []), list) else []) if persistent_external_gap_map.get(family_id, {}).get("critical")),
@@ -2349,6 +2451,9 @@ result = {
         "flat_persistent_external_gap_family_ids": [family_id for family_id in persistent_external_gap_ids if persistent_external_gap_map.get(family_id, {}).get("trend_direction") == "flat"],
         "closing_persistent_external_gap_family_ids": [family_id for family_id in persistent_external_gap_ids if persistent_external_gap_map.get(family_id, {}).get("trend_direction") == "closing"],
         "new_persistent_external_gap_family_ids": [family_id for family_id in persistent_external_gap_ids if persistent_external_gap_map.get(family_id, {}).get("trend_direction") == "new"],
+        "sustained_worsening_persistent_external_gap_family_ids": [family_id for family_id in persistent_external_gap_ids if persistent_external_gap_map.get(family_id, {}).get("trend_direction") == "worsening" and int(persistent_external_gap_map.get(family_id, {}).get("trend_compare_streak", 0) or 0) >= 2],
+        "sustained_flat_persistent_external_gap_family_ids": [family_id for family_id in persistent_external_gap_ids if persistent_external_gap_map.get(family_id, {}).get("trend_direction") == "flat" and int(persistent_external_gap_map.get(family_id, {}).get("trend_compare_streak", 0) or 0) >= 2],
+        "sustained_closing_persistent_external_gap_family_ids": [family_id for family_id in persistent_external_gap_ids if persistent_external_gap_map.get(family_id, {}).get("trend_direction") == "closing" and int(persistent_external_gap_map.get(family_id, {}).get("trend_compare_streak", 0) or 0) >= 2],
     },
 }
 print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
@@ -2462,6 +2567,18 @@ new_persistent_external_gap_family_ids = capability_benchmark_focus.get("new_per
 if not isinstance(new_persistent_external_gap_family_ids, list):
     new_persistent_external_gap_family_ids = []
 new_persistent_external_gap_family_ids = [" ".join(str(item).split()).strip() for item in new_persistent_external_gap_family_ids if str(item).strip()]
+sustained_worsening_persistent_external_gap_family_ids = capability_benchmark_focus.get("sustained_worsening_persistent_external_gap_family_ids", [])
+if not isinstance(sustained_worsening_persistent_external_gap_family_ids, list):
+    sustained_worsening_persistent_external_gap_family_ids = []
+sustained_worsening_persistent_external_gap_family_ids = [" ".join(str(item).split()).strip() for item in sustained_worsening_persistent_external_gap_family_ids if str(item).strip()]
+sustained_flat_persistent_external_gap_family_ids = capability_benchmark_focus.get("sustained_flat_persistent_external_gap_family_ids", [])
+if not isinstance(sustained_flat_persistent_external_gap_family_ids, list):
+    sustained_flat_persistent_external_gap_family_ids = []
+sustained_flat_persistent_external_gap_family_ids = [" ".join(str(item).split()).strip() for item in sustained_flat_persistent_external_gap_family_ids if str(item).strip()]
+sustained_closing_persistent_external_gap_family_ids = capability_benchmark_focus.get("sustained_closing_persistent_external_gap_family_ids", [])
+if not isinstance(sustained_closing_persistent_external_gap_family_ids, list):
+    sustained_closing_persistent_external_gap_family_ids = []
+sustained_closing_persistent_external_gap_family_ids = [" ".join(str(item).split()).strip() for item in sustained_closing_persistent_external_gap_family_ids if str(item).strip()]
 compare_recommendation = " ".join(str(latest_compare.get("recommendation", "")).split()).strip()
 candidate_promotable = bool(latest_compare.get("candidate_promotable", False))
 external_compare_recommendation = " ".join(str(latest_external_compare.get("recommendation", "")).split()).strip()
@@ -2714,6 +2831,18 @@ for index, plugin in enumerate(plugins, 1):
     if not isinstance(targeted_new_persistent_external_capability_gaps, list):
         targeted_new_persistent_external_capability_gaps = []
     payload["targeted_new_persistent_external_capability_gaps"] = [" ".join(str(tag).split()).strip() for tag in targeted_new_persistent_external_capability_gaps[:6] if str(tag).strip()]
+    targeted_sustained_worsening_persistent_external_capability_gaps = payload.get("targeted_sustained_worsening_persistent_external_capability_gaps", [])
+    if not isinstance(targeted_sustained_worsening_persistent_external_capability_gaps, list):
+        targeted_sustained_worsening_persistent_external_capability_gaps = []
+    payload["targeted_sustained_worsening_persistent_external_capability_gaps"] = [" ".join(str(tag).split()).strip() for tag in targeted_sustained_worsening_persistent_external_capability_gaps[:6] if str(tag).strip()]
+    targeted_sustained_flat_persistent_external_capability_gaps = payload.get("targeted_sustained_flat_persistent_external_capability_gaps", [])
+    if not isinstance(targeted_sustained_flat_persistent_external_capability_gaps, list):
+        targeted_sustained_flat_persistent_external_capability_gaps = []
+    payload["targeted_sustained_flat_persistent_external_capability_gaps"] = [" ".join(str(tag).split()).strip() for tag in targeted_sustained_flat_persistent_external_capability_gaps[:6] if str(tag).strip()]
+    targeted_sustained_closing_persistent_external_capability_gaps = payload.get("targeted_sustained_closing_persistent_external_capability_gaps", [])
+    if not isinstance(targeted_sustained_closing_persistent_external_capability_gaps, list):
+        targeted_sustained_closing_persistent_external_capability_gaps = []
+    payload["targeted_sustained_closing_persistent_external_capability_gaps"] = [" ".join(str(tag).split()).strip() for tag in targeted_sustained_closing_persistent_external_capability_gaps[:6] if str(tag).strip()]
     persistent_external_gap_trends = payload.get("persistent_external_gap_trends", [])
     if not isinstance(persistent_external_gap_trends, list):
         persistent_external_gap_trends = []
@@ -2875,6 +3004,9 @@ for index, plugin in enumerate(plugins, 1):
         "flat_persistent_external_gap_family_ids": flat_persistent_external_gap_family_ids,
         "closing_persistent_external_gap_family_ids": closing_persistent_external_gap_family_ids,
         "new_persistent_external_gap_family_ids": new_persistent_external_gap_family_ids,
+        "sustained_worsening_persistent_external_gap_family_ids": sustained_worsening_persistent_external_gap_family_ids,
+        "sustained_flat_persistent_external_gap_family_ids": sustained_flat_persistent_external_gap_family_ids,
+        "sustained_closing_persistent_external_gap_family_ids": sustained_closing_persistent_external_gap_family_ids,
         "external_baseline_name": external_baseline_name,
     }
 
@@ -2921,6 +3053,9 @@ last_run = {
         "flat_persistent_external_gap_family_ids": flat_persistent_external_gap_family_ids,
         "closing_persistent_external_gap_family_ids": closing_persistent_external_gap_family_ids,
         "new_persistent_external_gap_family_ids": new_persistent_external_gap_family_ids,
+        "sustained_worsening_persistent_external_gap_family_ids": sustained_worsening_persistent_external_gap_family_ids,
+        "sustained_flat_persistent_external_gap_family_ids": sustained_flat_persistent_external_gap_family_ids,
+        "sustained_closing_persistent_external_gap_family_ids": sustained_closing_persistent_external_gap_family_ids,
         "external_baseline_name": external_baseline_name,
     },
 }

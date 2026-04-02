@@ -121,6 +121,15 @@ Artificer now also tracks whether each recurring external gap is:
 
 That trend signal matters because self-improvement should spend more attention on recurring deficits that are worsening or flat than on deficits that are already closing.
 
+Artificer now also keeps a compare-cycle streak for that current direction.
+
+That means it can distinguish:
+
+- a family that worsened once
+- from a family that has been worsening for multiple compare cycles in a row
+
+The same applies to closing and flat trajectories. This is a better prioritization signal because it tells Artificer whether an external deficit is transient, already recovering, or persistently moving the wrong way.
+
 Self-improvement now reads those artifacts and treats the reported family gaps as measured targets, not vague aspirations.
 
 ## External Adapter Registry
