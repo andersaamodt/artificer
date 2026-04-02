@@ -492,7 +492,7 @@ PY
 
 self_improve_last_run_json() {
   if [ ! -f "$self_improve_last_run_file" ]; then
-    printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[],"capability_benchmark":{"latest_recommendation":"","compare_recommendation":"","candidate_promotable":false,"weak_family_ids":[],"recovered_families":[],"new_weak_families":[],"scorecard_count":0,"compare_count":0,"external_compare_count":0,"external_compare_recommendation":"","candidate_beats_external":false,"external_gap_family_ids":[],"persistent_external_gap_family_ids":[],"worsening_persistent_external_gap_family_ids":[],"flat_persistent_external_gap_family_ids":[],"closing_persistent_external_gap_family_ids":[],"new_persistent_external_gap_family_ids":[],"sustained_worsening_persistent_external_gap_family_ids":[],"sustained_flat_persistent_external_gap_family_ids":[],"sustained_closing_persistent_external_gap_family_ids":[],"external_baseline_name":"","external_adapter_count":0,"external_adapters":[]}}'
+    printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[],"capability_benchmark":{"latest_recommendation":"","compare_recommendation":"","candidate_promotable":false,"weak_family_ids":[],"internal_family_closure_report":[],"regressing_internal_family_ids":[],"flat_internal_family_ids":[],"improving_internal_family_ids":[],"new_internal_family_ids":[],"sustained_regressing_internal_family_ids":[],"sustained_flat_internal_family_ids":[],"sustained_improving_internal_family_ids":[],"recovered_families":[],"new_weak_families":[],"scorecard_count":0,"compare_count":0,"external_compare_count":0,"external_compare_recommendation":"","candidate_beats_external":false,"external_gap_family_ids":[],"persistent_external_gap_family_ids":[],"worsening_persistent_external_gap_family_ids":[],"flat_persistent_external_gap_family_ids":[],"closing_persistent_external_gap_family_ids":[],"new_persistent_external_gap_family_ids":[],"sustained_worsening_persistent_external_gap_family_ids":[],"sustained_flat_persistent_external_gap_family_ids":[],"sustained_closing_persistent_external_gap_family_ids":[],"external_baseline_name":"","external_adapter_count":0,"external_adapters":[]}}'
     return 0
   fi
   python3 - "$self_improve_last_run_file" <<'PY'
@@ -528,6 +528,14 @@ payload["capability_benchmark"].setdefault("latest_recommendation", "")
 payload["capability_benchmark"].setdefault("compare_recommendation", "")
 payload["capability_benchmark"].setdefault("candidate_promotable", False)
 payload["capability_benchmark"].setdefault("weak_family_ids", [])
+payload["capability_benchmark"].setdefault("internal_family_closure_report", [])
+payload["capability_benchmark"].setdefault("regressing_internal_family_ids", [])
+payload["capability_benchmark"].setdefault("flat_internal_family_ids", [])
+payload["capability_benchmark"].setdefault("improving_internal_family_ids", [])
+payload["capability_benchmark"].setdefault("new_internal_family_ids", [])
+payload["capability_benchmark"].setdefault("sustained_regressing_internal_family_ids", [])
+payload["capability_benchmark"].setdefault("sustained_flat_internal_family_ids", [])
+payload["capability_benchmark"].setdefault("sustained_improving_internal_family_ids", [])
 payload["capability_benchmark"].setdefault("recovered_families", [])
 payload["capability_benchmark"].setdefault("new_weak_families", [])
 payload["capability_benchmark"].setdefault("scorecard_count", 0)
@@ -800,7 +808,7 @@ self_improve_runtime_signals_json() {
   quality_summary="none"
   proposal_summary="none"
   controller_json="{}"
-  capability_benchmark_json='{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[],"persistent_external_gaps":[],"worsening_persistent_external_gap_family_ids":[],"flat_persistent_external_gap_family_ids":[],"closing_persistent_external_gap_family_ids":[],"new_persistent_external_gap_family_ids":[],"sustained_worsening_persistent_external_gap_family_ids":[],"sustained_flat_persistent_external_gap_family_ids":[],"sustained_closing_persistent_external_gap_family_ids":[],"external_registry_path":"","external_adapter_count":0,"external_adapters":[]}'
+  capability_benchmark_json='{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"internal_family_closure_report":[],"regressing_internal_family_ids":[],"flat_internal_family_ids":[],"improving_internal_family_ids":[],"new_internal_family_ids":[],"sustained_regressing_internal_family_ids":[],"sustained_flat_internal_family_ids":[],"sustained_improving_internal_family_ids":[],"external_gap_families":[],"persistent_external_gaps":[],"worsening_persistent_external_gap_family_ids":[],"flat_persistent_external_gap_family_ids":[],"closing_persistent_external_gap_family_ids":[],"new_persistent_external_gap_family_ids":[],"sustained_worsening_persistent_external_gap_family_ids":[],"sustained_flat_persistent_external_gap_family_ids":[],"sustained_closing_persistent_external_gap_family_ids":[],"external_registry_path":"","external_adapter_count":0,"external_adapters":[]}'
 
   if [ "$mode_runtime_lib_loaded" = "1" ]; then
     ensure_mode_runtime_bootstrap
@@ -1000,6 +1008,7 @@ latest_compare = parse_json(latest_compare_path) if latest_compare_path else {}
 latest_external_compare = parse_json(latest_external_compare_path) if latest_external_compare_path else {}
 
 high_leverage_gaps = []
+internal_family_closure_report = []
 external_gap_families = []
 persistent_external_gaps = []
 weak_families = latest_scorecard.get("weak_families", []) if isinstance(latest_scorecard, dict) else []
@@ -1015,6 +1024,155 @@ if isinstance(weak_families, list):
                 "reason": str(item.get("reason", "")).strip(),
             }
         )
+
+internal_family_history = {}
+if scorecard_paths:
+    recent_scorecard_paths = sorted(
+        scorecard_paths,
+        key=lambda item: (item.name, item.stat().st_mtime),
+        reverse=True,
+    )[:6]
+    for scorecard_path in recent_scorecard_paths:
+        payload = parse_json(scorecard_path)
+        families = payload.get("families", []) if isinstance(payload, dict) else []
+        weak_ids = {
+            str(item.get("id", "")).strip()
+            for item in payload.get("weak_families", [])
+            if isinstance(item, dict) and str(item.get("id", "")).strip()
+        } if isinstance(payload, dict) and isinstance(payload.get("weak_families", []), list) else set()
+        if not isinstance(families, list):
+            continue
+        for item in families:
+            if not isinstance(item, dict):
+                continue
+            family_id = str(item.get("id", "")).strip()
+            if not family_id:
+                continue
+            existing = internal_family_history.get(
+                family_id,
+                {
+                    "id": family_id,
+                    "occurrence_count": 0,
+                    "critical": False,
+                    "score_total": 0.0,
+                    "latest_score": 0.0,
+                    "oldest_score": 0.0,
+                    "scores": [],
+                    "weak_occurrence_count": 0,
+                    "latest_weak": False,
+                    "latest_gate_pass": True,
+                    "latest_risk": "",
+                },
+            )
+            try:
+                score_value = float(item.get("score", 0) or 0)
+            except Exception:
+                score_value = 0.0
+            gate_pass = bool(item.get("gate_pass", True))
+            latest_weak = family_id in weak_ids
+            existing["occurrence_count"] += 1
+            existing["critical"] = bool(existing.get("critical", False) or item.get("critical", False))
+            existing["score_total"] += score_value
+            if existing["occurrence_count"] == 1:
+                existing["latest_score"] = score_value
+                existing["latest_weak"] = latest_weak
+                existing["latest_gate_pass"] = gate_pass
+                existing["latest_risk"] = " ".join(str(item.get("risk", "")).split()).strip().lower()
+            existing["oldest_score"] = score_value
+            existing["scores"].append(score_value)
+            if latest_weak:
+                existing["weak_occurrence_count"] += 1
+            internal_family_history[family_id] = existing
+
+for family_id, item in internal_family_history.items():
+    occurrence_count = int(item.get("occurrence_count", 0) or 0)
+    if occurrence_count <= 0:
+        continue
+    avg_score = round(float(item.get("score_total", 0.0) or 0.0) / occurrence_count, 2)
+    latest_score = round(float(item.get("latest_score", 0.0) or 0.0), 2)
+    oldest_score = round(float(item.get("oldest_score", 0.0) or 0.0), 2)
+    score_change = round(latest_score - oldest_score, 2)
+    close_rate_per_scorecard = 0.0
+    if occurrence_count > 1:
+        close_rate_per_scorecard = round(score_change / float(occurrence_count - 1), 2)
+    score_points = item.get("scores", [])
+    if not isinstance(score_points, list):
+        score_points = []
+    trend_segments = []
+    for index in range(len(score_points) - 1):
+        try:
+            segment_delta = round(float(score_points[index] or 0) - float(score_points[index + 1] or 0), 2)
+        except Exception:
+            segment_delta = 0.0
+        if segment_delta >= 1.0:
+            segment_direction = "improving"
+        elif segment_delta <= -1.0:
+            segment_direction = "regressing"
+        else:
+            segment_direction = "flat"
+        trend_segments.append(
+            {
+                "direction": segment_direction,
+                "score_delta": segment_delta,
+            }
+        )
+    if trend_segments:
+        trend_direction = trend_segments[0]["direction"]
+        trend_scorecard_streak = 1
+        for segment in trend_segments[1:]:
+            if segment.get("direction") != trend_direction:
+                break
+            trend_scorecard_streak += 1
+    else:
+        trend_direction = "new"
+        trend_scorecard_streak = 0
+    if occurrence_count <= 1:
+        window_trend_direction = "new"
+    elif score_change >= 1.0:
+        window_trend_direction = "improving"
+    elif score_change <= -1.0:
+        window_trend_direction = "regressing"
+    else:
+        window_trend_direction = "flat"
+    if trend_direction == "new":
+        trajectory_summary = "new internal benchmark trajectory"
+    elif trend_scorecard_streak == 1:
+        trajectory_summary = f"{trend_direction} for 1 scorecard"
+    else:
+        trajectory_summary = f"{trend_direction} for {trend_scorecard_streak} scorecards"
+    internal_family_closure_report.append(
+        {
+            "id": family_id,
+            "occurrence_count": occurrence_count,
+            "critical": bool(item.get("critical", False)),
+            "avg_score": avg_score,
+            "latest_score": latest_score,
+            "oldest_score": oldest_score,
+            "score_change": score_change,
+            "close_rate_per_scorecard": close_rate_per_scorecard,
+            "trend_direction": trend_direction,
+            "trend_scorecard_streak": trend_scorecard_streak,
+            "window_trend_direction": window_trend_direction,
+            "trajectory_summary": trajectory_summary,
+            "latest_weak": bool(item.get("latest_weak", False)),
+            "weak_occurrence_count": int(item.get("weak_occurrence_count", 0) or 0),
+            "latest_gate_pass": bool(item.get("latest_gate_pass", True)),
+            "latest_risk": str(item.get("latest_risk", "")).strip().lower(),
+            "reason": "internal-benchmark-family-trajectory",
+        }
+    )
+
+internal_family_closure_report.sort(
+    key=lambda item: (
+        not item.get("latest_weak", False),
+        bool(item.get("latest_gate_pass", True)),
+        {"regressing": 0, "flat": 1, "new": 2, "improving": 3}.get(str(item.get("trend_direction", "")).strip().lower(), 4),
+        -int(item.get("trend_scorecard_streak", 0) or 0),
+        float(item.get("latest_score", 0) or 0),
+        item.get("id", ""),
+    )
+)
+internal_family_closure_report = internal_family_closure_report[:6]
 
 candidate_gap_families = latest_external_compare.get("candidate_gap_families", []) if isinstance(latest_external_compare, dict) else []
 if isinstance(candidate_gap_families, list):
@@ -1171,6 +1329,14 @@ payload = {
     "latest_compare": latest_compare,
     "latest_external_compare": latest_external_compare,
     "high_leverage_gaps": high_leverage_gaps,
+    "internal_family_closure_report": internal_family_closure_report,
+    "regressing_internal_family_ids": [item["id"] for item in internal_family_closure_report if item.get("trend_direction") == "regressing"],
+    "flat_internal_family_ids": [item["id"] for item in internal_family_closure_report if item.get("trend_direction") == "flat"],
+    "improving_internal_family_ids": [item["id"] for item in internal_family_closure_report if item.get("trend_direction") == "improving"],
+    "new_internal_family_ids": [item["id"] for item in internal_family_closure_report if item.get("trend_direction") == "new"],
+    "sustained_regressing_internal_family_ids": [item["id"] for item in internal_family_closure_report if item.get("trend_direction") == "regressing" and int(item.get("trend_scorecard_streak", 0) or 0) >= 2],
+    "sustained_flat_internal_family_ids": [item["id"] for item in internal_family_closure_report if item.get("trend_direction") == "flat" and int(item.get("trend_scorecard_streak", 0) or 0) >= 2],
+    "sustained_improving_internal_family_ids": [item["id"] for item in internal_family_closure_report if item.get("trend_direction") == "improving" and int(item.get("trend_scorecard_streak", 0) or 0) >= 2],
     "external_gap_families": external_gap_families,
     "persistent_external_gaps": persistent_external_gaps,
     "worsening_persistent_external_gap_family_ids": [item["id"] for item in persistent_external_gaps if item.get("trend_direction") == "worsening"],
@@ -1366,6 +1532,28 @@ for source_items in [capability_benchmark.get("high_leverage_gaps", []), capabil
         existing["critical"] = bool(existing.get("critical", False) or item.get("critical", False))
         weak_family_map[family_id] = existing
 
+family_closure_map = {}
+for item in capability_benchmark.get("internal_family_closure_report", []):
+    if not isinstance(item, dict):
+        continue
+    family_id = normalize_family_id(item.get("id", ""))
+    if not family_id:
+        continue
+    family_closure_map[family_id] = {
+        "id": family_id,
+        "critical": bool(item.get("critical", False)),
+        "latest_weak": bool(item.get("latest_weak", False)),
+        "latest_gate_pass": bool(item.get("latest_gate_pass", True)),
+        "latest_risk": " ".join(str(item.get("latest_risk", "")).split()).strip().lower(),
+        "trend_direction": " ".join(str(item.get("trend_direction", "flat")).split()).strip().lower(),
+        "trend_scorecard_streak": int(item.get("trend_scorecard_streak", 0) or 0),
+        "window_trend_direction": " ".join(str(item.get("window_trend_direction", "flat")).split()).strip().lower(),
+        "trajectory_summary": " ".join(str(item.get("trajectory_summary", "")).split()).strip(),
+        "latest_score": float(item.get("latest_score", 0) or 0),
+        "score_change": float(item.get("score_change", 0) or 0),
+        "weak_occurrence_count": int(item.get("weak_occurrence_count", 0) or 0),
+    }
+
 external_gap_map = {}
 for source_items in [capability_benchmark.get("external_gap_families", []), capability_benchmark.get("latest_external_compare", {}).get("candidate_gap_families", [])]:
     if not isinstance(source_items, list):
@@ -1407,6 +1595,28 @@ def benchmark_weight(family_id):
         weight += 5.0
         if weak_item.get("critical"):
             weight += 2.0
+    closure_item = family_closure_map.get(family_id, {})
+    if closure_item:
+        latest_score = float(closure_item.get("latest_score", 0) or 0)
+        latest_gate_pass = bool(closure_item.get("latest_gate_pass", True))
+        latest_weak = bool(closure_item.get("latest_weak", False))
+        if latest_weak or not latest_gate_pass or latest_score < 86.0:
+            direction = closure_item.get("trend_direction", "flat")
+            streak = int(closure_item.get("trend_scorecard_streak", 0) or 0)
+            if direction == "regressing":
+                weight += 2.5
+                if streak >= 2:
+                    weight += 1.5
+            elif direction == "flat":
+                weight += 1.0
+                if streak >= 2:
+                    weight += 0.75
+            elif direction == "new":
+                weight += 0.75
+            elif direction == "improving":
+                weight += 0.25
+        if closure_item.get("critical"):
+            weight += 0.5
     external_item = external_gap_map.get(family_id, {})
     if external_item:
         weight += 3.5
@@ -1446,10 +1656,28 @@ def relevance_weight(meta):
 
 
 def status_reason(family_id):
+    closure_item = family_closure_map.get(family_id, {})
     persistent_item = persistent_external_gap_map.get(family_id, {})
     weak_item = weak_family_map.get(family_id, {})
     external_item = external_gap_map.get(family_id, {})
     reason_parts = []
+    if closure_item:
+        direction = closure_item.get("trend_direction", "flat")
+        streak = int(closure_item.get("trend_scorecard_streak", 0) or 0)
+        if direction == "regressing" and streak >= 2:
+            reason_parts.append("sustained regressing internal benchmark trend")
+        elif direction == "flat" and streak >= 2:
+            reason_parts.append("sustained flat internal benchmark trend")
+        elif direction == "improving" and streak >= 2:
+            reason_parts.append("sustained improving internal benchmark trend")
+        elif direction == "regressing":
+            reason_parts.append("regressing internal benchmark trend")
+        elif direction == "flat":
+            reason_parts.append("flat internal benchmark trend")
+        elif direction == "improving":
+            reason_parts.append("improving internal benchmark trend")
+        elif direction == "new":
+            reason_parts.append("new internal benchmark trajectory")
     if persistent_item:
         direction = persistent_item.get("trend_direction", "flat")
         streak = int(persistent_item.get("trend_compare_streak", 0) or 0)
@@ -1472,7 +1700,8 @@ def status_reason(family_id):
     if weak_item:
         reason_parts.append("measured weak family")
     critical = bool(
-        weak_item.get("critical")
+        closure_item.get("critical")
+        or weak_item.get("critical")
         or external_item.get("critical")
         or persistent_item.get("critical")
     )
@@ -1694,7 +1923,13 @@ if run_mode not in {"instant", "chat"}:
         if "sustained worsening" in reason_text:
             family_effort_rank = max(family_effort_rank, effort_rank["extra-high"])
             family_iterations += 2
+        elif "sustained regressing" in reason_text:
+            family_effort_rank = max(family_effort_rank, effort_rank["extra-high"])
+            family_iterations += 2
         elif "worsening" in reason_text:
+            family_effort_rank = max(family_effort_rank, effort_rank["extra-high"])
+            family_iterations += 1
+        elif "regressing" in reason_text:
             family_effort_rank = max(family_effort_rank, effort_rank["extra-high"])
             family_iterations += 1
         elif "sustained flat" in reason_text:
@@ -1934,7 +2169,7 @@ PY
 
   papers_json='{"papers":[]}'
   web_json='{"web_signals":[]}'
-  runtime_json='{"failure_summary":"none","quality_summary":"none","proposal_summary":"none","controller_variants":{},"capability_benchmark":{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[],"persistent_external_gaps":[],"worsening_persistent_external_gap_family_ids":[],"flat_persistent_external_gap_family_ids":[],"closing_persistent_external_gap_family_ids":[],"new_persistent_external_gap_family_ids":[],"sustained_worsening_persistent_external_gap_family_ids":[],"sustained_flat_persistent_external_gap_family_ids":[],"sustained_closing_persistent_external_gap_family_ids":[],"external_registry_path":"","external_adapter_count":0,"external_adapters":[]},"counts":{"failure_events":0,"quality_entries":0,"proposal_items":0,"capability_benchmark_scorecards":0,"capability_benchmark_compares":0,"capability_benchmark_external_compares":0}}'
+  runtime_json='{"failure_summary":"none","quality_summary":"none","proposal_summary":"none","controller_variants":{},"capability_benchmark":{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"internal_family_closure_report":[],"regressing_internal_family_ids":[],"flat_internal_family_ids":[],"improving_internal_family_ids":[],"new_internal_family_ids":[],"sustained_regressing_internal_family_ids":[],"sustained_flat_internal_family_ids":[],"sustained_improving_internal_family_ids":[],"external_gap_families":[],"persistent_external_gaps":[],"worsening_persistent_external_gap_family_ids":[],"flat_persistent_external_gap_family_ids":[],"closing_persistent_external_gap_family_ids":[],"new_persistent_external_gap_family_ids":[],"sustained_worsening_persistent_external_gap_family_ids":[],"sustained_flat_persistent_external_gap_family_ids":[],"sustained_closing_persistent_external_gap_family_ids":[],"external_registry_path":"","external_adapter_count":0,"external_adapters":[]},"counts":{"failure_events":0,"quality_entries":0,"proposal_items":0,"capability_benchmark_scorecards":0,"capability_benchmark_compares":0,"capability_benchmark_external_compares":0}}'
   repo_json='{"repo_root":"","worktree":{"tracked_changes":0,"untracked_changes":0},"top_extensions":[],"todo_hotspots":[],"workflows":[],"release_scripts":[]}'
   platform_json='{"os":"","arch":"","commands":{},"scheduler_support":{"launchd":false,"systemd_user":false,"cron":false}}'
 
@@ -2404,6 +2639,68 @@ for source_items in [capability_benchmark.get("high_leverage_gaps", []), latest_
         existing["score"] = score_value
         weak_family_map[family_id] = existing
 weak_family_ids = sorted(weak_family_map.keys())
+family_closure_map = {}
+for source_items in [capability_benchmark.get("internal_family_closure_report", [])]:
+    if not isinstance(source_items, list):
+        continue
+    for item in source_items:
+        if not isinstance(item, dict):
+            continue
+        family_id = normalize_benchmark_family_id(item.get("id", ""))
+        if not family_id:
+            continue
+        existing = family_closure_map.get(
+            family_id,
+            {
+                "id": family_id,
+                "critical": False,
+                "latest_weak": False,
+                "latest_gate_pass": True,
+                "latest_risk": "",
+                "trend_direction": "flat",
+                "trend_scorecard_streak": 0,
+                "window_trend_direction": "flat",
+                "trajectory_summary": "",
+                "latest_score": 0.0,
+                "score_change": 0.0,
+                "weak_occurrence_count": 0,
+            },
+        )
+        existing["critical"] = bool(existing.get("critical", False) or item.get("critical", False))
+        existing["latest_weak"] = bool(item.get("latest_weak", existing.get("latest_weak", False)))
+        existing["latest_gate_pass"] = bool(item.get("latest_gate_pass", existing.get("latest_gate_pass", True)))
+        existing["latest_risk"] = " ".join(str(item.get("latest_risk", existing.get("latest_risk", ""))).split()).strip().lower()
+        trend_direction = " ".join(str(item.get("trend_direction", existing.get("trend_direction", "flat"))).split()).strip().lower()
+        if trend_direction not in {"improving", "flat", "regressing", "new"}:
+            trend_direction = "flat"
+        existing["trend_direction"] = trend_direction
+        try:
+            trend_scorecard_streak = int(item.get("trend_scorecard_streak", existing.get("trend_scorecard_streak", 0)) or 0)
+        except Exception:
+            trend_scorecard_streak = int(existing.get("trend_scorecard_streak", 0) or 0)
+        existing["trend_scorecard_streak"] = trend_scorecard_streak
+        window_trend_direction = " ".join(str(item.get("window_trend_direction", existing.get("window_trend_direction", "flat"))).split()).strip().lower()
+        if window_trend_direction not in {"improving", "flat", "regressing", "new"}:
+            window_trend_direction = "flat"
+        existing["window_trend_direction"] = window_trend_direction
+        existing["trajectory_summary"] = " ".join(str(item.get("trajectory_summary", existing.get("trajectory_summary", ""))).split()).strip()
+        try:
+            latest_score = float(item.get("latest_score", existing.get("latest_score", 0)) or 0)
+        except Exception:
+            latest_score = float(existing.get("latest_score", 0) or 0)
+        existing["latest_score"] = latest_score
+        try:
+            score_change = float(item.get("score_change", existing.get("score_change", 0)) or 0)
+        except Exception:
+            score_change = float(existing.get("score_change", 0) or 0)
+        existing["score_change"] = score_change
+        try:
+            weak_occurrence_count = int(item.get("weak_occurrence_count", existing.get("weak_occurrence_count", 0)) or 0)
+        except Exception:
+            weak_occurrence_count = int(existing.get("weak_occurrence_count", 0) or 0)
+        existing["weak_occurrence_count"] = weak_occurrence_count
+        family_closure_map[family_id] = existing
+family_closure_map_ids = sorted(family_closure_map.keys())
 latest_external_compare = capability_benchmark.get("latest_external_compare", {})
 if not isinstance(latest_external_compare, dict):
     latest_external_compare = {}
@@ -2523,6 +2820,21 @@ def persistent_gap_trend_weight(family_id):
     return 0.0
 
 
+def internal_family_trend_weight(family_id):
+    direction = str(family_closure_map.get(family_id, {}).get("trend_direction", "")).strip().lower()
+    streak = int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0)
+    sustained_bonus = min(2.0, max(0, streak - 1) * 1.0)
+    if direction == "regressing":
+        return 2.5 + sustained_bonus
+    if direction == "flat":
+        return 1.25 + min(1.25, max(0, streak - 1) * 0.5)
+    if direction == "new":
+        return 0.75
+    if direction == "improving":
+        return 0.25
+    return 0.0
+
+
 def infer_benchmark_targets(plugin_copy):
     combined = " ".join([
         str(plugin_copy.get("name", "")),
@@ -2621,9 +2933,18 @@ def normalize_report(raw_json, lane_name, model_name):
         plugin_copy["risk_level"] = risk_level
         benchmark_targets = infer_benchmark_targets(plugin_copy)
         targeted_gaps = [family_id for family_id in benchmark_targets if family_id in weak_family_map]
+        targeted_internal_closure_gaps = [family_id for family_id in benchmark_targets if family_id in family_closure_map]
         targeted_external_gaps = [family_id for family_id in benchmark_targets if family_id in external_gap_map]
         targeted_persistent_external_gaps = [family_id for family_id in benchmark_targets if family_id in persistent_external_gap_map]
         critical_hits = [family_id for family_id in targeted_gaps if weak_family_map.get(family_id, {}).get("critical")]
+        critical_internal_closure_hits = [family_id for family_id in targeted_internal_closure_gaps if family_closure_map.get(family_id, {}).get("critical")]
+        regressing_internal_hits = [family_id for family_id in targeted_internal_closure_gaps if family_closure_map.get(family_id, {}).get("trend_direction") == "regressing"]
+        flat_internal_hits = [family_id for family_id in targeted_internal_closure_gaps if family_closure_map.get(family_id, {}).get("trend_direction") == "flat"]
+        improving_internal_hits = [family_id for family_id in targeted_internal_closure_gaps if family_closure_map.get(family_id, {}).get("trend_direction") == "improving"]
+        new_internal_hits = [family_id for family_id in targeted_internal_closure_gaps if family_closure_map.get(family_id, {}).get("trend_direction") == "new"]
+        sustained_regressing_internal_hits = [family_id for family_id in regressing_internal_hits if int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0) >= 2]
+        sustained_flat_internal_hits = [family_id for family_id in flat_internal_hits if int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0) >= 2]
+        sustained_improving_internal_hits = [family_id for family_id in improving_internal_hits if int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0) >= 2]
         critical_external_hits = [family_id for family_id in targeted_external_gaps if external_gap_map.get(family_id, {}).get("critical")]
         critical_persistent_external_hits = [family_id for family_id in targeted_persistent_external_gaps if persistent_external_gap_map.get(family_id, {}).get("critical")]
         worsening_persistent_external_hits = [family_id for family_id in targeted_persistent_external_gaps if persistent_external_gap_map.get(family_id, {}).get("trend_direction") == "worsening"]
@@ -2633,9 +2954,10 @@ def normalize_report(raw_json, lane_name, model_name):
         sustained_worsening_persistent_external_hits = [family_id for family_id in worsening_persistent_external_hits if int(persistent_external_gap_map.get(family_id, {}).get("trend_compare_streak", 0) or 0) >= 2]
         sustained_flat_persistent_external_hits = [family_id for family_id in flat_persistent_external_hits if int(persistent_external_gap_map.get(family_id, {}).get("trend_compare_streak", 0) or 0) >= 2]
         sustained_closing_persistent_external_hits = [family_id for family_id in closing_persistent_external_hits if int(persistent_external_gap_map.get(family_id, {}).get("trend_compare_streak", 0) or 0) >= 2]
+        internal_closure_bonus = sum(internal_family_trend_weight(family_id) for family_id in targeted_internal_closure_gaps)
         persistence_bonus = sum(min(3.0, float(persistent_external_gap_map.get(family_id, {}).get("occurrence_count", 0) or 0)) for family_id in targeted_persistent_external_gaps)
         trend_urgency_bonus = sum(persistent_gap_trend_weight(family_id) for family_id in targeted_persistent_external_gaps)
-        alignment_score = (len(benchmark_targets) * 1.5) + (len(targeted_gaps) * 5.0) + (len(critical_hits) * 3.0) + (len(targeted_external_gaps) * 3.5) + (len(critical_external_hits) * 2.0) + (len(targeted_persistent_external_gaps) * 4.5) + (len(critical_persistent_external_hits) * 2.0) + persistence_bonus + trend_urgency_bonus
+        alignment_score = (len(benchmark_targets) * 1.5) + (len(targeted_gaps) * 5.0) + (len(critical_hits) * 3.0) + (len(targeted_internal_closure_gaps) * 2.5) + (len(critical_internal_closure_hits) * 1.5) + (len(targeted_external_gaps) * 3.5) + (len(critical_external_hits) * 2.0) + (len(targeted_persistent_external_gaps) * 4.5) + (len(critical_persistent_external_hits) * 2.0) + internal_closure_bonus + persistence_bonus + trend_urgency_bonus
         if risk_level == "high":
             alignment_score -= 2.0
         if alignment_score < 0:
@@ -2675,6 +2997,26 @@ def normalize_report(raw_json, lane_name, model_name):
             promotion_reason = "Does not map cleanly to a measured benchmark family yet."
         plugin_copy["benchmark_family_targets"] = benchmark_targets
         plugin_copy["targeted_capability_gaps"] = targeted_gaps
+        plugin_copy["targeted_internal_family_closure_gaps"] = targeted_internal_closure_gaps
+        plugin_copy["internal_family_closure_trends"] = [
+            {
+                "id": family_id,
+                "trend_direction": family_closure_map.get(family_id, {}).get("trend_direction", "flat"),
+                "trend_scorecard_streak": int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0),
+                "latest_score": round(float(family_closure_map.get(family_id, {}).get("latest_score", 0) or 0), 2),
+                "score_change": round(float(family_closure_map.get(family_id, {}).get("score_change", 0) or 0), 2),
+                "latest_weak": bool(family_closure_map.get(family_id, {}).get("latest_weak", False)),
+                "trajectory_summary": family_closure_map.get(family_id, {}).get("trajectory_summary", ""),
+            }
+            for family_id in targeted_internal_closure_gaps
+        ]
+        plugin_copy["regressing_internal_capability_families"] = regressing_internal_hits
+        plugin_copy["flat_internal_capability_families"] = flat_internal_hits
+        plugin_copy["improving_internal_capability_families"] = improving_internal_hits
+        plugin_copy["new_internal_capability_families"] = new_internal_hits
+        plugin_copy["sustained_regressing_internal_capability_families"] = sustained_regressing_internal_hits
+        plugin_copy["sustained_flat_internal_capability_families"] = sustained_flat_internal_hits
+        plugin_copy["sustained_improving_internal_capability_families"] = sustained_improving_internal_hits
         plugin_copy["targeted_external_capability_gaps"] = targeted_external_gaps
         plugin_copy["targeted_persistent_external_capability_gaps"] = targeted_persistent_external_gaps
         plugin_copy["persistent_external_gap_trends"] = [
@@ -3015,6 +3357,14 @@ result = {
         "latest_recommendation": str(latest_scorecard.get("recommendation", "")).strip(),
         "weak_family_ids": weak_family_ids,
         "weak_families": [weak_family_map[family_id] for family_id in weak_family_ids],
+        "internal_family_closure_report": [family_closure_map[family_id] for family_id in family_closure_map_ids],
+        "regressing_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "regressing"],
+        "flat_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "flat"],
+        "improving_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "improving"],
+        "new_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "new"],
+        "sustained_regressing_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "regressing" and int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0) >= 2],
+        "sustained_flat_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "flat" and int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0) >= 2],
+        "sustained_improving_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "improving" and int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0) >= 2],
         "external_gap_family_ids": external_gap_ids,
         "external_gap_families": [external_gap_map[family_id] for family_id in external_gap_ids],
         "persistent_external_gap_family_ids": persistent_external_gap_ids,
@@ -3115,6 +3465,47 @@ weak_family_ids = capability_benchmark_focus.get("weak_family_ids", [])
 if not isinstance(weak_family_ids, list):
     weak_family_ids = []
 weak_family_ids = [" ".join(str(item).split()).strip() for item in weak_family_ids if str(item).strip()]
+internal_family_closure_report = capability_benchmark_focus.get("internal_family_closure_report", [])
+if not isinstance(internal_family_closure_report, list):
+    internal_family_closure_report = []
+normalized_internal_family_closure_report = []
+for item in internal_family_closure_report[:6]:
+    if not isinstance(item, dict):
+        continue
+    family_id = " ".join(str(item.get("id", "")).split()).strip()
+    if not family_id:
+        continue
+    trend_direction = " ".join(str(item.get("trend_direction", "flat")).split()).strip().lower()
+    if trend_direction not in {"improving", "flat", "regressing", "new"}:
+        trend_direction = "flat"
+    try:
+        trend_scorecard_streak = int(item.get("trend_scorecard_streak", 0) or 0)
+    except Exception:
+        trend_scorecard_streak = 0
+    try:
+        latest_score = round(float(item.get("latest_score", 0) or 0), 2)
+    except Exception:
+        latest_score = 0.0
+    try:
+        score_change = round(float(item.get("score_change", 0) or 0), 2)
+    except Exception:
+        score_change = 0.0
+    normalized_internal_family_closure_report.append(
+        {
+            "id": family_id,
+            "trend_direction": trend_direction,
+            "trend_scorecard_streak": trend_scorecard_streak,
+            "trajectory_summary": " ".join(str(item.get("trajectory_summary", "")).split()).strip(),
+            "latest_score": latest_score,
+            "score_change": score_change,
+            "latest_weak": bool(item.get("latest_weak", False)),
+            "latest_gate_pass": bool(item.get("latest_gate_pass", True)),
+            "critical": bool(item.get("critical", False)),
+            "latest_risk": " ".join(str(item.get("latest_risk", "")).split()).strip().lower(),
+        }
+    )
+family_closure_map = {item["id"]: item for item in normalized_internal_family_closure_report}
+family_closure_map_ids = [item["id"] for item in normalized_internal_family_closure_report]
 external_gap_family_ids = capability_benchmark_focus.get("external_gap_family_ids", [])
 if not isinstance(external_gap_family_ids, list):
     external_gap_family_ids = []
@@ -3566,6 +3957,14 @@ for index, plugin in enumerate(plugins, 1):
         "compare_recommendation": compare_recommendation,
         "candidate_promotable": candidate_promotable,
         "weak_family_ids": weak_family_ids,
+        "internal_family_closure_report": [family_closure_map[family_id] for family_id in family_closure_map_ids],
+        "regressing_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "regressing"],
+        "flat_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "flat"],
+        "improving_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "improving"],
+        "new_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "new"],
+        "sustained_regressing_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "regressing" and int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0) >= 2],
+        "sustained_flat_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "flat" and int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0) >= 2],
+        "sustained_improving_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "improving" and int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0) >= 2],
         "recovered_families": recovered_families,
         "new_weak_families": new_weak_families,
         "external_compare_recommendation": external_compare_recommendation,
@@ -3612,6 +4011,14 @@ last_run = {
         "compare_recommendation": compare_recommendation,
         "candidate_promotable": candidate_promotable,
         "weak_family_ids": weak_family_ids,
+        "internal_family_closure_report": [family_closure_map[family_id] for family_id in family_closure_map_ids],
+        "regressing_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "regressing"],
+        "flat_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "flat"],
+        "improving_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "improving"],
+        "new_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "new"],
+        "sustained_regressing_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "regressing" and int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0) >= 2],
+        "sustained_flat_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "flat" and int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0) >= 2],
+        "sustained_improving_internal_family_ids": [family_id for family_id in family_closure_map_ids if family_closure_map.get(family_id, {}).get("trend_direction") == "improving" and int(family_closure_map.get(family_id, {}).get("trend_scorecard_streak", 0) or 0) >= 2],
         "recovered_families": recovered_families,
         "new_weak_families": new_weak_families,
         "scorecard_count": int(benchmark_runtime.get("scorecard_count", 0) or 0),

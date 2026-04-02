@@ -20,7 +20,15 @@ cleanup() {
 trap cleanup EXIT INT HUP TERM
 
 cat > "$assay_reports_dir/20260402-candidate-capability-benchmark-scorecard.json" <<'EOF_JSON'
-{"label":"20260402-candidate","family_count":6,"totals":{"overall_score":84.2,"coverage_ratio":1.0,"critical_failures":0,"weak_family_count":3,"high_risk_family_count":0},"recommendation":"hold","weak_families":[{"id":"coding_mutation","score":72.0,"critical":true,"reason":"score-below-threshold"},{"id":"planning_architecture","score":76.0,"critical":true,"reason":"design-drift"},{"id":"review_document","score":75.0,"critical":false,"reason":"evidence-surface"}]}
+{"label":"20260402-candidate","family_count":6,"totals":{"overall_score":84.2,"coverage_ratio":1.0,"critical_failures":0,"weak_family_count":3,"high_risk_family_count":0},"recommendation":"hold","weak_families":[{"id":"coding_mutation","score":72.0,"critical":true,"reason":"score-below-threshold"},{"id":"planning_architecture","score":76.0,"critical":true,"reason":"design-drift"},{"id":"review_document","score":75.0,"critical":false,"reason":"evidence-surface"}],"families":[{"id":"planning_architecture","score":76.0,"critical":true,"gate_pass":true,"risk":"low"},{"id":"coding_mutation","score":72.0,"critical":true,"gate_pass":true,"risk":"low"},{"id":"review_document","score":75.0,"critical":false,"gate_pass":true,"risk":"low"}]}
+EOF_JSON
+
+cat > "$assay_reports_dir/20260331-candidate-capability-benchmark-scorecard.json" <<'EOF_JSON'
+{"label":"20260331-candidate","family_count":6,"totals":{"overall_score":82.8,"coverage_ratio":1.0,"critical_failures":0,"weak_family_count":2,"high_risk_family_count":0},"recommendation":"hold","weak_families":[{"id":"planning_architecture","score":82.0,"critical":true,"reason":"design-drift"},{"id":"coding_mutation","score":70.0,"critical":true,"reason":"score-below-threshold"}],"families":[{"id":"planning_architecture","score":82.0,"critical":true,"gate_pass":true,"risk":"low"},{"id":"coding_mutation","score":70.0,"critical":true,"gate_pass":true,"risk":"low"},{"id":"review_document","score":78.0,"critical":false,"gate_pass":true,"risk":"low"}]}
+EOF_JSON
+
+cat > "$assay_reports_dir/20260329-candidate-capability-benchmark-scorecard.json" <<'EOF_JSON'
+{"label":"20260329-candidate","family_count":6,"totals":{"overall_score":80.1,"coverage_ratio":1.0,"critical_failures":0,"weak_family_count":2,"high_risk_family_count":0},"recommendation":"hold","weak_families":[{"id":"planning_architecture","score":88.0,"critical":true,"reason":"design-drift"},{"id":"coding_mutation","score":66.0,"critical":true,"reason":"score-below-threshold"}],"families":[{"id":"planning_architecture","score":88.0,"critical":true,"gate_pass":true,"risk":"low"},{"id":"coding_mutation","score":66.0,"critical":true,"gate_pass":true,"risk":"low"},{"id":"review_document","score":80.0,"critical":false,"gate_pass":true,"risk":"low"}]}
 EOF_JSON
 
 cat > "$assay_reports_dir/20260402-candidate-vs-frontier-capability-benchmark-external-compare.json" <<'EOF_JSON'
@@ -42,6 +50,7 @@ ARTIFICER_ASSAY_REPORTS_DIR="$assay_reports_dir" \
 programming_guidance=$(self_improve_capability_guidance_prompt_block "programming" "Fix the failing tests, refactor the code path, and keep the patch verifiable.")
 printf '%s\n' "$programming_guidance" | grep -Fq "coding_mutation" || fail "programming guidance should prioritize coding mutation"
 printf '%s\n' "$programming_guidance" | grep -Fq "planning_architecture" || fail "programming guidance should include planning architecture when it is a measured weak family"
+printf '%s\n' "$programming_guidance" | grep -Fq "sustained regressing internal benchmark trend" || fail "programming guidance should preserve sustained regressing internal benchmark trend context"
 if printf '%s\n' "$programming_guidance" | grep -Fq "teaching_reassessment"; then
   fail "programming guidance should not inject teaching reassessment for unrelated code work"
 fi

@@ -114,6 +114,19 @@ Artificer can also derive a benchmark-aware execution profile from that trace an
 
 That means benchmark evidence can influence not only which model runs, but also how much effort the run spends when the task sits in a family Artificer still needs to strengthen.
 
+Artificer now also computes an internal family-closure report from recent scorecards.
+
+That report tracks whether each capability family is:
+
+- improving
+- flat
+- regressing
+- new
+
+and whether that direction has held across multiple benchmark scorecards.
+
+This matters because a family can be trending the wrong way before it fully collapses into an obvious weak-family failure. Artificer can now see that earlier and use it in ordinary-run guidance and self-improvement prioritization.
+
 This matters because benchmark-aware reasoning should be inspectable, not invisible. If a run was influenced by a measured weak family or sustained external deficit, the operator should be able to see that instead of guessing.
 
 ## External Baseline Lane

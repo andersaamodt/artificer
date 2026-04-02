@@ -45,6 +45,14 @@ cat > "$assay_reports_dir/20260401-candidate-capability-benchmark-scorecard.json
 {"label":"20260401-candidate","family_count":6,"totals":{"overall_score":88.4,"coverage_ratio":1.0,"critical_failures":0,"weak_family_count":1,"high_risk_family_count":0},"recommendation":"promote","weak_families":[{"id":"teaching_reassessment","score":74.0}],"families":[{"id":"planning_architecture","score":90.0,"critical":true,"gate_pass":true,"risk":"low"},{"id":"teaching_reassessment","score":74.0,"critical":false,"gate_pass":true,"risk":"low"}]}
 EOF_JSON
 
+cat > "$assay_reports_dir/20260330-candidate-capability-benchmark-scorecard.json" <<'EOF_JSON'
+{"label":"20260330-candidate","family_count":6,"totals":{"overall_score":85.1,"coverage_ratio":1.0,"critical_failures":0,"weak_family_count":1,"high_risk_family_count":0},"recommendation":"hold","weak_families":[{"id":"teaching_reassessment","score":80.0}],"families":[{"id":"planning_architecture","score":84.0,"critical":true,"gate_pass":true,"risk":"low"},{"id":"teaching_reassessment","score":80.0,"critical":false,"gate_pass":true,"risk":"low"}]}
+EOF_JSON
+
+cat > "$assay_reports_dir/20260328-candidate-capability-benchmark-scorecard.json" <<'EOF_JSON'
+{"label":"20260328-candidate","family_count":6,"totals":{"overall_score":83.2,"coverage_ratio":1.0,"critical_failures":0,"weak_family_count":1,"high_risk_family_count":0},"recommendation":"hold","weak_families":[{"id":"teaching_reassessment","score":86.0}],"families":[{"id":"planning_architecture","score":78.0,"critical":true,"gate_pass":true,"risk":"low"},{"id":"teaching_reassessment","score":86.0,"critical":false,"gate_pass":true,"risk":"low"}]}
+EOF_JSON
+
 cat > "$assay_reports_dir/20260401-candidate-vs-baseline-capability-benchmark-compare.json" <<'EOF_JSON'
 {"label":"20260401-candidate-vs-baseline","baseline_label":"20260328-baseline","candidate_label":"20260401-candidate","recommendation":"promote-candidate","candidate_promotable":true,"deltas":{"overall_score":12.5,"coverage_ratio":0.0},"recovered_families":["planning_architecture","research_integration"],"new_weak_families":[]}
 EOF_JSON
@@ -67,7 +75,12 @@ runtime_json=$(self_improve_runtime_signals_json)
 [ "$(json_query "$runtime_json" 'data["capability_benchmark"]["latest_scorecard"].get("label")')" = "20260401-candidate" ] || fail "runtime signals should expose latest capability benchmark scorecard"
 [ "$(json_query "$runtime_json" 'data["capability_benchmark"]["latest_scorecard"]["totals"].get("overall_score")')" = "88.4" ] || fail "runtime signals should expose benchmark overall score"
 [ "$(json_query "$runtime_json" 'data["capability_benchmark"]["latest_compare"].get("recommendation")')" = "promote-candidate" ] || fail "runtime signals should expose latest compare recommendation"
-[ "$(json_query "$runtime_json" 'data["counts"].get("capability_benchmark_scorecards")')" = "1" ] || fail "runtime counts should include capability benchmark scorecards"
+[ "$(json_query "$runtime_json" 'data["capability_benchmark"]["internal_family_closure_report"][0].get("id")')" = "teaching_reassessment" ] || fail "runtime signals should expose internal family closure report"
+[ "$(json_query "$runtime_json" 'data["capability_benchmark"]["internal_family_closure_report"][0].get("trend_direction")')" = "regressing" ] || fail "runtime signals should expose regressing family trend"
+[ "$(json_query "$runtime_json" 'data["capability_benchmark"]["internal_family_closure_report"][1].get("id")')" = "planning_architecture" ] || fail "runtime signals should preserve improving internal family trend"
+[ "$(json_query "$runtime_json" '",".join(data["capability_benchmark"].get("regressing_internal_family_ids", []))')" = "teaching_reassessment" ] || fail "runtime signals should expose regressing internal family ids"
+[ "$(json_query "$runtime_json" '",".join(data["capability_benchmark"].get("improving_internal_family_ids", []))')" = "planning_architecture" ] || fail "runtime signals should expose improving internal family ids"
+[ "$(json_query "$runtime_json" 'data["counts"].get("capability_benchmark_scorecards")')" = "3" ] || fail "runtime counts should include capability benchmark scorecards"
 [ "$(json_query "$runtime_json" 'data["counts"].get("capability_benchmark_compares")')" = "1" ] || fail "runtime counts should include capability benchmark comparisons"
 
 evidence_json=$(self_improve_build_evidence_bundle_json '{"objective":"Improve measured capability","sources":{"runtime":true,"papers":false,"web":false,"repo":false,"platform":false}}')
