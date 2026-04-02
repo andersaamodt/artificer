@@ -8,6 +8,157 @@ model_is_text_generation_model() {
   return 0
 }
 
+capability_family_model_bias_score() {
+  model_name=$1
+  family_id=$2
+  lower=$(printf '%s' "$model_name" | tr '[:upper:]' '[:lower:]')
+  score=0
+  case "$family_id" in
+    research_integration)
+      case "$lower" in
+        qwen2.5*|*qwen2.5*|qwen3*|*qwen3*|qwen*|*qwen*)
+          score=14
+          ;;
+        llama3.1*|*llama3.1*|llama3*|*llama3*|deepseek-r1*|*deepseek-r1*|deepseek-v3*|*deepseek-v3*)
+          score=12
+          ;;
+        mistral*|*mistral*|phi3*|*phi3*|phi4*|*phi4*|gemma2*|*gemma2*)
+          score=8
+          ;;
+        deepseek-coder*|*deepseek-coder*|qwen2.5-coder*|*qwen2.5-coder*|qwen-coder*|*qwen-coder*|codellama*|*codellama*|starcoder*|*starcoder*)
+          score=-10
+          ;;
+      esac
+      ;;
+    planning_architecture)
+      case "$lower" in
+        qwen2.5*|*qwen2.5*|qwen3*|*qwen3*|qwen*|*qwen*|deepseek-r1*|*deepseek-r1*|deepseek-v3*|*deepseek-v3*)
+          score=12
+          ;;
+        llama3.1*|*llama3.1*|llama3*|*llama3*|mistral*|*mistral*)
+          score=10
+          ;;
+        deepseek-coder*|*deepseek-coder*|qwen2.5-coder*|*qwen2.5-coder*|qwen-coder*|*qwen-coder*|codellama*|*codellama*|starcoder*|*starcoder*)
+          score=-8
+          ;;
+      esac
+      ;;
+    coding_mutation)
+      case "$lower" in
+        deepseek-coder*|*deepseek-coder*)
+          score=16
+          ;;
+        qwen2.5-coder*|*qwen2.5-coder*|qwen-coder*|*qwen-coder*)
+          score=14
+          ;;
+        starcoder*|*starcoder*|codellama*|*codellama*)
+          score=12
+          ;;
+        qwen2.5*|*qwen2.5*|qwen3*|*qwen3*|qwen*|*qwen*)
+          score=8
+          ;;
+        llama3.1*|*llama3.1*|llama3*|*llama3*|mistral*|*mistral*)
+          score=4
+          ;;
+      esac
+      ;;
+    review_document)
+      case "$lower" in
+        qwen2.5*|*qwen2.5*|qwen3*|*qwen3*|qwen*|*qwen*|mistral*|*mistral*)
+          score=10
+          ;;
+        llama3.1*|*llama3.1*|llama3*|*llama3*|deepseek-coder*|*deepseek-coder*|qwen2.5-coder*|*qwen2.5-coder*|qwen-coder*|*qwen-coder*)
+          score=8
+          ;;
+        codellama*|*codellama*|starcoder*|*starcoder*|deepseek-r1*|*deepseek-r1*|deepseek-v3*|*deepseek-v3*)
+          score=6
+          ;;
+      esac
+      ;;
+    teaching_reassessment)
+      case "$lower" in
+        qwen2.5*|*qwen2.5*|qwen3*|*qwen3*|qwen*|*qwen*)
+          score=14
+          ;;
+        llama3.1*|*llama3.1*|llama3*|*llama3*)
+          score=12
+          ;;
+        phi3*|*phi3*|phi4*|*phi4*|gemma2*|*gemma2*|mistral*|*mistral*)
+          score=10
+          ;;
+        deepseek-coder*|*deepseek-coder*|qwen2.5-coder*|*qwen2.5-coder*|qwen-coder*|*qwen-coder*|codellama*|*codellama*|starcoder*|*starcoder*)
+          score=-10
+          ;;
+      esac
+      ;;
+    admin_env_repair)
+      case "$lower" in
+        qwen2.5*|*qwen2.5*|qwen3*|*qwen3*|qwen*|*qwen*)
+          score=10
+          ;;
+        llama3.1*|*llama3.1*|llama3*|*llama3*|mistral*|*mistral*)
+          score=8
+          ;;
+        deepseek-coder*|*deepseek-coder*|qwen2.5-coder*|*qwen2.5-coder*|qwen-coder*|*qwen-coder*|codellama*|*codellama*|starcoder*|*starcoder*)
+          score=6
+          ;;
+      esac
+      ;;
+  esac
+  printf '%s' "$score"
+}
+
+capability_guidance_trace_family_ids() {
+  trace_json=${1-}
+  ARTIFICER_CAPABILITY_TRACE_JSON=$trace_json python3 - <<'PY'
+import json
+import os
+
+try:
+    payload = json.loads(os.environ.get("ARTIFICER_CAPABILITY_TRACE_JSON", "") or "{}")
+except Exception:
+    payload = {}
+if not isinstance(payload, dict):
+    payload = {}
+items = payload.get("items", [])
+if not isinstance(items, list):
+    items = []
+for item in items[:6]:
+    if not isinstance(item, dict):
+        continue
+    family_id = " ".join(str(item.get("id", "")).split()).strip()
+    if family_id:
+        print(family_id)
+PY
+}
+
+model_preference_score_for_mode_with_capability_guidance() {
+  model_name=$1
+  mode_name=$2
+  trace_json=${3-}
+  base_score=$(model_preference_score_for_mode "$model_name" "$mode_name")
+  case "$base_score" in
+    ""|*[!0-9-]*)
+      base_score=0
+      ;;
+  esac
+  total_score=$base_score
+  while IFS= read -r family_id; do
+    family_id=$(trim "$family_id")
+    [ -n "$family_id" ] || continue
+    bias_score=$(capability_family_model_bias_score "$model_name" "$family_id")
+    case "$bias_score" in
+      ""|*[!0-9-]*)
+        bias_score=0
+        ;;
+    esac
+    total_score=$((total_score + bias_score))
+  done <<EOF
+$(capability_guidance_trace_family_ids "$trace_json")
+EOF
+  printf '%s' "$total_score"
+}
+
 model_preference_score_for_mode() {
   model_name=$1
   mode_name=$2
@@ -93,6 +244,66 @@ model_preference_score_for_mode() {
           ;;
       esac
       ;;
+    assistant|auto|report|teacher|text-perfecter|instant)
+      case "$lower" in
+        qwen2.5*|*qwen2.5*|qwen3*|*qwen3*|qwen*|*qwen*)
+          score=122
+          ;;
+        llama3.1*|*llama3.1*|llama3*|*llama3*)
+          score=116
+          ;;
+        mistral*|*mistral*)
+          score=108
+          ;;
+        phi3*|*phi3*|phi4*|*phi4*|gemma2*|*gemma2*)
+          score=104
+          ;;
+        deepseek-r1*|*deepseek-r1*|deepseek-v3*|*deepseek-v3*)
+          score=102
+          ;;
+        deepseek*|*deepseek*)
+          score=92
+          ;;
+        codellama*|*codellama*|starcoder*|*starcoder*)
+          score=74
+          ;;
+        *)
+          score=82
+          ;;
+      esac
+      case "$lower" in
+        *coder*|*code*)
+          score=$((score - 12))
+          ;;
+      esac
+      case "$lower" in
+        *instruct*|*chat*)
+          score=$((score + 4))
+          ;;
+      esac
+      ;;
+    security-audit|pentest)
+      case "$lower" in
+        qwen2.5*|*qwen2.5*|qwen3*|*qwen3*|qwen*|*qwen*)
+          score=120
+          ;;
+        deepseek-r1*|*deepseek-r1*|deepseek-v3*|*deepseek-v3*|mistral*|*mistral*)
+          score=112
+          ;;
+        llama3.1*|*llama3.1*|llama3*|*llama3*)
+          score=108
+          ;;
+        deepseek-coder*|*deepseek-coder*|qwen2.5-coder*|*qwen2.5-coder*|qwen-coder*|*qwen-coder*)
+          score=104
+          ;;
+        codellama*|*codellama*|starcoder*|*starcoder*)
+          score=94
+          ;;
+        *)
+          score=84
+          ;;
+      esac
+      ;;
     *)
       score=80
       ;;
@@ -131,6 +342,115 @@ best_model_for_mode() {
 $models
 EOF
   printf '%s' "$best_model"
+}
+
+best_model_for_mode_with_capability_guidance() {
+  mode_name=$1
+  trace_json=${2-}
+  models=$(list_models_raw || true)
+  if [ -z "$(trim "$models")" ]; then
+    models=$(list_models_from_workspace_data || true)
+  fi
+  [ -n "$(trim "$models")" ] || return 0
+
+  best_model=""
+  best_score=-9999
+  while IFS= read -r model_name; do
+    model_name=$(trim "$model_name")
+    [ -n "$model_name" ] || continue
+    if ! model_is_text_generation_model "$model_name"; then
+      continue
+    fi
+    score=$(model_preference_score_for_mode_with_capability_guidance "$model_name" "$mode_name" "$trace_json")
+    case "$score" in
+      ""|*[!0-9-]*)
+        score=0
+        ;;
+    esac
+    if [ -z "$best_model" ] || [ "$score" -gt "$best_score" ]; then
+      best_model=$model_name
+      best_score=$score
+    fi
+  done <<EOF
+$models
+EOF
+  printf '%s' "$best_model"
+}
+
+capability_guidance_favors_general_reasoning() {
+  trace_json=${1-}
+  while IFS= read -r family_id; do
+    case "$(trim "$family_id")" in
+      research_integration|planning_architecture|review_document|teaching_reassessment|admin_env_repair)
+        return 0
+        ;;
+    esac
+  done <<EOF
+$(capability_guidance_trace_family_ids "$trace_json")
+EOF
+  return 1
+}
+
+capability_guidance_favors_code_specialist() {
+  trace_json=${1-}
+  while IFS= read -r family_id; do
+    case "$(trim "$family_id")" in
+      coding_mutation)
+        return 0
+        ;;
+    esac
+  done <<EOF
+$(capability_guidance_trace_family_ids "$trace_json")
+EOF
+  return 1
+}
+
+run_capability_autoroute_model() {
+  current_model=$(trim "$1")
+  mode_name=$(trim "$2")
+  trace_json=${3-}
+  [ -n "$current_model" ] || return 0
+  [ -n "$(trim "$trace_json")" ] || return 0
+
+  best_model=$(best_model_for_mode_with_capability_guidance "$mode_name" "$trace_json")
+  [ -n "$best_model" ] || return 0
+  if [ "$best_model" = "$current_model" ]; then
+    return 0
+  fi
+
+  current_score=$(model_preference_score_for_mode_with_capability_guidance "$current_model" "$mode_name" "$trace_json")
+  best_score=$(model_preference_score_for_mode_with_capability_guidance "$best_model" "$mode_name" "$trace_json")
+  case "$current_score" in ""|*[!0-9-]*) current_score=0 ;; esac
+  case "$best_score" in ""|*[!0-9-]*) best_score=0 ;; esac
+  score_gap=$((best_score - current_score))
+
+  current_lower=$(printf '%s' "$current_model" | tr '[:upper:]' '[:lower:]')
+  best_lower=$(printf '%s' "$best_model" | tr '[:upper:]' '[:lower:]')
+  current_coder_like=0
+  best_coder_like=0
+  case "$current_lower" in
+    *coder*|*code*|starcoder*|*starcoder*|codellama*|*codellama*|deepseek-coder*|*deepseek-coder*)
+      current_coder_like=1
+      ;;
+  esac
+  case "$best_lower" in
+    *coder*|*code*|starcoder*|*starcoder*|codellama*|*codellama*|deepseek-coder*|*deepseek-coder*)
+      best_coder_like=1
+      ;;
+  esac
+
+  if [ "$mode_name" = "programming" ] && capability_guidance_favors_code_specialist "$trace_json" && [ "$best_coder_like" -eq 1 ] && [ "$score_gap" -ge 8 ]; then
+    printf '%s' "$best_model"
+    return 0
+  fi
+  if [ "$mode_name" != "programming" ] && capability_guidance_favors_general_reasoning "$trace_json" && [ "$current_coder_like" -eq 1 ] && [ "$score_gap" -ge 8 ]; then
+    printf '%s' "$best_model"
+    return 0
+  fi
+  if [ "$score_gap" -ge 14 ]; then
+    printf '%s' "$best_model"
+    return 0
+  fi
 }
 
 chat_autoroute_model() {

@@ -106,6 +106,10 @@ That means a completed run can show:
 - why those families were selected
 - the concrete operating guidance derived from them
 
+Artificer can now also use that same capability-guidance trace before the run starts to reroute onto a better-matched installed model.
+
+That means benchmark evidence can improve execution quality directly, not only explain decisions after the fact.
+
 This matters because benchmark-aware reasoning should be inspectable, not invisible. If a run was influenced by a measured weak family or sustained external deficit, the operator should be able to see that instead of guessing.
 
 ## External Baseline Lane

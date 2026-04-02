@@ -784,13 +784,36 @@ EOF
       model=$(default_model)
       printf '%s\n' "$model" > "$conv_dir/model"
     fi
-    if [ "$run_mode" = "chat" ]; then
-      routed_chat_model=$(chat_autoroute_model "$model")
-      if [ -n "$routed_chat_model" ] && [ "$routed_chat_model" != "$model" ]; then
-        prior_chat_model=$model
-        model=$routed_chat_model
-        printf '%s\n' "$model" > "$conv_dir/model"
-        stream_emit_line "$stream_output_file" "Auto-selected conversational model: $prior_chat_model -> $model."
+    run_capability_guidance_seed_trace_json='{"summary":"","items":[],"count":0}'
+    run_capability_guidance_seed_summary=""
+    if command -v self_improve_capability_guidance_prompt_block >/dev/null 2>&1; then
+      run_capability_guidance_seed_block=$(self_improve_capability_guidance_prompt_block "$run_mode" "$user_prompt")
+      if [ -n "$(trim "$run_capability_guidance_seed_block")" ] && [ "$run_capability_guidance_seed_block" != "NONE" ]; then
+        if command -v self_improve_capability_guidance_trace_json_from_block >/dev/null 2>&1; then
+          run_capability_guidance_seed_trace_json=$(self_improve_capability_guidance_trace_json_from_block "$run_capability_guidance_seed_block")
+        fi
+        if command -v self_improve_capability_guidance_trace_summary_text >/dev/null 2>&1; then
+          run_capability_guidance_seed_summary=$(self_improve_capability_guidance_trace_summary_text "$run_capability_guidance_seed_trace_json")
+        fi
+      fi
+    fi
+    routed_model=""
+    if command -v run_capability_autoroute_model >/dev/null 2>&1; then
+      routed_model=$(run_capability_autoroute_model "$model" "$run_mode" "$run_capability_guidance_seed_trace_json")
+    fi
+    if [ -z "$routed_model" ] && [ "$run_mode" = "chat" ]; then
+      routed_model=$(chat_autoroute_model "$model")
+    fi
+    if [ -n "$routed_model" ] && [ "$routed_model" != "$model" ]; then
+      prior_model=$model
+      model=$routed_model
+      printf '%s\n' "$model" > "$conv_dir/model"
+      if [ -n "$(trim "$run_capability_guidance_seed_summary")" ]; then
+        stream_emit_line "$stream_output_file" "Auto-selected model for capability focus ($run_capability_guidance_seed_summary): $prior_model -> $model."
+      elif [ "$run_mode" = "chat" ]; then
+        stream_emit_line "$stream_output_file" "Auto-selected conversational model: $prior_model -> $model."
+      else
+        stream_emit_line "$stream_output_file" "Auto-selected run model: $prior_model -> $model."
       fi
     fi
 
