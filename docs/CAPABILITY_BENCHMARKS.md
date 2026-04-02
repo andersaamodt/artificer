@@ -112,6 +112,15 @@ That lets self-improvement distinguish:
 
 Persistent external gaps are the higher-leverage target because they are less likely to be noise.
 
+Artificer now also tracks whether each recurring external gap is:
+
+- `worsening`: the gap is opening further
+- `flat`: the gap is not materially improving
+- `closing`: the gap is shrinking
+- `new`: there is only one recorded compare so far
+
+That trend signal matters because self-improvement should spend more attention on recurring deficits that are worsening or flat than on deficits that are already closing.
+
 Self-improvement now reads those artifacts and treats the reported family gaps as measured targets, not vague aspirations.
 
 ## External Adapter Registry
