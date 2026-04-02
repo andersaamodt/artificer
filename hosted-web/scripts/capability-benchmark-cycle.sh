@@ -17,6 +17,7 @@ Usage:
   capability-benchmark-cycle.sh plan [--label LABEL] [--reports-dir DIR] [--manifest FILE]
   capability-benchmark-cycle.sh score [--label LABEL] [--reports-dir DIR] [--manifest FILE] [--out-json FILE] [--out-md FILE]
   capability-benchmark-cycle.sh compare --baseline FILE --candidate FILE [--label LABEL] [--reports-dir DIR] [--out-json FILE] [--out-md FILE]
+  capability-benchmark-cycle.sh external-compare --external-baseline FILE --candidate FILE --external-name NAME [--external-kind KIND] [--external-model MODEL] [--external-notes TEXT] [--label LABEL] [--reports-dir DIR] [--out-json FILE] [--out-md FILE]
 EOF_USAGE
 }
 
@@ -421,6 +422,82 @@ def compare_scorecards(label, baseline, candidate):
     return result
 
 
+def compare_external_scorecards(label, external_meta, external, candidate):
+    external_families = {item.get("id"): item for item in external.get("families", []) if isinstance(item, dict)}
+    candidate_families = {item.get("id"): item for item in candidate.get("families", []) if isinstance(item, dict)}
+    family_ids = sorted(set(external_families.keys()) | set(candidate_families.keys()))
+
+    candidate_lead_families = []
+    candidate_gap_families = []
+    for family_id in family_ids:
+        external_row = external_families.get(family_id, {})
+        candidate_row = candidate_families.get(family_id, {})
+        candidate_score = round(float(candidate_row.get("score", 0.0) or 0.0), 2)
+        external_score = round(float(external_row.get("score", 0.0) or 0.0), 2)
+        score_delta = round(candidate_score - external_score, 2)
+        if score_delta == 0:
+            continue
+        item = {
+            "id": family_id,
+            "score_delta": score_delta,
+            "candidate_score": candidate_score,
+            "external_score": external_score,
+            "candidate_critical": bool(candidate_row.get("critical", False)),
+            "candidate_gate_pass": bool(candidate_row.get("gate_pass", False)),
+            "candidate_weak_reason": str(candidate_row.get("weak_reason", "")).strip(),
+            "external_risk": str(external_row.get("risk", "")).strip(),
+        }
+        if score_delta > 0:
+            candidate_lead_families.append(item)
+        else:
+            candidate_gap_families.append(item)
+
+    candidate_lead_families.sort(key=lambda item: (-item["score_delta"], item["id"]))
+    candidate_gap_families.sort(key=lambda item: (not item["candidate_critical"], item["score_delta"], item["id"]))
+
+    overall_delta = round(float(candidate.get("totals", {}).get("overall_score", 0.0) or 0.0) - float(external.get("totals", {}).get("overall_score", 0.0) or 0.0), 2)
+    coverage_delta = round(float(candidate.get("totals", {}).get("coverage_ratio", 0.0) or 0.0) - float(external.get("totals", {}).get("coverage_ratio", 0.0) or 0.0), 4)
+    critical_delta = int(candidate.get("totals", {}).get("critical_failures", 0) or 0) - int(external.get("totals", {}).get("critical_failures", 0) or 0)
+    high_risk_delta = int(candidate.get("totals", {}).get("high_risk_family_count", 0) or 0) - int(external.get("totals", {}).get("high_risk_family_count", 0) or 0)
+    candidate_beats_external = (
+        str(candidate.get("recommendation", "")).strip().lower() == "promote"
+        and overall_delta >= 0
+        and coverage_delta >= 0
+        and critical_delta <= 0
+        and high_risk_delta <= 0
+        and not any(item.get("candidate_critical", False) for item in candidate_gap_families)
+    )
+    recommendation = "external-still-ahead"
+    if candidate_beats_external:
+        recommendation = "candidate-beats-external"
+    elif overall_delta >= 0 and coverage_delta >= 0 and critical_delta <= 0:
+        recommendation = "mixed"
+
+    result = {
+        "label": label,
+        "generated_at": dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        "external_baseline": {
+            "name": " ".join(str(external_meta.get("name", "")).split()).strip(),
+            "kind": " ".join(str(external_meta.get("kind", "")).split()).strip(),
+            "model": " ".join(str(external_meta.get("model", "")).split()).strip(),
+            "notes": " ".join(str(external_meta.get("notes", "")).split()).strip(),
+        },
+        "external_label": external.get("label", ""),
+        "candidate_label": candidate.get("label", ""),
+        "recommendation": recommendation,
+        "candidate_beats_external": candidate_beats_external,
+        "deltas": {
+            "overall_score": overall_delta,
+            "coverage_ratio": coverage_delta,
+            "critical_failures": critical_delta,
+            "high_risk_family_count": high_risk_delta,
+        },
+        "candidate_gap_families": candidate_gap_families[:10],
+        "candidate_lead_families": candidate_lead_families[:10],
+    }
+    return result
+
+
 def render_compare_markdown(payload):
     lines = [
         f"# Capability Benchmark Compare: {payload['label']}",
@@ -441,6 +518,38 @@ def render_compare_markdown(payload):
         lines.extend(["", "## New Weak Families"])
         for family_id in payload["new_weak_families"]:
             lines.append(f"- {family_id}")
+    return "\n".join(lines) + "\n"
+
+
+def render_external_compare_markdown(payload):
+    external_baseline = payload.get("external_baseline", {}) if isinstance(payload, dict) else {}
+    lines = [
+        f"# Capability Benchmark External Compare: {payload['label']}",
+        "",
+        "## Summary",
+        f"- External baseline: {external_baseline.get('name', '')}",
+        f"- External kind: {external_baseline.get('kind', '')}",
+        f"- External model: {external_baseline.get('model', '')}",
+        f"- Candidate: {payload.get('candidate_label', '')}",
+        f"- Overall score delta: {payload['deltas']['overall_score']}",
+        f"- Coverage ratio delta: {payload['deltas']['coverage_ratio']}",
+        f"- Recommendation: {payload['recommendation']}",
+        f"- Candidate beats external: {'true' if payload.get('candidate_beats_external') else 'false'}",
+    ]
+    if external_baseline.get("notes"):
+        lines.append(f"- Notes: {external_baseline.get('notes')}")
+    if payload.get("candidate_gap_families"):
+        lines.extend(["", "## External Baseline Still Ahead"])
+        for item in payload["candidate_gap_families"]:
+            lines.append(
+                f"- {item['id']}: delta={item['score_delta']} candidate={item['candidate_score']} external={item['external_score']}"
+            )
+    if payload.get("candidate_lead_families"):
+        lines.extend(["", "## Candidate Leads"])
+        for item in payload["candidate_lead_families"]:
+            lines.append(
+                f"- {item['id']}: delta={item['score_delta']} candidate={item['candidate_score']} external={item['external_score']}"
+            )
     return "\n".join(lines) + "\n"
 
 
@@ -527,6 +636,39 @@ elif command == "compare":
     out_md = pathlib.Path(args.out_md) if args.out_md else pathlib.Path(args.reports_dir) / f"{args.label}-capability-benchmark-compare.md"
     out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     out_md.write_text(render_compare_markdown(payload), encoding="utf-8")
+    print(str(out_json))
+    print(str(out_md))
+elif command == "external-compare":
+    ap = argparse.ArgumentParser(prog="capability-benchmark-cycle.sh external-compare")
+    ap.add_argument("--external-baseline", required=True)
+    ap.add_argument("--candidate", required=True)
+    ap.add_argument("--external-name", required=True)
+    ap.add_argument("--external-kind", default="")
+    ap.add_argument("--external-model", default="")
+    ap.add_argument("--external-notes", default="")
+    ap.add_argument("--label", default="capability-benchmark-external-compare")
+    ap.add_argument("--reports-dir", default=default_reports_dir)
+    ap.add_argument("--out-json", default="")
+    ap.add_argument("--out-md", default="")
+    args = ap.parse_args(argv)
+    pathlib.Path(args.reports_dir).mkdir(parents=True, exist_ok=True)
+    external = load_scorecard(args.external_baseline)
+    candidate = load_scorecard(args.candidate)
+    payload = compare_external_scorecards(
+        args.label,
+        {
+            "name": args.external_name,
+            "kind": args.external_kind,
+            "model": args.external_model,
+            "notes": args.external_notes,
+        },
+        external,
+        candidate,
+    )
+    out_json = pathlib.Path(args.out_json) if args.out_json else pathlib.Path(args.reports_dir) / f"{args.label}-capability-benchmark-external-compare.json"
+    out_md = pathlib.Path(args.out_md) if args.out_md else pathlib.Path(args.reports_dir) / f"{args.label}-capability-benchmark-external-compare.md"
+    out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    out_md.write_text(render_external_compare_markdown(payload), encoding="utf-8")
     print(str(out_json))
     print(str(out_md))
 else:

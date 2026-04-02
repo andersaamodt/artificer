@@ -31,6 +31,7 @@ The benchmark driver supports four workflows:
 2. `plan`
 3. `score`
 4. `compare`
+5. `external-compare`
 
 Use it like this:
 
@@ -39,6 +40,7 @@ sh hosted-web/scripts/capability-benchmark-cycle.sh manifest
 sh hosted-web/scripts/capability-benchmark-cycle.sh plan --label candidate-a
 sh hosted-web/scripts/capability-benchmark-cycle.sh score --label candidate-a
 sh hosted-web/scripts/capability-benchmark-cycle.sh compare --baseline ~/.local/state/artificer/assay-reports/baseline-a-capability-benchmark-scorecard.json --candidate ~/.local/state/artificer/assay-reports/candidate-a-capability-benchmark-scorecard.json --label candidate-a-vs-baseline-a
+sh hosted-web/scripts/capability-benchmark-cycle.sh external-compare --external-baseline ~/.local/state/artificer/assay-reports/frontier-a-capability-benchmark-scorecard.json --candidate ~/.local/state/artificer/assay-reports/candidate-a-capability-benchmark-scorecard.json --external-name "Frontier Reference" --external-kind model --external-model gpt-5.4 --label candidate-a-vs-frontier-a
 ```
 
 ## Intended Workflow
@@ -62,6 +64,7 @@ That means self-improvement runs can see:
 - weak capability families
 - the current highest-leverage gaps
 - whether a candidate scorecard actually beat a baseline
+- whether an external baseline is still ahead, and on which families
 
 This is the intended loop:
 
@@ -69,6 +72,32 @@ This is the intended loop:
 2. propose reversible improvements
 3. measure them against the battery
 4. keep only the changes that improve holdout performance
+
+## External Baseline Lane
+
+Internal compare results answer:
+
+- "Did this change beat Artificer's previous baseline?"
+
+External compare results answer:
+
+- "Where does another model or workflow still beat Artificer?"
+
+That distinction matters. Internal improvement can be real while Artificer still trails a stronger external reference on important families.
+
+The `external-compare` workflow writes a first-class artifact:
+
+- `*-capability-benchmark-external-compare.json`
+- `*-capability-benchmark-external-compare.md`
+
+Those artifacts keep:
+
+- external baseline metadata such as name, kind, and model
+- overall deltas against the external reference
+- family-level gaps where the external baseline is still ahead
+- family-level leads where Artificer is already ahead
+
+Self-improvement now reads those artifacts and treats the reported family gaps as measured targets, not vague aspirations.
 
 ## Automatic Adoption Policy
 
