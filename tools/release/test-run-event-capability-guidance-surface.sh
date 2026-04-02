@@ -45,9 +45,24 @@ if ! grep -Fq "Capability Guidance" "$render_file"; then
   exit 1
 fi
 
+if ! grep -Fq 'item.source_scopes' "$render_file"; then
+  printf '%s\n' "run advanced trace rendering is missing capability guidance source-scope metadata" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'item.severity_weight' "$render_file"; then
+  printf '%s\n' "run advanced trace rendering is missing capability guidance severity metadata" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'clipTextForStorage(item.status || "", 240)' "$boot_file"; then
+  printf '%s\n' "frontend run-event normalization is missing capability guidance status preservation" >&2
+  exit 1
+fi
+
 if ! grep -Fq 'pendingEvent.capability_guidance = normalizeCapabilityGuidanceTrace(response.capability_guidance);' "$api_sync_file"; then
   printf '%s\n' "API sync is missing immediate capability guidance trace hydration" >&2
   exit 1
 fi
 
-printf '%s\n' "ok run event capability guidance surface: backend, state normalization, merge, API sync, and advanced trace rendering preserve benchmark-guidance traces"
+printf '%s\n' "ok run event capability guidance surface: backend, state normalization, merge, API sync, and advanced trace rendering preserve benchmark-guidance traces and derived metadata"

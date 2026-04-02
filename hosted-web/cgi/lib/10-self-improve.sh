@@ -1761,11 +1761,115 @@ self_improve_capability_guidance_trace_json_from_block() {
   SELF_IMPROVE_GUIDANCE_BLOCK=$guidance_block python3 - <<'PY'
 import json
 import os
+import re
 
 raw_block = str(os.environ.get("SELF_IMPROVE_GUIDANCE_BLOCK", "") or "")
 lines = [line.strip() for line in raw_block.splitlines() if line.strip()]
 items = []
 summary_parts = []
+
+
+def normalize_family_id(value):
+    token = re.sub(r"[^a-z0-9-]+", "_", str(value).strip().lower()).strip("_")
+    if token in {"research", "research_integration", "knowledge_integration"}:
+        return "research_integration"
+    if token in {"planning", "planning_architecture", "architecture"}:
+        return "planning_architecture"
+    if token in {"coding", "coding_mutation", "programming"}:
+        return "coding_mutation"
+    if token in {"review", "review_document", "document"}:
+        return "review_document"
+    if token in {"teaching", "teaching_reassessment", "reassessment"}:
+        return "teaching_reassessment"
+    if token in {"admin", "admin_env_repair", "env_repair"}:
+        return "admin_env_repair"
+    return token
+
+
+def guidance_metadata(reason_text):
+    reason = " ".join(str(reason_text or "").split()).strip().lower()
+    source_scopes = []
+    if "internal benchmark" in reason:
+        source_scopes.append("internal")
+    if "external-baseline" in reason or "external gap" in reason:
+        source_scopes.append("external")
+    if "weak family" in reason:
+        source_scopes.append("weak")
+    critical = "critical" in reason
+    sustained = False
+    trend_direction = ""
+    if "sustained worsening" in reason:
+        sustained = True
+        trend_direction = "worsening"
+    elif "sustained regressing" in reason:
+        sustained = True
+        trend_direction = "regressing"
+    elif "sustained flat" in reason:
+        sustained = True
+        trend_direction = "flat"
+    elif "sustained improving" in reason:
+        sustained = True
+        trend_direction = "improving"
+    elif "closing" in reason:
+        trend_direction = "closing"
+    elif "worsening" in reason:
+        trend_direction = "worsening"
+    elif "regressing" in reason:
+        trend_direction = "regressing"
+    elif "improving" in reason:
+        trend_direction = "improving"
+    elif "flat" in reason:
+        trend_direction = "flat"
+    elif "new" in reason:
+        trend_direction = "new"
+    if not source_scopes:
+        if trend_direction in {"worsening", "closing"}:
+            source_scopes.append("external")
+        elif trend_direction in {"regressing", "flat", "improving", "new"}:
+            source_scopes.append("internal")
+    severity_weight = 100
+    if trend_direction in {"worsening", "regressing"}:
+        severity_weight += 45
+        if sustained:
+            severity_weight += 25
+    elif trend_direction == "flat":
+        severity_weight += 15
+        if sustained:
+            severity_weight += 10
+    elif trend_direction == "new":
+        severity_weight += 12
+    elif trend_direction in {"closing", "improving"}:
+        severity_weight += 4
+        if sustained:
+            severity_weight += 4
+    if "weak" in source_scopes:
+        severity_weight += 14
+    if critical:
+        severity_weight += 16
+    status_bits = []
+    if sustained and trend_direction:
+        status_bits.append("sustained " + trend_direction)
+    elif trend_direction:
+        status_bits.append(trend_direction)
+    for scope in source_scopes:
+        if scope == "internal":
+            status_bits.append("internal benchmark")
+        elif scope == "external":
+            status_bits.append("external baseline")
+        elif scope == "weak":
+            status_bits.append("measured weak family")
+    if critical:
+        status_bits.append("critical")
+    return {
+        "source_scopes": source_scopes,
+        "trend_direction": trend_direction,
+        "critical": critical,
+        "sustained": sustained,
+        "severity_weight": severity_weight,
+        "status": "; ".join(status_bits),
+    }
+
+
 for raw_line in lines:
     line = raw_line
     if line.upper() == "NONE":
@@ -1781,15 +1885,23 @@ for raw_line in lines:
     reason = remainder
     guidance = ""
     if ";" in remainder:
-        reason, guidance = remainder.split(";", 1)
+        reason, guidance = remainder.rsplit(";", 1)
         reason = reason.strip()
         guidance = guidance.strip()
     if not family_id:
         continue
+    family_id = normalize_family_id(family_id)
+    metadata = guidance_metadata(reason)
     item = {
         "id": family_id,
         "reason": reason,
         "guidance": guidance,
+        "source_scopes": metadata["source_scopes"],
+        "trend_direction": metadata["trend_direction"],
+        "critical": metadata["critical"],
+        "sustained": metadata["sustained"],
+        "severity_weight": metadata["severity_weight"],
+        "status": metadata["status"],
     }
     items.append(item)
     if reason:
@@ -1915,24 +2027,60 @@ if run_mode not in {"instant", "chat"}:
             continue
         if run_mode not in policy.get("modes", set()):
             continue
+        trend_direction = " ".join(str(item.get("trend_direction", "")).split()).strip().lower()
+        source_scopes = item.get("source_scopes", [])
+        if not isinstance(source_scopes, list):
+            source_scopes = []
+        source_scopes = [str(scope).strip().lower() for scope in source_scopes if str(scope).strip()]
+        critical = bool(item.get("critical", False))
+        sustained = bool(item.get("sustained", False))
         reason_text = " ".join(str(item.get("reason", "")).split()).strip().lower()
+        if not trend_direction:
+            if "sustained worsening" in reason_text:
+                trend_direction = "worsening"
+                sustained = True
+            elif "sustained regressing" in reason_text:
+                trend_direction = "regressing"
+                sustained = True
+            elif "sustained flat" in reason_text:
+                trend_direction = "flat"
+                sustained = True
+            elif "sustained improving" in reason_text:
+                trend_direction = "improving"
+                sustained = True
+            elif "closing" in reason_text:
+                trend_direction = "closing"
+            elif "worsening" in reason_text:
+                trend_direction = "worsening"
+            elif "regressing" in reason_text:
+                trend_direction = "regressing"
+            elif "improving" in reason_text:
+                trend_direction = "improving"
+            elif "flat" in reason_text:
+                trend_direction = "flat"
+            elif "new" in reason_text:
+                trend_direction = "new"
+        if not source_scopes:
+            if "internal benchmark" in reason_text:
+                source_scopes.append("internal")
+            if "external-baseline" in reason_text or "external gap" in reason_text:
+                source_scopes.append("external")
+            if "weak family" in reason_text:
+                source_scopes.append("weak")
+        if not critical and "critical" in reason_text:
+            critical = True
         family_effort_rank = effort_rank.get(policy.get("effort", "high"), 2)
         family_iterations = int(policy.get("iterations", 0) or 0)
-        if "critical" in reason_text:
+        if critical or "critical" in reason_text:
             family_iterations += 1
-        if "sustained worsening" in reason_text:
+        if trend_direction in {"worsening", "regressing"}:
             family_effort_rank = max(family_effort_rank, effort_rank["extra-high"])
-            family_iterations += 2
-        elif "sustained regressing" in reason_text:
-            family_effort_rank = max(family_effort_rank, effort_rank["extra-high"])
-            family_iterations += 2
-        elif "worsening" in reason_text:
-            family_effort_rank = max(family_effort_rank, effort_rank["extra-high"])
+            family_iterations += 2 if sustained else 1
+        elif trend_direction == "flat":
+            family_iterations += 1 if sustained else 0
+        elif trend_direction == "new":
             family_iterations += 1
-        elif "regressing" in reason_text:
-            family_effort_rank = max(family_effort_rank, effort_rank["extra-high"])
-            family_iterations += 1
-        elif "sustained flat" in reason_text:
+        elif trend_direction in {"closing", "improving"} and "external" in source_scopes and critical:
             family_iterations += 1
         result_effort_rank = effort_rank.get(result_effort or "low", 0)
         if family_effort_rank > result_effort_rank:

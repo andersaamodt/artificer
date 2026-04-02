@@ -219,10 +219,32 @@
       if (!id) {
         continue;
       }
+      var sourceScopes = Array.isArray(item.source_scopes) ? item.source_scopes : [];
+      var cleanSourceScopes = [];
+      for (var s = 0; s < sourceScopes.length && cleanSourceScopes.length < 4; s += 1) {
+        var scope = clipTextForStorage(sourceScopes[s] || "", 32).toLowerCase();
+        if (!scope) {
+          continue;
+        }
+        if (cleanSourceScopes.indexOf(scope) >= 0) {
+          continue;
+        }
+        cleanSourceScopes.push(scope);
+      }
+      var severityWeight = Number(item.severity_weight || 0);
+      if (!isFinite(severityWeight) || severityWeight < 0) {
+        severityWeight = 0;
+      }
       items.push({
         id: id,
         reason: clipTextForStorage(item.reason || "", 240),
-        guidance: clipTextForStorage(item.guidance || "", 520)
+        guidance: clipTextForStorage(item.guidance || "", 520),
+        source_scopes: cleanSourceScopes,
+        trend_direction: clipTextForStorage(item.trend_direction || "", 32).toLowerCase(),
+        critical: item.critical === true,
+        sustained: item.sustained === true,
+        severity_weight: severityWeight,
+        status: clipTextForStorage(item.status || "", 240)
       });
     }
     if (!items.length) {

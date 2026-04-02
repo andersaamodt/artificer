@@ -63,12 +63,43 @@
     html += "<ul class='run-lines'>";
     for (var i = 0; i < items.length; i += 1) {
       var item = items[i] || {};
+      var metadataBits = [];
+      if (item.sustained && trim(item.trend_direction || "")) {
+        metadataBits.push("sustained " + trim(item.trend_direction || ""));
+      } else if (trim(item.trend_direction || "")) {
+        metadataBits.push(trim(item.trend_direction || ""));
+      }
+      var scopes = Array.isArray(item.source_scopes) ? item.source_scopes : [];
+      for (var s = 0; s < scopes.length; s += 1) {
+        var scope = trim(scopes[s] || "");
+        if (!scope) {
+          continue;
+        }
+        if (scope === "internal") {
+          metadataBits.push("internal benchmark");
+        } else if (scope === "external") {
+          metadataBits.push("external baseline");
+        } else if (scope === "weak") {
+          metadataBits.push("measured weak family");
+        } else {
+          metadataBits.push(scope);
+        }
+      }
+      if (item.critical) {
+        metadataBits.push("critical");
+      }
+      if (Number(item.severity_weight || 0) > 100) {
+        metadataBits.push("priority " + String(Number(item.severity_weight || 0)));
+      }
       html += "<li><strong>" + escHtml(item.id || "") + "</strong>";
       if (trim(item.reason || "")) {
         html += ": " + escHtml(item.reason || "");
       }
       if (trim(item.guidance || "")) {
         html += " — " + escHtml(item.guidance || "");
+      }
+      if (metadataBits.length) {
+        html += "<div class='run-line subtle'>" + escHtml(metadataBits.join(" | ")) + "</div>";
       }
       html += "</li>";
     }

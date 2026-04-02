@@ -41,6 +41,11 @@ if ! grep -q 'summaryParts.push("Compare cycles: " + String(Number(benchmarkSumm
   exit 1
 fi
 
+if ! grep -q 'summaryParts.push("External compares: " + String(Number(benchmarkSummary.external_compare_count || 0)));' "$render_file"; then
+  printf '%s\n' "self-improvement summary is missing external-compare count copy" >&2
+  exit 1
+fi
+
 if ! grep -q 'summaryParts.push("Active plugins: " + String(pluginInventory.active_count));' "$render_file"; then
   printf '%s\n' "self-improvement summary is missing active-plugin inventory copy" >&2
   exit 1
@@ -56,8 +61,43 @@ if ! grep -q 'summaryParts.push("Weak families: " + weakFamilies.join(" | "));' 
   exit 1
 fi
 
+if ! grep -q 'summaryParts.push("Internal regressions: " + regressingInternalFamilies.join(" | "));' "$render_file"; then
+  printf '%s\n' "self-improvement summary is missing internal-regression copy" >&2
+  exit 1
+fi
+
+if ! grep -q 'summaryParts.push("Sustained external deficits: " + sustainedWorseningExternalGaps.join(" | "));' "$render_file"; then
+  printf '%s\n' "self-improvement summary is missing sustained external-gap copy" >&2
+  exit 1
+fi
+
 if ! grep -q 'summaryParts.push("Recovered families: " + recoveredFamilies.join(" | "));' "$render_file"; then
   printf '%s\n' "self-improvement summary is missing recovered-family copy" >&2
+  exit 1
+fi
+
+if ! grep -q 'internal_family_closure_report: normalizeCapabilityClosureReportItems(capabilityBenchmark.internal_family_closure_report)' "$render_file"; then
+  printf '%s\n' "self-improvement last-run normalization is missing internal closure-report hydration" >&2
+  exit 1
+fi
+
+if ! grep -q 'persistent_external_gaps: normalizePersistentExternalGapItems(capabilityBenchmark.persistent_external_gaps)' "$render_file"; then
+  printf '%s\n' "self-improvement last-run normalization is missing persistent external-gap hydration" >&2
+  exit 1
+fi
+
+if ! grep -q "<strong>Capability trend report</strong>" "$render_file"; then
+  printf '%s\n' "self-improvement UI is missing capability trend report rendering" >&2
+  exit 1
+fi
+
+if ! grep -q "<strong>Internal closure trends:</strong>" "$render_file"; then
+  printf '%s\n' "self-improvement UI is missing internal closure trend rendering" >&2
+  exit 1
+fi
+
+if ! grep -q "<strong>Persistent external gaps:</strong>" "$render_file"; then
+  printf '%s\n' "self-improvement UI is missing persistent external-gap rendering" >&2
   exit 1
 fi
 
@@ -151,4 +191,4 @@ if ! grep -q '"plugin_inventory":%s' "$run_action_file"; then
   exit 1
 fi
 
-printf '%s\n' "ok self-improve frontend benchmark surfacing: summary and plugin cards expose benchmark recommendation, weak families, and plugin promotion metadata"
+printf '%s\n' "ok self-improve frontend benchmark surfacing: summary, capability trend report, and plugin cards expose benchmark recommendation, regressions, external deficits, and plugin promotion metadata"

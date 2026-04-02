@@ -128,7 +128,7 @@ capability_family_model_bias_score() {
   printf '%s' "$score"
 }
 
-capability_guidance_trace_family_ids() {
+capability_guidance_trace_rows() {
   trace_json=${1-}
   ARTIFICER_CAPABILITY_TRACE_JSON=$trace_json python3 - <<'PY'
 import json
@@ -147,9 +147,43 @@ for item in items[:6]:
     if not isinstance(item, dict):
         continue
     family_id = " ".join(str(item.get("id", "")).split()).strip()
-    if family_id:
-        print(family_id)
+    if not family_id:
+        continue
+    try:
+        severity_weight = int(item.get("severity_weight", 100) or 100)
+    except Exception:
+        severity_weight = 100
+    if severity_weight < 100:
+        severity_weight = 100
+    source_scopes = item.get("source_scopes", [])
+    if not isinstance(source_scopes, list):
+        source_scopes = []
+    normalized_scopes = []
+    for scope in source_scopes:
+        scope_text = " ".join(str(scope).split()).strip().lower()
+        if scope_text and scope_text not in normalized_scopes:
+            normalized_scopes.append(scope_text)
+    trend_direction = " ".join(str(item.get("trend_direction", "")).split()).strip().lower()
+    critical = "1" if bool(item.get("critical", False)) else "0"
+    sustained = "1" if bool(item.get("sustained", False)) else "0"
+    print(
+        "\t".join(
+            [
+                family_id,
+                str(severity_weight),
+                ",".join(normalized_scopes),
+                trend_direction,
+                critical,
+                sustained,
+            ]
+        )
+    )
 PY
+}
+
+capability_guidance_trace_family_ids() {
+  trace_json=${1-}
+  capability_guidance_trace_rows "$trace_json" | awk -F '\t' '{print $1}'
 }
 
 model_preference_score_for_mode_with_capability_guidance() {
@@ -163,7 +197,7 @@ model_preference_score_for_mode_with_capability_guidance() {
       ;;
   esac
   total_score=$base_score
-  while IFS= read -r family_id; do
+  while IFS="$(printf '\t')" read -r family_id severity_weight _source_scopes _trend_direction _critical_flag _sustained_flag; do
     family_id=$(trim "$family_id")
     [ -n "$family_id" ] || continue
     bias_score=$(capability_family_model_bias_score "$model_name" "$family_id")
@@ -172,9 +206,25 @@ model_preference_score_for_mode_with_capability_guidance() {
         bias_score=0
         ;;
     esac
-    total_score=$((total_score + bias_score))
+    case "$severity_weight" in
+      ""|*[!0-9-]*)
+        severity_weight=100
+        ;;
+    esac
+    if [ "$severity_weight" -lt 100 ]; then
+      severity_weight=100
+    fi
+    weighted_bias=$((bias_score * severity_weight / 100))
+    if [ "$weighted_bias" -eq 0 ] && [ "$bias_score" -ne 0 ] && [ "$severity_weight" -gt 100 ]; then
+      if [ "$bias_score" -gt 0 ]; then
+        weighted_bias=1
+      else
+        weighted_bias=-1
+      fi
+    fi
+    total_score=$((total_score + weighted_bias))
   done <<EOF
-$(capability_guidance_trace_family_ids "$trace_json")
+$(capability_guidance_trace_rows "$trace_json")
 EOF
   printf '%s' "$total_score"
 }

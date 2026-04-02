@@ -105,10 +105,14 @@ That means a completed run can show:
 - which benchmark families influenced the run
 - why those families were selected
 - the concrete operating guidance derived from them
+- whether the pressure came from internal benchmark decay, external deficits, measured weak-family status, or a sustained trend
+- how severe that guidance was relative to other families in the same run
 
 Artificer can now also use that same capability-guidance trace before the run starts to reroute onto a better-matched installed model.
 
 That means benchmark evidence can improve execution quality directly, not only explain decisions after the fact.
+
+That routing is now severity-aware. A sustained regressing planning family or worsening external research gap carries more routing weight than a mild improving signal in the same family, so Artificer reacts earlier when a capability is decaying in a meaningful way.
 
 Artificer can also derive a benchmark-aware execution profile from that trace and raise reasoning floor or iteration minima for substantive runs when the task touches measured weak families.
 
@@ -128,6 +132,8 @@ and whether that direction has held across multiple benchmark scorecards.
 This matters because a family can be trending the wrong way before it fully collapses into an obvious weak-family failure. Artificer can now see that earlier and use it in ordinary-run guidance and self-improvement prioritization.
 
 This matters because benchmark-aware reasoning should be inspectable, not invisible. If a run was influenced by a measured weak family or sustained external deficit, the operator should be able to see that instead of guessing.
+
+The self-improvement settings surface now also exposes those internal closure trends and persistent external-gap trajectories directly, so operators can see whether Artificer is actually recovering, stalling, or decaying by family instead of only seeing the latest recommendation string.
 
 ## External Baseline Lane
 

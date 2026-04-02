@@ -1146,6 +1146,48 @@
     };
   }
 
+  function normalizeCapabilityClosureReportItems(value) {
+    var list = Array.isArray(value) ? value : [];
+    var clean = [];
+    for (var i = 0; i < list.length && clean.length < 6; i += 1) {
+      var item = list[i] || {};
+      var id = trim(String(item.id || ""));
+      if (!id) {
+        continue;
+      }
+      clean.push({
+        id: id,
+        trend_direction: trim(String(item.trend_direction || "")).toLowerCase(),
+        trend_scorecard_streak: Number(item.trend_scorecard_streak || 0),
+        latest_weak: !!item.latest_weak,
+        critical: !!item.critical,
+        trajectory_summary: trim(String(item.trajectory_summary || ""))
+      });
+    }
+    return clean;
+  }
+
+  function normalizePersistentExternalGapItems(value) {
+    var list = Array.isArray(value) ? value : [];
+    var clean = [];
+    for (var i = 0; i < list.length && clean.length < 6; i += 1) {
+      var item = list[i] || {};
+      var id = trim(String(item.id || ""));
+      if (!id) {
+        continue;
+      }
+      clean.push({
+        id: id,
+        trend_direction: trim(String(item.trend_direction || "")).toLowerCase(),
+        trend_compare_streak: Number(item.trend_compare_streak || 0),
+        occurrence_count: Number(item.occurrence_count || 0),
+        critical: !!item.critical,
+        trajectory_summary: trim(String(item.trajectory_summary || ""))
+      });
+    }
+    return clean;
+  }
+
   function normalizeSelfImproveLastRun(value) {
     var data = value && typeof value === "object" ? value : {};
     var capabilityBenchmark = data.capability_benchmark && typeof data.capability_benchmark === "object"
@@ -1171,10 +1213,24 @@
         compare_recommendation: trim(String(capabilityBenchmark.compare_recommendation || "")),
         candidate_promotable: !!capabilityBenchmark.candidate_promotable,
         weak_family_ids: Array.isArray(capabilityBenchmark.weak_family_ids) ? capabilityBenchmark.weak_family_ids : [],
+        internal_family_closure_report: normalizeCapabilityClosureReportItems(capabilityBenchmark.internal_family_closure_report),
+        regressing_internal_family_ids: Array.isArray(capabilityBenchmark.regressing_internal_family_ids) ? capabilityBenchmark.regressing_internal_family_ids : [],
+        sustained_regressing_internal_family_ids: Array.isArray(capabilityBenchmark.sustained_regressing_internal_family_ids) ? capabilityBenchmark.sustained_regressing_internal_family_ids : [],
+        improving_internal_family_ids: Array.isArray(capabilityBenchmark.improving_internal_family_ids) ? capabilityBenchmark.improving_internal_family_ids : [],
+        sustained_improving_internal_family_ids: Array.isArray(capabilityBenchmark.sustained_improving_internal_family_ids) ? capabilityBenchmark.sustained_improving_internal_family_ids : [],
+        flat_internal_family_ids: Array.isArray(capabilityBenchmark.flat_internal_family_ids) ? capabilityBenchmark.flat_internal_family_ids : [],
+        persistent_external_gaps: normalizePersistentExternalGapItems(capabilityBenchmark.persistent_external_gaps),
+        external_gap_family_ids: Array.isArray(capabilityBenchmark.external_gap_family_ids) ? capabilityBenchmark.external_gap_family_ids : [],
+        persistent_external_gap_family_ids: Array.isArray(capabilityBenchmark.persistent_external_gap_family_ids) ? capabilityBenchmark.persistent_external_gap_family_ids : [],
+        worsening_persistent_external_gap_family_ids: Array.isArray(capabilityBenchmark.worsening_persistent_external_gap_family_ids) ? capabilityBenchmark.worsening_persistent_external_gap_family_ids : [],
+        sustained_worsening_persistent_external_gap_family_ids: Array.isArray(capabilityBenchmark.sustained_worsening_persistent_external_gap_family_ids) ? capabilityBenchmark.sustained_worsening_persistent_external_gap_family_ids : [],
+        closing_persistent_external_gap_family_ids: Array.isArray(capabilityBenchmark.closing_persistent_external_gap_family_ids) ? capabilityBenchmark.closing_persistent_external_gap_family_ids : [],
+        sustained_closing_persistent_external_gap_family_ids: Array.isArray(capabilityBenchmark.sustained_closing_persistent_external_gap_family_ids) ? capabilityBenchmark.sustained_closing_persistent_external_gap_family_ids : [],
         recovered_families: Array.isArray(capabilityBenchmark.recovered_families) ? capabilityBenchmark.recovered_families : [],
         new_weak_families: Array.isArray(capabilityBenchmark.new_weak_families) ? capabilityBenchmark.new_weak_families : [],
         scorecard_count: Number(capabilityBenchmark.scorecard_count || 0),
-        compare_count: Number(capabilityBenchmark.compare_count || 0)
+        compare_count: Number(capabilityBenchmark.compare_count || 0),
+        external_compare_count: Number(capabilityBenchmark.external_compare_count || 0)
       }
     };
   }
@@ -1495,6 +1551,15 @@
       ? state.selfImproveLastRun.capability_benchmark
       : {};
     var weakFamilies = Array.isArray(benchmarkSummary.weak_family_ids) ? benchmarkSummary.weak_family_ids : [];
+    var internalClosureReport = Array.isArray(benchmarkSummary.internal_family_closure_report) ? benchmarkSummary.internal_family_closure_report : [];
+    var regressingInternalFamilies = Array.isArray(benchmarkSummary.regressing_internal_family_ids) ? benchmarkSummary.regressing_internal_family_ids : [];
+    var sustainedRegressingInternalFamilies = Array.isArray(benchmarkSummary.sustained_regressing_internal_family_ids) ? benchmarkSummary.sustained_regressing_internal_family_ids : [];
+    var improvingInternalFamilies = Array.isArray(benchmarkSummary.improving_internal_family_ids) ? benchmarkSummary.improving_internal_family_ids : [];
+    var sustainedImprovingInternalFamilies = Array.isArray(benchmarkSummary.sustained_improving_internal_family_ids) ? benchmarkSummary.sustained_improving_internal_family_ids : [];
+    var persistentExternalGaps = Array.isArray(benchmarkSummary.persistent_external_gaps) ? benchmarkSummary.persistent_external_gaps : [];
+    var sustainedWorseningExternalGaps = Array.isArray(benchmarkSummary.sustained_worsening_persistent_external_gap_family_ids) ? benchmarkSummary.sustained_worsening_persistent_external_gap_family_ids : [];
+    var closingExternalGaps = Array.isArray(benchmarkSummary.closing_persistent_external_gap_family_ids) ? benchmarkSummary.closing_persistent_external_gap_family_ids : [];
+    var sustainedClosingExternalGaps = Array.isArray(benchmarkSummary.sustained_closing_persistent_external_gap_family_ids) ? benchmarkSummary.sustained_closing_persistent_external_gap_family_ids : [];
     var recoveredFamilies = Array.isArray(benchmarkSummary.recovered_families) ? benchmarkSummary.recovered_families : [];
     var newWeakFamilies = Array.isArray(benchmarkSummary.new_weak_families) ? benchmarkSummary.new_weak_families : [];
     if (benchmarkSummary.latest_recommendation) {
@@ -1506,6 +1571,9 @@
     if (Number(benchmarkSummary.compare_count || 0) > 0) {
       summaryParts.push("Compare cycles: " + String(Number(benchmarkSummary.compare_count || 0)));
     }
+    if (Number(benchmarkSummary.external_compare_count || 0) > 0) {
+      summaryParts.push("External compares: " + String(Number(benchmarkSummary.external_compare_count || 0)));
+    }
     if (pluginInventory.active_count > 0) {
       summaryParts.push("Active plugins: " + String(pluginInventory.active_count));
     }
@@ -1514,6 +1582,27 @@
     }
     if (weakFamilies.length) {
       summaryParts.push("Weak families: " + weakFamilies.join(" | "));
+    }
+    if (regressingInternalFamilies.length) {
+      summaryParts.push("Internal regressions: " + regressingInternalFamilies.join(" | "));
+    }
+    if (sustainedRegressingInternalFamilies.length) {
+      summaryParts.push("Sustained internal regressions: " + sustainedRegressingInternalFamilies.join(" | "));
+    }
+    if (improvingInternalFamilies.length) {
+      summaryParts.push("Internal recovery: " + improvingInternalFamilies.join(" | "));
+    }
+    if (sustainedImprovingInternalFamilies.length) {
+      summaryParts.push("Sustained internal recovery: " + sustainedImprovingInternalFamilies.join(" | "));
+    }
+    if (sustainedWorseningExternalGaps.length) {
+      summaryParts.push("Sustained external deficits: " + sustainedWorseningExternalGaps.join(" | "));
+    }
+    if (closingExternalGaps.length) {
+      summaryParts.push("Closing external gaps: " + closingExternalGaps.join(" | "));
+    }
+    if (sustainedClosingExternalGaps.length) {
+      summaryParts.push("Sustained external recovery: " + sustainedClosingExternalGaps.join(" | "));
     }
     if (recoveredFamilies.length) {
       summaryParts.push("Recovered families: " + recoveredFamilies.join(" | "));
@@ -1530,6 +1619,67 @@
     } else {
       if (!plugins.length) {
         html += "<p class='empty-state'>No active self-improvement plugins. Archived plugins remain available below.</p>";
+      }
+      if (internalClosureReport.length || persistentExternalGaps.length) {
+        html += "<article class='mode-runtime-skill'>";
+        html += "<div class='mode-runtime-mode-head'><strong>Capability trend report</strong></div>";
+        if (internalClosureReport.length) {
+          html += "<p class='settings-hint'><strong>Internal closure trends:</strong></p><ul class='run-lines'>";
+          for (var ci = 0; ci < internalClosureReport.length; ci += 1) {
+            var closureItem = internalClosureReport[ci];
+            var closureBits = [];
+            if (closureItem.trend_direction) {
+              closureBits.push(closureItem.trend_direction);
+            }
+            if (closureItem.trend_scorecard_streak > 1) {
+              closureBits.push(String(closureItem.trend_scorecard_streak) + " scorecards");
+            }
+            if (closureItem.latest_weak) {
+              closureBits.push("currently weak");
+            }
+            if (closureItem.critical) {
+              closureBits.push("critical");
+            }
+            if (closureItem.trajectory_summary) {
+              closureBits.push(closureItem.trajectory_summary);
+            }
+            html += "<li><strong>" + escHtml(closureItem.id) + "</strong>";
+            if (closureBits.length) {
+              html += " — " + escHtml(closureBits.join(" | "));
+            }
+            html += "</li>";
+          }
+          html += "</ul>";
+        }
+        if (persistentExternalGaps.length) {
+          html += "<p class='settings-hint'><strong>Persistent external gaps:</strong></p><ul class='run-lines'>";
+          for (var pg = 0; pg < persistentExternalGaps.length; pg += 1) {
+            var gapItem = persistentExternalGaps[pg];
+            var gapBits = [];
+            if (gapItem.trend_direction) {
+              gapBits.push(gapItem.trend_direction);
+            }
+            if (gapItem.trend_compare_streak > 1) {
+              gapBits.push(String(gapItem.trend_compare_streak) + " compares");
+            }
+            if (gapItem.occurrence_count > 0) {
+              gapBits.push(String(gapItem.occurrence_count) + " observations");
+            }
+            if (gapItem.critical) {
+              gapBits.push("critical");
+            }
+            if (gapItem.trajectory_summary) {
+              gapBits.push(gapItem.trajectory_summary);
+            }
+            html += "<li><strong>" + escHtml(gapItem.id) + "</strong>";
+            if (gapBits.length) {
+              html += " — " + escHtml(gapBits.join(" | "));
+            }
+            html += "</li>";
+          }
+          html += "</ul>";
+        }
+        html += "</article>";
       }
       for (var j = 0; j < plugins.length; j += 1) {
         var plugin = plugins[j];
