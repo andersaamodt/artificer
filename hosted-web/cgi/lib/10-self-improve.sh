@@ -323,12 +323,19 @@ if os.path.isdir(plugins_dir):
         payload.setdefault("benchmark_recovered_family_hits", [])
         payload.setdefault("benchmark_improved_family_hits", [])
         payload.setdefault("benchmark_new_weak_family_hits", [])
+        payload["benchmark_compare_count"] = int(payload.get("benchmark_compare_count", 0) or 0)
+        payload["benchmark_promotable_hit_count"] = int(payload.get("benchmark_promotable_hit_count", 0) or 0)
+        payload["benchmark_hold_count"] = int(payload.get("benchmark_hold_count", 0) or 0)
+        payload["benchmark_success_streak"] = int(payload.get("benchmark_success_streak", 0) or 0)
+        payload["benchmark_hold_streak"] = int(payload.get("benchmark_hold_streak", 0) or 0)
+        payload.setdefault("lineage_key", "")
         payload["adoption_state"] = normalize_adoption_state(payload)
         payload.setdefault("adoption_reason", "")
         items.append(payload)
 items.sort(
     key=lambda payload: (
         adoption_rank.get(payload.get("adoption_state", "review"), 4),
+        -safe_number(payload.get("benchmark_success_streak", 0)),
         promotion_rank.get(payload.get("promotion_state", "candidate"), 3),
         -safe_number(payload.get("benchmark_alignment_score", 0)),
         -safe_number(payload.get("competition_score", 0)),
@@ -1906,6 +1913,46 @@ def clean_family_ids(values):
     return clean
 
 
+def normalize_lineage_key(value):
+    text = " ".join(str(value or "").split()).strip().lower()
+    if not text:
+        return ""
+    text = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", text)
+    text = re.sub(r"[^a-z0-9-]+", "-", text).strip("-")
+    return text
+
+
+def lineage_key_for_payload(payload):
+    if not isinstance(payload, dict):
+        return ""
+    for value in [payload.get("lineage_key", ""), payload.get("name", ""), payload.get("id", "")]:
+        line = normalize_lineage_key(value)
+        if line:
+            return line
+    return ""
+
+
+def prior_lineage_records(plugins_dir, lineage_key):
+    records = []
+    if not lineage_key or not os.path.isdir(plugins_dir):
+        return records
+    for name in os.listdir(plugins_dir):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(plugins_dir, name)
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except Exception:
+            continue
+        if lineage_key_for_payload(payload) != lineage_key:
+            continue
+        sort_key = " ".join(str(payload.get("generated_at", "")).split()).strip() or name
+        records.append((sort_key, path, payload))
+    records.sort(key=lambda item: item[0], reverse=True)
+    return records
+
+
 recovered_families = clean_family_ids(latest_compare.get("recovered_families", []))
 improved_families = clean_family_ids(latest_compare.get("improved_families", []))
 new_weak_families = clean_family_ids(latest_compare.get("new_weak_families", []))
@@ -1921,6 +1968,9 @@ for index, plugin in enumerate(plugins, 1):
     base_id = re.sub(r"[^a-z0-9-]+", "-", base_id).strip("-")
     if not base_id:
         base_id = f"plugin-{index}"
+    lineage_key = base_id
+    prior_records = prior_lineage_records(plugins_dir, lineage_key)
+    prior_payload = prior_records[0][2] if prior_records else {}
     final_id = f"{generated_at[:10]}-{base_id}"
     suffix = 2
     while os.path.exists(os.path.join(plugins_dir, final_id + ".json")):
@@ -1929,6 +1979,7 @@ for index, plugin in enumerate(plugins, 1):
 
     payload = dict(plugin)
     payload["id"] = final_id
+    payload["lineage_key"] = lineage_key
     payload["generated_at"] = generated_at
     payload["source_model"] = str(payload.get("source_model", "")).strip() or model_name
     payload["source_lane"] = str(payload.get("source_lane", "")).strip()
@@ -1979,16 +2030,52 @@ for index, plugin in enumerate(plugins, 1):
     payload["benchmark_recovered_family_hits"] = [family_id for family_id in recovered_families if family_id in benchmark_targets_set]
     payload["benchmark_improved_family_hits"] = [family_id for family_id in improved_families if family_id in benchmark_targets_set and family_id not in payload["benchmark_recovered_family_hits"]]
     payload["benchmark_new_weak_family_hits"] = [family_id for family_id in new_weak_families if family_id in benchmark_targets_set]
-    if payload["benchmark_new_weak_family_hits"]:
+    compare_present = bool(compare_recommendation)
+    direct_compare_win = bool(payload["benchmark_recovered_family_hits"] or payload["benchmark_improved_family_hits"])
+    previous_compare_count = int(prior_payload.get("benchmark_compare_count", 0) or 0)
+    previous_promotable_hit_count = int(prior_payload.get("benchmark_promotable_hit_count", 0) or 0)
+    previous_hold_count = int(prior_payload.get("benchmark_hold_count", 0) or 0)
+    previous_success_streak = int(prior_payload.get("benchmark_success_streak", 0) or 0)
+    previous_hold_streak = int(prior_payload.get("benchmark_hold_streak", 0) or 0)
+    payload["benchmark_compare_count"] = previous_compare_count + (1 if compare_present else 0)
+    payload["benchmark_promotable_hit_count"] = previous_promotable_hit_count + (1 if direct_compare_win else 0)
+    payload["benchmark_hold_count"] = previous_hold_count + (1 if compare_present and (not candidate_promotable or payload["benchmark_new_weak_family_hits"]) else 0)
+    if direct_compare_win:
+        payload["benchmark_success_streak"] = previous_success_streak + 1
+        payload["benchmark_hold_streak"] = 0
+    elif compare_present and (not candidate_promotable or payload["benchmark_new_weak_family_hits"]):
+        payload["benchmark_success_streak"] = 0
+        payload["benchmark_hold_streak"] = previous_hold_streak + 1
+    elif compare_present:
+        payload["benchmark_success_streak"] = 0
+        payload["benchmark_hold_streak"] = 0
+    else:
+        payload["benchmark_success_streak"] = previous_success_streak
+        payload["benchmark_hold_streak"] = previous_hold_streak
+    if not payload["benchmark_family_targets"]:
         adoption_state = "rejected"
-        adoption_reason = "Latest benchmark compare still shows the targeted family as weak."
-    elif candidate_promotable and (payload["benchmark_recovered_family_hits"] or payload["benchmark_improved_family_hits"]):
-        adoption_state = "adopted"
-        adoption_reason = "Latest promotable benchmark compare improved this plugin's targeted families."
+        adoption_reason = "No measurable benchmark family mapping."
+    elif payload["benchmark_new_weak_family_hits"]:
+        if payload["benchmark_hold_streak"] >= 2:
+            adoption_state = "rejected"
+            adoption_reason = "Two consecutive benchmark compares still showed the targeted family as weak."
+        else:
+            adoption_state = "review"
+            adoption_reason = "Latest benchmark compare still shows the targeted family as weak; one more failed compare will reject it."
+    elif direct_compare_win:
+        if payload["benchmark_success_streak"] >= 2:
+            adoption_state = "adopted"
+            adoption_reason = "Two consecutive promotable benchmark compares improved this plugin's targeted families."
+        else:
+            adoption_state = "trial"
+            adoption_reason = "One promotable benchmark compare improved this plugin's targeted families; one more consecutive promotable compare is required before adoption."
     elif compare_recommendation:
         if candidate_promotable and payload["targeted_capability_gaps"]:
             adoption_state = "trial"
-            adoption_reason = "Latest benchmark compare is promotable overall, but this plugin still needs isolated family-level proof."
+            adoption_reason = "Latest benchmark compare is promotable overall, but this plugin still needs direct family-level proof."
+        elif payload["benchmark_hold_streak"] >= 2:
+            adoption_state = "rejected"
+            adoption_reason = "Two consecutive benchmark compares failed to prove this plugin improves its mapped families."
         elif payload["benchmark_family_targets"]:
             adoption_state = "review"
             adoption_reason = "Latest benchmark compare did not yet prove this plugin should stay active."
@@ -2017,6 +2104,11 @@ for index, plugin in enumerate(plugins, 1):
         "new_weak_families": new_weak_families,
     }
 
+    for _, old_path, _ in prior_records:
+        try:
+            os.remove(old_path)
+        except OSError:
+            pass
     with open(os.path.join(plugins_dir, final_id + ".json"), "w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
     saved_ids.append(final_id)
@@ -2140,10 +2232,12 @@ if os.path.isdir(plugins_dir):
             promotion_state = "candidate"
         payload["promotion_state"] = promotion_state
         payload["adoption_state"] = normalize_adoption_state(payload)
+        payload["benchmark_success_streak"] = int(payload.get("benchmark_success_streak", 0) or 0)
         items.append(payload)
 items.sort(
     key=lambda payload: (
         adoption_rank.get(payload.get("adoption_state", "review"), 4),
+        -safe_number(payload.get("benchmark_success_streak", 0)),
         promotion_rank.get(payload.get("promotion_state", "candidate"), 3),
         -safe_number(payload.get("benchmark_alignment_score", 0)),
         str(payload.get("name", payload.get("id", ""))).strip().lower(),

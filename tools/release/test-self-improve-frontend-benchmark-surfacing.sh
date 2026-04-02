@@ -30,6 +30,11 @@ if ! grep -q 'summaryParts.push("Latest compare: " + benchmarkSummary.compare_re
   exit 1
 fi
 
+if ! grep -q 'summaryParts.push("Compare cycles: " + String(Number(benchmarkSummary.compare_count || 0)));' "$render_file"; then
+  printf '%s\n' "self-improvement summary is missing compare-count copy" >&2
+  exit 1
+fi
+
 if ! grep -q 'summaryParts.push("Weak families: " + weakFamilies.join(" | "));' "$render_file"; then
   printf '%s\n' "self-improvement summary is missing weak-family copy" >&2
   exit 1
@@ -60,8 +65,18 @@ if ! grep -q "<strong>Weak compare hits:</strong>" "$render_file"; then
   exit 1
 fi
 
+if ! grep -q "<strong>Benchmark history:</strong>" "$render_file"; then
+  printf '%s\n' "self-improvement plugin cards are missing benchmark history rendering" >&2
+  exit 1
+fi
+
 if ! grep -q 'metadataBits.push("adoption " + plugin.adoption_state);' "$render_file"; then
   printf '%s\n' "self-improvement plugin cards are missing adoption-state metadata" >&2
+  exit 1
+fi
+
+if ! grep -q 'metadataBits.push("streak " + String(plugin.benchmark_success_streak));' "$render_file"; then
+  printf '%s\n' "self-improvement plugin cards are missing benchmark streak metadata" >&2
   exit 1
 fi
 

@@ -74,14 +74,14 @@ This is the intended loop:
 
 Self-improvement plugins are no longer treated as active just because they were proposed.
 
-Artificer now stores an explicit adoption state for each plugin:
+Artificer now stores an explicit adoption state for each plugin and keeps one current record per plugin lineage:
 
-- `adopted`: latest benchmark compare is promotable and improved or recovered the plugin's targeted families
-- `trial`: targets live weak families, but still needs more isolated family-level proof
+- `adopted`: two consecutive promotable benchmark compares improved or recovered the plugin's targeted families
+- `trial`: promising, but still waiting for either the first direct family-level win or the second consecutive win needed for adoption
 - `review`: mapped to a benchmark family, but the latest compare did not prove it should stay active
-- `rejected`: latest compare still shows the targeted family as weak or the plugin did not map to a measurable family
+- `rejected`: two consecutive failed compares still showed weakness or failed to prove the plugin's mapped families
 
-This keeps the self-improvement loop aligned with the standard above: measured transfer beats plausibility.
+This keeps the self-improvement loop aligned with the standard above: measured transfer beats plausibility, and repeated evidence beats one lucky run.
 
 ## Why This Matters
 

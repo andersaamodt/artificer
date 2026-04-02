@@ -1236,6 +1236,11 @@
         benchmark_recovered_family_hits: Array.isArray(item.benchmark_recovered_family_hits) ? item.benchmark_recovered_family_hits : [],
         benchmark_improved_family_hits: Array.isArray(item.benchmark_improved_family_hits) ? item.benchmark_improved_family_hits : [],
         benchmark_new_weak_family_hits: Array.isArray(item.benchmark_new_weak_family_hits) ? item.benchmark_new_weak_family_hits : [],
+        benchmark_compare_count: Number(item.benchmark_compare_count || 0),
+        benchmark_promotable_hit_count: Number(item.benchmark_promotable_hit_count || 0),
+        benchmark_hold_count: Number(item.benchmark_hold_count || 0),
+        benchmark_success_streak: Number(item.benchmark_success_streak || 0),
+        benchmark_hold_streak: Number(item.benchmark_hold_streak || 0),
         adoption_state: adoptionState,
         adoption_reason: trim(String(item.adoption_reason || ""))
       });
@@ -1256,6 +1261,9 @@
       var bAdoptionRank = adoptionRank.hasOwnProperty(b.adoption_state) ? adoptionRank[b.adoption_state] : 4;
       if (aAdoptionRank !== bAdoptionRank) {
         return aAdoptionRank - bAdoptionRank;
+      }
+      if (a.benchmark_success_streak !== b.benchmark_success_streak) {
+        return b.benchmark_success_streak - a.benchmark_success_streak;
       }
       var aRank = stateRank.hasOwnProperty(a.promotion_state) ? stateRank[a.promotion_state] : 3;
       var bRank = stateRank.hasOwnProperty(b.promotion_state) ? stateRank[b.promotion_state] : 3;
@@ -1422,6 +1430,9 @@
     if (benchmarkSummary.compare_recommendation) {
       summaryParts.push("Latest compare: " + benchmarkSummary.compare_recommendation + (benchmarkSummary.candidate_promotable ? " (promotable)" : ""));
     }
+    if (Number(benchmarkSummary.compare_count || 0) > 0) {
+      summaryParts.push("Compare cycles: " + String(Number(benchmarkSummary.compare_count || 0)));
+    }
     if (weakFamilies.length) {
       summaryParts.push("Weak families: " + weakFamilies.join(" | "));
     }
@@ -1475,6 +1486,9 @@
         if (plugin.benchmark_new_weak_family_hits && plugin.benchmark_new_weak_family_hits.length) {
           html += "<p class='settings-hint'><strong>Weak compare hits:</strong> " + escHtml(plugin.benchmark_new_weak_family_hits.join(" | ")) + "</p>";
         }
+        if (plugin.benchmark_compare_count > 0 || plugin.benchmark_promotable_hit_count > 0 || plugin.benchmark_hold_count > 0) {
+          html += "<p class='settings-hint'><strong>Benchmark history:</strong> compares " + escHtml(String(plugin.benchmark_compare_count)) + " | promotable hits " + escHtml(String(plugin.benchmark_promotable_hit_count)) + " | holds " + escHtml(String(plugin.benchmark_hold_count)) + " | success streak " + escHtml(String(plugin.benchmark_success_streak)) + " | hold streak " + escHtml(String(plugin.benchmark_hold_streak)) + "</p>";
+        }
         if (plugin.evidence_refs && plugin.evidence_refs.length) {
           html += "<p class='settings-hint'><strong>Evidence refs:</strong> " + escHtml(plugin.evidence_refs.join(" | ")) + "</p>";
         }
@@ -1502,6 +1516,9 @@
         }
         if (isFinite(plugin.benchmark_alignment_score) && plugin.benchmark_alignment_score > 0) {
           metadataBits.push("alignment " + String(plugin.benchmark_alignment_score));
+        }
+        if (plugin.benchmark_success_streak > 0) {
+          metadataBits.push("streak " + String(plugin.benchmark_success_streak));
         }
         if (metadataBits.length) {
           html += "<p class='settings-hint'>" + escHtml(metadataBits.join(" | ")) + "</p>";

@@ -59,13 +59,15 @@ EOF_JSON
 store_json=$(self_improve_store_report_and_plugins "mistral:latest" '{"objective":"Benchmark-gated adoption","competition_enabled":true}' "$promote_evidence_json" "$report_json")
 plugins_payload=$(self_improve_plugins_json)
 
-[ "$(json_query "$plugins_payload" '[item.get("adoption_state") for item in data]')" = "[\"adopted\",\"adopted\",\"trial\",\"review\",\"rejected\"]" ] || fail "plugins should sort by adoption state"
+[ "$(json_query "$plugins_payload" '[item.get("adoption_state") for item in data]')" = "[\"trial\",\"trial\",\"trial\",\"review\",\"review\"]" ] || fail "first measured compare should stage promising plugins as trial/review instead of immediately locking them in"
 [ "$(json_query "$plugins_payload" 'sum(1 for item in data if item.get("enabled") is True)')" = "3" ] || fail "adopted and trial plugins should auto-enable"
 [ "$(json_query "$plugins_payload" 'data[0].get("benchmark_recovered_family_hits")')" = "[\"planning_architecture\"]" ] || fail "planning plugin should record recovered-family evidence"
+[ "$(json_query "$plugins_payload" 'data[0].get("benchmark_success_streak")')" = "1" ] || fail "planning plugin should start with a single success streak after one promotable compare"
 [ "$(json_query "$plugins_payload" 'data[1].get("benchmark_improved_family_hits")')" = "[\"coding_mutation\"]" ] || fail "coding plugin should record improved-family evidence"
 [ "$(json_query "$plugins_payload" 'data[2].get("adoption_state")')" = "trial" ] || fail "admin weak-gap plugin should remain in trial when compare is promotable overall but lacks direct family proof"
 [ "$(json_query "$plugins_payload" 'data[4].get("benchmark_new_weak_family_hits")')" = "[\"review_document\"]" ] || fail "review plugin should record weak-family compare evidence"
-[ "$(json_query "$plugins_payload" 'data[4].get("enabled")')" = "false" ] || fail "review plugin should auto-disable when compare shows it as weak"
+[ "$(json_query "$plugins_payload" 'data[4].get("benchmark_hold_streak")')" = "1" ] || fail "review plugin should record an initial hold streak when compare evidence is weak"
+[ "$(json_query "$plugins_payload" 'data[4].get("enabled")')" = "false" ] || fail "review plugin should stay disabled until repeated compare evidence promotes it"
 [ "$(json_query "$store_json" 'data.get("capability_benchmark", {}).get("compare_recommendation")')" = "promote-candidate" ] || fail "last-run payload should preserve compare recommendation"
 [ "$(json_query "$store_json" 'data.get("capability_benchmark", {}).get("candidate_promotable")')" = "true" ] || fail "last-run payload should preserve compare promotable flag"
 
