@@ -1,0 +1,7 @@
+family_id	name	axis	weight	critical	run_style	transfer_style	score_style	cycle_script	regressions_fixture	holdout_fixture
+research_integration	Research and knowledge integration	web-research+knowledge-integration	1.2	1	profile	simple	simple	hosted-web/scripts/repo-runtime-web-triage-cycle.sh		
+planning_architecture	Planning and architecture	planning+architecture	1.35	1	tasks	battery	broad	hosted-web/scripts/broad-reasoning-cycle.sh	hosted-web/tests/fixtures/artificer-broad-reasoning-battery-v16.tsv	hosted-web/tests/fixtures/artificer-broad-reasoning-holdout-v16.tsv
+coding_mutation	Coding and bounded mutation	programming+verification	1.25	1	profile	simple	simple	hosted-web/scripts/filesystem-mutation-cycle.sh		
+review_document	Review and document quality	verification+document-quality	1.1	1	profile	battery	broad	hosted-web/scripts/document-quality-cycle.sh		
+teaching_reassessment	Teaching and long-context reassessment	teaching+long-context	1.0	0	profile	battery	rich	hosted-web/scripts/long-context-reassessment-cycle.sh		
+admin_env_repair	Admin setup and environment repair	admin-setup	1.1	1	profile	simple	simple	hosted-web/scripts/env-drift-cycle.sh		

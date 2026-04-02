@@ -100,6 +100,7 @@ Human-facing docs, by intent:
 
 - Start here: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md), [docs/USER_GUIDE.md](docs/USER_GUIDE.md), [docs/SETTINGS_AND_MODELS.md](docs/SETTINGS_AND_MODELS.md)
 - Intelligence and reasoning: [docs/HOW_ARTIFICER_LLMS_WORK.md](docs/HOW_ARTIFICER_LLMS_WORK.md), [docs/OLLAMA_CONTRIBUTOR_PATH.md](docs/OLLAMA_CONTRIBUTOR_PATH.md), [docs/INTELLIGENCE_MENTORING_EXPLAINED.md](docs/INTELLIGENCE_MENTORING_EXPLAINED.md), [docs/CAPABILITY_ROADMAP.md](docs/CAPABILITY_ROADMAP.md)
+- Capability measurement: [docs/CAPABILITY_BENCHMARKS.md](docs/CAPABILITY_BENCHMARKS.md)
 - Reference: [docs/GLOSSARY.md](docs/GLOSSARY.md), [docs/REPO_OVERVIEW.md](docs/REPO_OVERVIEW.md), [docs/PROJECT_LAYOUT.md](docs/PROJECT_LAYOUT.md)
 - Release and contribution: [docs/release-notes/v0.1.0.md](docs/release-notes/v0.1.0.md), [docs/PUBLISHING_AUDIT.md](docs/PUBLISHING_AUDIT.md), [docs/CODEBASE_HARDENING_CHECKLIST.md](docs/CODEBASE_HARDENING_CHECKLIST.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md)
 - Runtime/tooling dependencies: [docs/RUNTIME_DEPENDENCIES.md](docs/RUNTIME_DEPENDENCIES.md)

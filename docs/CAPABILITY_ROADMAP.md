@@ -57,6 +57,8 @@ The best next steps are:
 4. Improve retrieval so local models spend context on the most relevant evidence.
 5. Keep self-improvement ideas only when they improve measured results on holdout tasks.
 
+The benchmark battery and scorecard workflow are documented in [CAPABILITY_BENCHMARKS.md](CAPABILITY_BENCHMARKS.md).
+
 ## How To Prove Improvement
 
 Do not trust intuition or one impressive demo.

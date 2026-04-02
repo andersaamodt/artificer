@@ -23,6 +23,8 @@ self_actuation_orchestration_policy_audit	Self-actuation orchestration enforces 
 self_actuation_orchestrate_operation_coverage	Every orchestrated self-actuation operation executes through preview/apply with state verification in isolated runtime.	test-self-actuation-orchestrate-operation-coverage.sh
 self_knowledge_drift_guards	Registry topics, reflexive prompt topics, GUI labels, and command-surface contracts stay synchronized without silent drift.	test-self-knowledge-drift-guards.sh
 self_knowledge_capability_roadmap_quality	Self-knowledge teach/show payloads explain current strengths, model ceilings, engineering gaps, and measurable next improvements.	test-self-knowledge-capability-roadmap-quality.sh
+self_improve_runtime_capability_benchmark	Self-improvement runtime evidence exposes the latest capability benchmark scorecards and comparisons for measured gap-aware improvement planning.	test-self-improve-runtime-capability-benchmark.sh
+self_improve_capability_benchmark_cycle	Cross-domain capability benchmark manifest, plan, score, and compare flows remain deterministic and promotable against real family scorecards.	test-capability-benchmark-cycle.sh
 self_knowledge_self_actuation_quality	Self-knowledge teach/show payloads for self-actuation remain explicit, operational, and diagnostically complete.	test-self-knowledge-self-actuation-quality.sh
 model_catalog_metadata	Model rows preserve description optionality and always include size metadata.	test-model-catalog-installed-metadata.sh
 model_auto_refresh_recovery	Model list refresh loop recovers after failed fetch cycles.	test-model-auto-refresh-recovery.sh

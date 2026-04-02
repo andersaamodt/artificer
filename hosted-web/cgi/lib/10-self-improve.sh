@@ -569,6 +569,7 @@ self_improve_runtime_signals_json() {
   quality_summary="none"
   proposal_summary="none"
   controller_json="{}"
+  capability_benchmark_json='{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"latest_scorecard":{},"latest_compare":{},"high_leverage_gaps":[]}'
 
   if [ "$mode_runtime_lib_loaded" = "1" ]; then
     ensure_mode_runtime_bootstrap
@@ -586,7 +587,9 @@ self_improve_runtime_signals_json() {
     fi
   fi
 
-  RUNTIME_CONTROLLER_JSON=$controller_json python3 - "$mode_runtime_root" "$failure_summary" "$quality_summary" "$proposal_summary" <<'PY'
+  capability_benchmark_json=$(self_improve_capability_benchmark_summary_json)
+
+  RUNTIME_CONTROLLER_JSON=$controller_json RUNTIME_BENCHMARK_JSON=$capability_benchmark_json python3 - "$mode_runtime_root" "$failure_summary" "$quality_summary" "$proposal_summary" <<'PY'
 import json
 import os
 import pathlib
@@ -597,6 +600,7 @@ failure_summary = " ".join(str(sys.argv[2]).split()).strip() or "none"
 quality_summary = " ".join(str(sys.argv[3]).split()).strip() or "none"
 proposal_summary = " ".join(str(sys.argv[4]).split()).strip() or "none"
 controller_raw = os.environ.get("RUNTIME_CONTROLLER_JSON", "{}")
+benchmark_raw = os.environ.get("RUNTIME_BENCHMARK_JSON", "{}")
 
 
 def line_count(path):
@@ -625,16 +629,102 @@ try:
 except Exception:
     controller_state = {}
 
+try:
+    benchmark_state = json.loads(benchmark_raw)
+    if not isinstance(benchmark_state, dict):
+        benchmark_state = {}
+except Exception:
+    benchmark_state = {}
+
+benchmark_scorecard_count = 0
+benchmark_compare_count = 0
+try:
+    benchmark_scorecard_count = int(benchmark_state.get("scorecard_count", 0))
+except Exception:
+    benchmark_scorecard_count = 0
+try:
+    benchmark_compare_count = int(benchmark_state.get("compare_count", 0))
+except Exception:
+    benchmark_compare_count = 0
+
 payload = {
     "failure_summary": failure_summary,
     "quality_summary": quality_summary,
     "proposal_summary": proposal_summary,
     "controller_variants": controller_state,
+    "capability_benchmark": benchmark_state,
     "counts": {
         "failure_events": failure_events,
         "quality_entries": quality_entries,
         "proposal_items": proposal_count,
+        "capability_benchmark_scorecards": benchmark_scorecard_count,
+        "capability_benchmark_compares": benchmark_compare_count,
     },
+}
+print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+PY
+}
+
+self_improve_capability_benchmark_summary_json() {
+  manifest_path="$ARTIFICER_SCRIPT_DIR/../../tests/fixtures/artificer-capability-benchmark-manifest-v1.tsv"
+  python3 - "$ARTIFICER_ASSAY_REPORTS_DIR" "$manifest_path" <<'PY'
+import json
+import pathlib
+import sys
+
+reports_dir = pathlib.Path(sys.argv[1]).expanduser()
+manifest_path = pathlib.Path(sys.argv[2]).expanduser()
+
+
+def parse_json(path):
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except Exception:
+        payload = {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def latest(paths):
+    if not paths:
+        return None
+    return max(paths, key=lambda item: (item.stat().st_mtime, item.name))
+
+
+scorecard_paths = []
+compare_paths = []
+if reports_dir.is_dir():
+    scorecard_paths = sorted(reports_dir.glob("*-capability-benchmark-scorecard.json"))
+    compare_paths = sorted(reports_dir.glob("*-capability-benchmark-compare.json"))
+
+latest_scorecard_path = latest(scorecard_paths)
+latest_compare_path = latest(compare_paths)
+latest_scorecard = parse_json(latest_scorecard_path) if latest_scorecard_path else {}
+latest_compare = parse_json(latest_compare_path) if latest_compare_path else {}
+
+high_leverage_gaps = []
+weak_families = latest_scorecard.get("weak_families", []) if isinstance(latest_scorecard, dict) else []
+if isinstance(weak_families, list):
+    for item in weak_families[:4]:
+        if not isinstance(item, dict):
+            continue
+        high_leverage_gaps.append(
+            {
+                "id": str(item.get("id", "")).strip(),
+                "score": item.get("score", 0),
+                "critical": bool(item.get("critical", False)),
+                "reason": str(item.get("reason", "")).strip(),
+            }
+        )
+
+payload = {
+    "manifest_path": str(manifest_path) if manifest_path.is_file() else "",
+    "family_count": int(latest_scorecard.get("family_count", 0) or 0) if isinstance(latest_scorecard, dict) else 0,
+    "scorecard_count": len(scorecard_paths),
+    "compare_count": len(compare_paths),
+    "latest_scorecard": latest_scorecard,
+    "latest_compare": latest_compare,
+    "high_leverage_gaps": high_leverage_gaps,
 }
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 PY
@@ -843,7 +933,7 @@ PY
 
   papers_json='{"papers":[]}'
   web_json='{"web_signals":[]}'
-  runtime_json='{"failure_summary":"none","quality_summary":"none","proposal_summary":"none","controller_variants":{},"counts":{"failure_events":0,"quality_entries":0,"proposal_items":0}}'
+  runtime_json='{"failure_summary":"none","quality_summary":"none","proposal_summary":"none","controller_variants":{},"capability_benchmark":{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"latest_scorecard":{},"latest_compare":{},"high_leverage_gaps":[]},"counts":{"failure_events":0,"quality_entries":0,"proposal_items":0,"capability_benchmark_scorecards":0,"capability_benchmark_compares":0}}'
   repo_json='{"repo_root":"","worktree":{"tracked_changes":0,"untracked_changes":0},"top_extensions":[],"todo_hotspots":[],"workflows":[],"release_scripts":[]}'
   platform_json='{"os":"","arch":"","commands":{},"scheduler_support":{"launchd":false,"systemd_user":false,"cron":false}}'
 
@@ -907,6 +997,8 @@ counts = {
     "failure_events": to_int(runtime_counts.get("failure_events", 0)),
     "quality_entries": to_int(runtime_counts.get("quality_entries", 0)),
     "proposal_items": to_int(runtime_counts.get("proposal_items", 0)),
+    "capability_benchmark_scorecards": to_int(runtime_counts.get("capability_benchmark_scorecards", 0)),
+    "capability_benchmark_compares": to_int(runtime_counts.get("capability_benchmark_compares", 0)),
     "repo_tracked_changes": to_int(repo_worktree.get("tracked_changes", 0)),
     "repo_untracked_changes": to_int(repo_worktree.get("untracked_changes", 0)),
 }
@@ -954,6 +1046,7 @@ Rules:
 - Every plugin must include specific instructions plus an implementation plan.
 - Include domain tags from: web-research, knowledge-integration, planning, architecture, programming, verification, admin-setup
 - Include concise evidence references and any admin/setup actions needed.
+- If runtime_signals.capability_benchmark is present, prioritize weak critical families and propose changes that can be measured against those benchmark families.
 - Return strict JSON only.
 
 JSON schema:
@@ -1646,4 +1739,3 @@ for line in lines[:8]:
     print(line)
 PY
 }
-
