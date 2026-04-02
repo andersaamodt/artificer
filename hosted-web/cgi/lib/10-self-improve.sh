@@ -1594,6 +1594,143 @@ print(summary)
 PY
 }
 
+self_improve_capability_guidance_execution_profile_json() {
+  trace_json=${1-}
+  run_mode=${2-}
+  SELF_IMPROVE_GUIDANCE_TRACE_JSON=$trace_json \
+  SELF_IMPROVE_GUIDANCE_PROFILE_RUN_MODE=$run_mode \
+  python3 - <<'PY'
+import json
+import os
+import re
+
+
+def normalize_family_id(value):
+    token = re.sub(r"[^a-z0-9-]+", "_", str(value).strip().lower()).strip("_")
+    if token in {"research", "research_integration", "knowledge_integration"}:
+        return "research_integration"
+    if token in {"planning", "planning_architecture", "architecture"}:
+        return "planning_architecture"
+    if token in {"coding", "coding_mutation", "programming"}:
+        return "coding_mutation"
+    if token in {"review", "review_document", "document"}:
+        return "review_document"
+    if token in {"teaching", "teaching_reassessment", "reassessment"}:
+        return "teaching_reassessment"
+    if token in {"admin", "admin_env_repair", "env_repair"}:
+        return "admin_env_repair"
+    return ""
+
+
+try:
+    payload = json.loads(os.environ.get("SELF_IMPROVE_GUIDANCE_TRACE_JSON", "") or "{}")
+except Exception:
+    payload = {}
+if not isinstance(payload, dict):
+    payload = {}
+
+run_mode = " ".join(str(os.environ.get("SELF_IMPROVE_GUIDANCE_PROFILE_RUN_MODE", "")).split()).strip().lower()
+items = payload.get("items", [])
+if not isinstance(items, list):
+    items = []
+
+effort_rank = {"low": 0, "medium": 1, "high": 2, "extra-high": 3}
+effort_name = {value: key for key, value in effort_rank.items()}
+
+family_policy = {
+    "research_integration": {
+        "modes": {"assistant", "auto", "report", "teacher", "text-perfecter", "security-audit", "pentest"},
+        "effort": "high",
+        "iterations": 8,
+    },
+    "planning_architecture": {
+        "modes": {"assistant", "auto", "programming", "report", "security-audit", "pentest", "gui-testing"},
+        "effort": "high",
+        "iterations": 8,
+    },
+    "coding_mutation": {
+        "modes": {"assistant", "auto", "programming", "security-audit", "pentest", "gui-testing"},
+        "effort": "high",
+        "iterations": 6,
+    },
+    "review_document": {
+        "modes": {"assistant", "auto", "report", "teacher", "text-perfecter", "security-audit"},
+        "effort": "high",
+        "iterations": 6,
+    },
+    "teaching_reassessment": {
+        "modes": {"assistant", "auto", "teacher", "report", "text-perfecter"},
+        "effort": "high",
+        "iterations": 7,
+    },
+    "admin_env_repair": {
+        "modes": {"assistant", "auto", "programming", "gui-testing"},
+        "effort": "high",
+        "iterations": 6,
+    },
+}
+
+result_effort = ""
+result_iterations = 0
+matched = []
+
+if run_mode not in {"instant", "chat"}:
+    for item in items[:6]:
+        if not isinstance(item, dict):
+            continue
+        family_id = normalize_family_id(item.get("id", ""))
+        if not family_id:
+            continue
+        policy = family_policy.get(family_id)
+        if not policy:
+            continue
+        if run_mode not in policy.get("modes", set()):
+            continue
+        reason_text = " ".join(str(item.get("reason", "")).split()).strip().lower()
+        family_effort_rank = effort_rank.get(policy.get("effort", "high"), 2)
+        family_iterations = int(policy.get("iterations", 0) or 0)
+        if "critical" in reason_text:
+            family_iterations += 1
+        if "sustained worsening" in reason_text:
+            family_effort_rank = max(family_effort_rank, effort_rank["extra-high"])
+            family_iterations += 2
+        elif "worsening" in reason_text:
+            family_effort_rank = max(family_effort_rank, effort_rank["extra-high"])
+            family_iterations += 1
+        elif "sustained flat" in reason_text:
+            family_iterations += 1
+        result_effort_rank = effort_rank.get(result_effort or "low", 0)
+        if family_effort_rank > result_effort_rank:
+            result_effort = effort_name[family_effort_rank]
+        result_iterations = max(result_iterations, family_iterations)
+        matched.append(family_id)
+
+summary = ""
+if result_effort or result_iterations:
+    summary_parts = []
+    if result_effort:
+        summary_parts.append(f"{result_effort} reasoning")
+    if result_iterations:
+        summary_parts.append(f"minimum {result_iterations} iterations")
+    if matched:
+        summary_parts.append("for " + ", ".join(matched[:3]))
+    summary = ", ".join(summary_parts)
+
+print(
+    json.dumps(
+        {
+            "reasoning_effort_floor": result_effort,
+            "min_iterations": result_iterations,
+            "matched_family_ids": matched[:6],
+            "summary": summary,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+)
+PY
+}
+
 self_improve_repo_signals_json() {
   repo_root=$(artificer_app_root_for_runtime)
   if [ -z "$repo_root" ]; then

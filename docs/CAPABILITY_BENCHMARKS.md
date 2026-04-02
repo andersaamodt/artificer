@@ -110,6 +110,10 @@ Artificer can now also use that same capability-guidance trace before the run st
 
 That means benchmark evidence can improve execution quality directly, not only explain decisions after the fact.
 
+Artificer can also derive a benchmark-aware execution profile from that trace and raise reasoning floor or iteration minima for substantive runs when the task touches measured weak families.
+
+That means benchmark evidence can influence not only which model runs, but also how much effort the run spends when the task sits in a family Artificer still needs to strengthen.
+
 This matters because benchmark-aware reasoning should be inspectable, not invisible. If a run was influenced by a measured weak family or sustained external deficit, the operator should be able to see that instead of guessing.
 
 ## External Baseline Lane

@@ -8,6 +8,26 @@ model_is_text_generation_model() {
   return 0
 }
 
+reasoning_effort_rank() {
+  case "$(printf '%s' "${1-}" | tr '[:upper:]' '[:lower:]')" in
+    low)
+      printf '%s' "0"
+      ;;
+    medium)
+      printf '%s' "1"
+      ;;
+    high)
+      printf '%s' "2"
+      ;;
+    extra-high)
+      printf '%s' "3"
+      ;;
+    *)
+      printf '%s' "1"
+      ;;
+  esac
+}
+
 capability_family_model_bias_score() {
   model_name=$1
   family_id=$2

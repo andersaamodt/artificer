@@ -314,6 +314,9 @@
     else
       stream_emit_line "$stream_output_file" "Run mode: $run_mode (advanced_loop=${advanced_loop_raw:-auto}, reasoning=$reasoning_effort, compute_budget=$compute_budget, max_iterations=$max_iterations_label)"
     fi
+    if [ -n "$(trim "${capability_execution_profile_summary:-}")" ]; then
+      stream_emit_line "$stream_output_file" "Benchmark-aware effort profile: $capability_execution_profile_summary"
+    fi
     stream_emit_line "$stream_output_file" "Run orchestration initialized."
     stream_emit_line "$stream_output_file" "Initial checkpoints seeded."
     stream_emit_line "$stream_output_file" "Run time budget: ${run_time_budget}s"

@@ -53,6 +53,11 @@
     controller_variant_active_id=""
     controller_variant_candidate_id=""
     controller_variant_guidance=""
+    run_capability_guidance_seed_block="NONE"
+    run_capability_guidance_seed_trace_json='{"summary":"","items":[],"count":0}'
+    run_capability_guidance_seed_summary=""
+    capability_execution_profile_json='{"reasoning_effort_floor":"","min_iterations":0,"matched_family_ids":[],"summary":""}'
+    capability_execution_profile_summary=""
 
     if ! valid_workspace_id "$workspace_id"; then
       emit_error "invalid workspace_id"
@@ -228,6 +233,17 @@
       assay_edit_root=""
     fi
     prompt_lower_for_budget=$(printf '%s' "$user_prompt" | tr '[:upper:]' '[:lower:]')
+    if command -v self_improve_capability_guidance_prompt_block >/dev/null 2>&1; then
+      run_capability_guidance_seed_block=$(self_improve_capability_guidance_prompt_block "$run_mode" "$user_prompt")
+      if [ -n "$(trim "$run_capability_guidance_seed_block")" ] && [ "$run_capability_guidance_seed_block" != "NONE" ]; then
+        if command -v self_improve_capability_guidance_trace_json_from_block >/dev/null 2>&1; then
+          run_capability_guidance_seed_trace_json=$(self_improve_capability_guidance_trace_json_from_block "$run_capability_guidance_seed_block")
+        fi
+        if command -v self_improve_capability_guidance_trace_summary_text >/dev/null 2>&1; then
+          run_capability_guidance_seed_summary=$(self_improve_capability_guidance_trace_summary_text "$run_capability_guidance_seed_trace_json")
+        fi
+      fi
+    fi
     if [ "$assay_run_profile" -ne 1 ]; then
       if [ "$run_mode" = "auto" ] && prompt_prefers_compact_reasoning_contract "$user_prompt"; then
         if [ "$max_iterations" -gt 2 ]; then
@@ -369,6 +385,47 @@
           fi
           ;;
       esac
+      if command -v self_improve_capability_guidance_execution_profile_json >/dev/null 2>&1; then
+        capability_execution_profile_json=$(self_improve_capability_guidance_execution_profile_json "$run_capability_guidance_seed_trace_json" "$run_mode")
+        capability_execution_profile_values=$(ARTIFICER_CAPABILITY_EXECUTION_PROFILE_JSON=$capability_execution_profile_json python3 - <<'PY'
+import json
+import os
+
+try:
+    payload = json.loads(os.environ.get("ARTIFICER_CAPABILITY_EXECUTION_PROFILE_JSON", "") or "{}")
+except Exception:
+    payload = {}
+if not isinstance(payload, dict):
+    payload = {}
+reasoning = " ".join(str(payload.get("reasoning_effort_floor", "")).split()).strip().lower()
+min_iterations = int(payload.get("min_iterations", 0) or 0)
+summary = " ".join(str(payload.get("summary", "")).split()).strip()
+print(reasoning)
+print(min_iterations)
+print(summary)
+PY
+)
+        capability_execution_reasoning_floor=$(printf '%s\n' "$capability_execution_profile_values" | sed -n '1p')
+        capability_execution_min_iterations=$(printf '%s\n' "$capability_execution_profile_values" | sed -n '2p')
+        capability_execution_profile_summary=$(printf '%s\n' "$capability_execution_profile_values" | sed -n '3p')
+        case "$capability_execution_reasoning_floor" in
+          low|medium|high|extra-high)
+            current_reasoning_rank=$(reasoning_effort_rank "$reasoning_effort")
+            capability_reasoning_rank=$(reasoning_effort_rank "$capability_execution_reasoning_floor")
+            if [ "$capability_reasoning_rank" -gt "$current_reasoning_rank" ]; then
+              reasoning_effort=$capability_execution_reasoning_floor
+            fi
+            ;;
+        esac
+        case "$capability_execution_min_iterations" in
+          ""|*[!0-9]*)
+            capability_execution_min_iterations=0
+            ;;
+        esac
+        if [ "$capability_execution_min_iterations" -gt 0 ] && [ "$max_iterations" -lt "$capability_execution_min_iterations" ]; then
+          max_iterations=$capability_execution_min_iterations
+        fi
+      fi
     fi
 
     case "$compute_budget" in
@@ -783,19 +840,6 @@ EOF
     if [ -z "$model" ]; then
       model=$(default_model)
       printf '%s\n' "$model" > "$conv_dir/model"
-    fi
-    run_capability_guidance_seed_trace_json='{"summary":"","items":[],"count":0}'
-    run_capability_guidance_seed_summary=""
-    if command -v self_improve_capability_guidance_prompt_block >/dev/null 2>&1; then
-      run_capability_guidance_seed_block=$(self_improve_capability_guidance_prompt_block "$run_mode" "$user_prompt")
-      if [ -n "$(trim "$run_capability_guidance_seed_block")" ] && [ "$run_capability_guidance_seed_block" != "NONE" ]; then
-        if command -v self_improve_capability_guidance_trace_json_from_block >/dev/null 2>&1; then
-          run_capability_guidance_seed_trace_json=$(self_improve_capability_guidance_trace_json_from_block "$run_capability_guidance_seed_block")
-        fi
-        if command -v self_improve_capability_guidance_trace_summary_text >/dev/null 2>&1; then
-          run_capability_guidance_seed_summary=$(self_improve_capability_guidance_trace_summary_text "$run_capability_guidance_seed_trace_json")
-        fi
-      fi
     fi
     routed_model=""
     if command -v run_capability_autoroute_model >/dev/null 2>&1; then
