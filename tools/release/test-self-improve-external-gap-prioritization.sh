@@ -47,7 +47,7 @@ self_improve_last_run_file="$last_run_file" \
 . "$self_improve_lib"
 
 evidence_json=$(cat <<'EOF_JSON'
-{"runtime_signals":{"capability_benchmark":{"high_leverage_gaps":[],"external_gap_families":[{"id":"teaching_reassessment","critical":false,"score_delta":-12.0,"reason":"external-baseline-ahead"},{"id":"research_integration","critical":true,"score_delta":-9.0,"reason":"external-baseline-ahead"}],"latest_scorecard":{"recommendation":"promote","weak_families":[]},"latest_external_compare":{"recommendation":"external-still-ahead","candidate_beats_external":false,"external_baseline":{"name":"Frontier Reference","model":"gpt-5.4"},"candidate_gap_families":[{"id":"teaching_reassessment","candidate_critical":false,"score_delta":-12.0},{"id":"research_integration","candidate_critical":true,"score_delta":-9.0}]}}},"counts":{"failure_events":1,"quality_entries":9,"proposal_items":0}}
+{"runtime_signals":{"capability_benchmark":{"high_leverage_gaps":[],"external_gap_families":[{"id":"teaching_reassessment","critical":false,"score_delta":-12.0,"reason":"external-baseline-ahead"},{"id":"research_integration","critical":true,"score_delta":-9.0,"reason":"external-baseline-ahead"}],"persistent_external_gaps":[{"id":"research_integration","critical":true,"occurrence_count":3,"avg_score_delta":-10.0,"latest_score_delta":-9.0,"reason":"persistent-external-baseline-gap"},{"id":"teaching_reassessment","critical":false,"occurrence_count":2,"avg_score_delta":-13.0,"latest_score_delta":-12.0,"reason":"persistent-external-baseline-gap"}],"latest_scorecard":{"recommendation":"promote","weak_families":[]},"latest_external_compare":{"recommendation":"external-still-ahead","candidate_beats_external":false,"external_baseline":{"name":"Frontier Reference","model":"gpt-5.4"},"candidate_gap_families":[{"id":"teaching_reassessment","candidate_critical":false,"score_delta":-12.0},{"id":"research_integration","candidate_critical":true,"score_delta":-9.0}]}}},"counts":{"failure_events":1,"quality_entries":9,"proposal_items":0}}
 EOF_JSON
 )
 
@@ -73,14 +73,19 @@ compare_json=$(self_improve_compare_reports_json \
 [ "$(json_query "$compare_json" 'data.get("winner_lane")')" = "challenger" ] || fail "external-gap-guided comparison should prefer the challenger lane"
 [ "$(json_query "$compare_json" 'data["lane_scores"]["challenger"] > data["lane_scores"]["artificer"]')" = "true" ] || fail "challenger score should exceed primary score on external-gap evidence"
 [ "$(json_query "$compare_json" 'data["lanes"][1]["score"].get("critical_external_gap_hits") >= 1')" = "true" ] || fail "challenger score should register critical external-gap hits"
+[ "$(json_query "$compare_json" 'data["lanes"][1]["score"].get("critical_persistent_external_gap_hits") >= 1')" = "true" ] || fail "challenger score should register critical persistent external-gap hits"
 [ "$(json_query "$compare_json" 'data["plugins"][0].get("promotion_state")')" = "priority" ] || fail "top merged plugin should be priority when it targets external gaps"
 [ "$(json_query "$compare_json" 'data["plugins"][0].get("targeted_external_capability_gaps", []) != []')" = "true" ] || fail "top merged plugin should record targeted external capability gaps"
+[ "$(json_query "$compare_json" 'data["plugins"][0].get("targeted_persistent_external_capability_gaps", []) != []')" = "true" ] || fail "top merged plugin should record targeted persistent external capability gaps"
 [ "$(json_query "$compare_json" '"research_integration" in data.get("capability_benchmark_focus", {}).get("external_gap_family_ids", [])')" = "true" ] || fail "compare result should carry external benchmark gap focus"
+[ "$(json_query "$compare_json" '"research_integration" in data.get("capability_benchmark_focus", {}).get("persistent_external_gap_family_ids", [])')" = "true" ] || fail "compare result should carry persistent external benchmark gap focus"
 
 store_json=$(self_improve_store_report_and_plugins "mistral:latest" '{"objective":"Improve measured gaps against an external baseline","competition_enabled":true}' "$evidence_json" "$compare_json")
 plugins_payload=$(self_improve_plugins_json)
 [ "$(json_query "$plugins_payload" '[item.get("promotion_state") for item in data]')" = "[\"priority\",\"priority\",\"candidate\"]" ] || fail "stored plugins should keep external-gap-targeting plugins first"
+[ "$(json_query "$plugins_payload" 'data[0].get("targeted_persistent_external_capability_gaps", []) != []')" = "true" ] || fail "stored plugins should preserve persistent external gap targeting metadata"
 [ "$(json_query "$store_json" 'data.get("capability_benchmark", {}).get("external_compare_recommendation")')" = "external-still-ahead" ] || fail "last-run payload should preserve external compare recommendation"
 [ "$(json_query "$store_json" 'data.get("capability_benchmark", {}).get("external_baseline_name")')" = "Frontier Reference" ] || fail "last-run payload should preserve external baseline name"
+[ "$(json_query "$store_json" '"research_integration" in data.get("capability_benchmark", {}).get("persistent_external_gap_family_ids", [])')" = "true" ] || fail "last-run payload should preserve persistent external gap ids"
 
 printf '%s\n' "ok self-improve external gap prioritization: external baseline gap evidence changes lane scoring, merged plugin priority, and stored benchmark metadata"

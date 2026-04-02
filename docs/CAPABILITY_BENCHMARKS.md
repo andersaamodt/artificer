@@ -97,6 +97,15 @@ Those artifacts keep:
 - family-level gaps where the external baseline is still ahead
 - family-level leads where Artificer is already ahead
 
+Artificer also aggregates recent external compare artifacts into a persistent-gap view.
+
+That lets self-improvement distinguish:
+
+- a one-off external loss
+- from a recurring external deficit that has shown up across multiple compare cycles
+
+Persistent external gaps are the higher-leverage target because they are less likely to be noise.
+
 Self-improvement now reads those artifacts and treats the reported family gaps as measured targets, not vague aspirations.
 
 ## Automatic Adoption Policy

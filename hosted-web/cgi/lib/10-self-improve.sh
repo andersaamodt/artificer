@@ -337,6 +337,7 @@ if os.path.isdir(plugins_dir):
         payload.setdefault("benchmark_family_targets", [])
         payload.setdefault("targeted_capability_gaps", [])
         payload.setdefault("targeted_external_capability_gaps", [])
+        payload.setdefault("targeted_persistent_external_capability_gaps", [])
         payload.setdefault("benchmark_alignment_score", 0.0)
         promotion_state = str(payload.get("promotion_state", "candidate")).strip().lower()
         if promotion_state not in promotion_rank:
@@ -453,6 +454,7 @@ if os.path.isdir(archive_dir):
             "benchmark_family_targets": payload.get("benchmark_family_targets", []) if isinstance(payload.get("benchmark_family_targets", []), list) else [],
             "targeted_capability_gaps": payload.get("targeted_capability_gaps", []) if isinstance(payload.get("targeted_capability_gaps", []), list) else [],
             "targeted_external_capability_gaps": payload.get("targeted_external_capability_gaps", []) if isinstance(payload.get("targeted_external_capability_gaps", []), list) else [],
+            "targeted_persistent_external_capability_gaps": payload.get("targeted_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_persistent_external_capability_gaps", []), list) else [],
             "archived_at": " ".join(str(payload.get("archived_at", "")).split()).strip(),
             "archived_via": " ".join(str(payload.get("archived_via", "")).split()).strip(),
             "archived_reason": " ".join(str(payload.get("archived_reason", "")).split()).strip(),
@@ -474,7 +476,7 @@ PY
 
 self_improve_last_run_json() {
   if [ ! -f "$self_improve_last_run_file" ]; then
-    printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[],"capability_benchmark":{"latest_recommendation":"","compare_recommendation":"","candidate_promotable":false,"weak_family_ids":[],"recovered_families":[],"new_weak_families":[],"scorecard_count":0,"compare_count":0,"external_compare_count":0,"external_compare_recommendation":"","candidate_beats_external":false,"external_gap_family_ids":[],"external_baseline_name":""}}'
+    printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[],"capability_benchmark":{"latest_recommendation":"","compare_recommendation":"","candidate_promotable":false,"weak_family_ids":[],"recovered_families":[],"new_weak_families":[],"scorecard_count":0,"compare_count":0,"external_compare_count":0,"external_compare_recommendation":"","candidate_beats_external":false,"external_gap_family_ids":[],"persistent_external_gap_family_ids":[],"external_baseline_name":""}}'
     return 0
   fi
   python3 - "$self_improve_last_run_file" <<'PY'
@@ -518,6 +520,7 @@ payload["capability_benchmark"].setdefault("external_compare_count", 0)
 payload["capability_benchmark"].setdefault("external_compare_recommendation", "")
 payload["capability_benchmark"].setdefault("candidate_beats_external", False)
 payload["capability_benchmark"].setdefault("external_gap_family_ids", [])
+payload["capability_benchmark"].setdefault("persistent_external_gap_family_ids", [])
 payload["capability_benchmark"].setdefault("external_baseline_name", "")
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 PY
@@ -772,7 +775,7 @@ self_improve_runtime_signals_json() {
   quality_summary="none"
   proposal_summary="none"
   controller_json="{}"
-  capability_benchmark_json='{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[]}'
+  capability_benchmark_json='{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[],"persistent_external_gaps":[]}'
 
   if [ "$mode_runtime_lib_loaded" = "1" ]; then
     ensure_mode_runtime_bootstrap
@@ -917,6 +920,7 @@ latest_external_compare = parse_json(latest_external_compare_path) if latest_ext
 
 high_leverage_gaps = []
 external_gap_families = []
+persistent_external_gaps = []
 weak_families = latest_scorecard.get("weak_families", []) if isinstance(latest_scorecard, dict) else []
 if isinstance(weak_families, list):
     for item in weak_families[:4]:
@@ -947,6 +951,71 @@ if isinstance(candidate_gap_families, list):
             }
         )
 
+gap_history = {}
+if external_compare_paths:
+    recent_external_compare_paths = sorted(
+        external_compare_paths,
+        key=lambda item: (item.stat().st_mtime, item.name),
+        reverse=True,
+    )[:6]
+    for compare_path in recent_external_compare_paths:
+        payload = parse_json(compare_path)
+        candidate_gap_items = payload.get("candidate_gap_families", []) if isinstance(payload, dict) else []
+        if not isinstance(candidate_gap_items, list):
+            continue
+        for item in candidate_gap_items:
+            if not isinstance(item, dict):
+                continue
+            family_id = str(item.get("id", "")).strip()
+            if not family_id:
+                continue
+            existing = gap_history.get(
+                family_id,
+                {
+                    "id": family_id,
+                    "occurrence_count": 0,
+                    "critical": False,
+                    "score_delta_total": 0.0,
+                    "latest_score_delta": 0.0,
+                },
+            )
+            existing["occurrence_count"] += 1
+            existing["critical"] = bool(existing.get("critical", False) or item.get("candidate_critical", False))
+            try:
+                score_delta = float(item.get("score_delta", 0) or 0)
+            except Exception:
+                score_delta = 0.0
+            existing["score_delta_total"] += score_delta
+            if existing["occurrence_count"] == 1:
+                existing["latest_score_delta"] = score_delta
+            gap_history[family_id] = existing
+
+for family_id, item in gap_history.items():
+    occurrence_count = int(item.get("occurrence_count", 0) or 0)
+    if occurrence_count <= 0:
+        continue
+    avg_score_delta = round(float(item.get("score_delta_total", 0.0) or 0.0) / occurrence_count, 2)
+    persistent_external_gaps.append(
+        {
+            "id": family_id,
+            "occurrence_count": occurrence_count,
+            "critical": bool(item.get("critical", False)),
+            "avg_score_delta": avg_score_delta,
+            "latest_score_delta": round(float(item.get("latest_score_delta", 0.0) or 0.0), 2),
+            "reason": "persistent-external-baseline-gap",
+        }
+    )
+
+persistent_external_gaps.sort(
+    key=lambda item: (
+        -int(item.get("occurrence_count", 0) or 0),
+        not item.get("critical", False),
+        float(item.get("avg_score_delta", 0) or 0),
+        item.get("id", ""),
+    )
+)
+persistent_external_gaps = persistent_external_gaps[:4]
+
 payload = {
     "manifest_path": str(manifest_path) if manifest_path.is_file() else "",
     "family_count": int(latest_scorecard.get("family_count", 0) or 0) if isinstance(latest_scorecard, dict) else 0,
@@ -958,6 +1027,7 @@ payload = {
     "latest_external_compare": latest_external_compare,
     "high_leverage_gaps": high_leverage_gaps,
     "external_gap_families": external_gap_families,
+    "persistent_external_gaps": persistent_external_gaps,
 }
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 PY
@@ -1166,7 +1236,7 @@ PY
 
   papers_json='{"papers":[]}'
   web_json='{"web_signals":[]}'
-  runtime_json='{"failure_summary":"none","quality_summary":"none","proposal_summary":"none","controller_variants":{},"capability_benchmark":{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[]},"counts":{"failure_events":0,"quality_entries":0,"proposal_items":0,"capability_benchmark_scorecards":0,"capability_benchmark_compares":0,"capability_benchmark_external_compares":0}}'
+  runtime_json='{"failure_summary":"none","quality_summary":"none","proposal_summary":"none","controller_variants":{},"capability_benchmark":{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[],"persistent_external_gaps":[]},"counts":{"failure_events":0,"quality_entries":0,"proposal_items":0,"capability_benchmark_scorecards":0,"capability_benchmark_compares":0,"capability_benchmark_external_compares":0}}'
   repo_json='{"repo_root":"","worktree":{"tracked_changes":0,"untracked_changes":0},"top_extensions":[],"todo_hotspots":[],"workflows":[],"release_scripts":[]}'
   platform_json='{"os":"","arch":"","commands":{},"scheduler_support":{"launchd":false,"systemd_user":false,"cron":false}}'
 
@@ -1283,6 +1353,7 @@ Rules:
 - Include concise evidence references and any admin/setup actions needed.
 - If runtime_signals.capability_benchmark is present, prioritize weak critical families and propose changes that can be measured against those benchmark families.
 - If runtime_signals.capability_benchmark.external_gap_families is present, also prioritize families where an external baseline still outperforms Artificer.
+- If runtime_signals.capability_benchmark.persistent_external_gaps is present, treat those recurring external deficits as especially high-leverage targets.
 - Return strict JSON only.
 
 JSON schema:
@@ -1656,6 +1727,47 @@ for source_items in [capability_benchmark.get("external_gap_families", []), late
         existing["score_delta"] = delta_value
         external_gap_map[family_id] = existing
 external_gap_ids = sorted(external_gap_map.keys())
+persistent_external_gap_map = {}
+for source_items in [capability_benchmark.get("persistent_external_gaps", [])]:
+    if not isinstance(source_items, list):
+        continue
+    for item in source_items:
+        if not isinstance(item, dict):
+            continue
+        family_id = normalize_benchmark_family_id(item.get("id", ""))
+        if not family_id:
+            continue
+        existing = persistent_external_gap_map.get(
+            family_id,
+            {
+                "id": family_id,
+                "critical": False,
+                "occurrence_count": 0,
+                "avg_score_delta": 0.0,
+                "latest_score_delta": 0.0,
+                "reason": "persistent-external-baseline-gap",
+            },
+        )
+        existing["critical"] = bool(existing.get("critical", False) or item.get("critical", False))
+        try:
+            occurrence_count = int(item.get("occurrence_count", existing.get("occurrence_count", 0)) or 0)
+        except Exception:
+            occurrence_count = int(existing.get("occurrence_count", 0) or 0)
+        existing["occurrence_count"] = occurrence_count
+        try:
+            avg_score_delta = float(item.get("avg_score_delta", existing.get("avg_score_delta", 0)) or 0)
+        except Exception:
+            avg_score_delta = float(existing.get("avg_score_delta", 0) or 0)
+        existing["avg_score_delta"] = avg_score_delta
+        try:
+            latest_score_delta = float(item.get("latest_score_delta", existing.get("latest_score_delta", 0)) or 0)
+        except Exception:
+            latest_score_delta = float(existing.get("latest_score_delta", 0) or 0)
+        existing["latest_score_delta"] = latest_score_delta
+        reason_text = " ".join(str(item.get("reason", "")).split()).strip() or "persistent-external-baseline-gap"
+        existing["reason"] = reason_text
+        persistent_external_gap_map[family_id] = existing
+persistent_external_gap_ids = sorted(persistent_external_gap_map.keys())
 
 
 def infer_benchmark_targets(plugin_copy):
@@ -1757,14 +1869,23 @@ def normalize_report(raw_json, lane_name, model_name):
         benchmark_targets = infer_benchmark_targets(plugin_copy)
         targeted_gaps = [family_id for family_id in benchmark_targets if family_id in weak_family_map]
         targeted_external_gaps = [family_id for family_id in benchmark_targets if family_id in external_gap_map]
+        targeted_persistent_external_gaps = [family_id for family_id in benchmark_targets if family_id in persistent_external_gap_map]
         critical_hits = [family_id for family_id in targeted_gaps if weak_family_map.get(family_id, {}).get("critical")]
         critical_external_hits = [family_id for family_id in targeted_external_gaps if external_gap_map.get(family_id, {}).get("critical")]
-        alignment_score = (len(benchmark_targets) * 1.5) + (len(targeted_gaps) * 5.0) + (len(critical_hits) * 3.0) + (len(targeted_external_gaps) * 3.5) + (len(critical_external_hits) * 2.0)
+        critical_persistent_external_hits = [family_id for family_id in targeted_persistent_external_gaps if persistent_external_gap_map.get(family_id, {}).get("critical")]
+        persistence_bonus = sum(min(3.0, float(persistent_external_gap_map.get(family_id, {}).get("occurrence_count", 0) or 0)) for family_id in targeted_persistent_external_gaps)
+        alignment_score = (len(benchmark_targets) * 1.5) + (len(targeted_gaps) * 5.0) + (len(critical_hits) * 3.0) + (len(targeted_external_gaps) * 3.5) + (len(critical_external_hits) * 2.0) + (len(targeted_persistent_external_gaps) * 4.5) + (len(critical_persistent_external_hits) * 2.0) + persistence_bonus
         if risk_level == "high":
             alignment_score -= 2.0
         if alignment_score < 0:
             alignment_score = 0.0
-        if targeted_gaps and targeted_external_gaps:
+        if targeted_gaps and targeted_persistent_external_gaps:
+            promotion_state = "priority"
+            promotion_reason = "Targets current benchmark weak families and persistent external-baseline gaps."
+        elif targeted_persistent_external_gaps:
+            promotion_state = "priority"
+            promotion_reason = "Targets persistent families where an external baseline is still ahead."
+        elif targeted_gaps and targeted_external_gaps:
             promotion_state = "priority"
             promotion_reason = "Targets current benchmark weak families and external-baseline gaps."
         elif targeted_gaps:
@@ -1782,6 +1903,7 @@ def normalize_report(raw_json, lane_name, model_name):
         plugin_copy["benchmark_family_targets"] = benchmark_targets
         plugin_copy["targeted_capability_gaps"] = targeted_gaps
         plugin_copy["targeted_external_capability_gaps"] = targeted_external_gaps
+        plugin_copy["targeted_persistent_external_capability_gaps"] = targeted_persistent_external_gaps
         plugin_copy["benchmark_alignment_score"] = round(alignment_score, 2)
         plugin_copy["promotion_state"] = promotion_state
         plugin_copy["promotion_reason"] = promotion_reason
@@ -1812,8 +1934,10 @@ def score_report(report):
     benchmark_target_coverage = []
     targeted_weak_gaps = []
     targeted_external_gaps = []
+    targeted_persistent_external_gaps = []
     critical_weak_gap_hits = 0
     critical_external_gap_hits = 0
+    critical_persistent_external_gap_hits = 0
     benchmark_alignment_sum = 0.0
     risk_balance = {"low": 0, "medium": 0, "high": 0}
     fingerprints = set()
@@ -1844,6 +1968,13 @@ def score_report(report):
                     targeted_external_gaps.append(family_id)
                     if external_gap_map.get(family_id, {}).get("critical"):
                         critical_external_gap_hits += 1
+        persistent_external_targets = plugin.get("targeted_persistent_external_capability_gaps", [])
+        if isinstance(persistent_external_targets, list):
+            for family_id in persistent_external_targets:
+                if family_id in persistent_external_gap_map and family_id not in targeted_persistent_external_gaps:
+                    targeted_persistent_external_gaps.append(family_id)
+                    if persistent_external_gap_map.get(family_id, {}).get("critical"):
+                        critical_persistent_external_gap_hits += 1
         refs = plugin.get("evidence_refs", [])
         if isinstance(refs, list):
             evidence_ref_count += len(refs)
@@ -1875,7 +2006,8 @@ def score_report(report):
     evidence_score = min(18.0, evidence_ref_count * 1.5 + admin_action_count * 1.1)
     implementation_score = min(16.0, plan_count * 2.0 + rationale_count * 1.2)
     avg_instruction_words = (instruction_word_total / plugin_count) if plugin_count else 0.0
-    benchmark_focus_score = min(20.0, len(targeted_weak_gaps) * 6.0 + critical_weak_gap_hits * 2.5 + len(targeted_external_gaps) * 4.0 + critical_external_gap_hits * 1.5 + len(benchmark_target_coverage) * 1.2)
+    persistent_external_focus_bonus = sum(min(2.5, float(persistent_external_gap_map.get(family_id, {}).get("occurrence_count", 0) or 0)) for family_id in targeted_persistent_external_gaps)
+    benchmark_focus_score = min(24.0, len(targeted_weak_gaps) * 6.0 + critical_weak_gap_hits * 2.5 + len(targeted_external_gaps) * 4.0 + critical_external_gap_hits * 1.5 + len(targeted_persistent_external_gaps) * 5.0 + critical_persistent_external_gap_hits * 1.5 + persistent_external_focus_bonus + len(benchmark_target_coverage) * 1.2)
     instruction_quality = 0.0
     if avg_instruction_words >= 14:
         instruction_quality = min(10.0, avg_instruction_words / 2.0)
@@ -1887,9 +2019,12 @@ def score_report(report):
     external_gap_miss_penalty = 0.0
     if external_gap_ids and not targeted_external_gaps:
         external_gap_miss_penalty = 4.0
+    persistent_external_gap_miss_penalty = 0.0
+    if persistent_external_gap_ids and not targeted_persistent_external_gaps:
+        persistent_external_gap_miss_penalty = 6.0
 
     total_score = coverage_score + plugin_count_score + evidence_score + implementation_score + benchmark_focus_score + instruction_quality
-    total_score -= (risk_penalty + duplicate_penalty_score + weak_gap_miss_penalty + external_gap_miss_penalty)
+    total_score -= (risk_penalty + duplicate_penalty_score + weak_gap_miss_penalty + external_gap_miss_penalty + persistent_external_gap_miss_penalty)
     if total_score < 0:
         total_score = 0.0
     if total_score > 100:
@@ -1905,11 +2040,14 @@ def score_report(report):
         "benchmark_target_coverage": sorted(benchmark_target_coverage),
         "targeted_weak_gaps": sorted(targeted_weak_gaps),
         "targeted_external_gaps": sorted(targeted_external_gaps),
+        "targeted_persistent_external_gaps": sorted(targeted_persistent_external_gaps),
         "critical_weak_gap_hits": critical_weak_gap_hits,
         "critical_external_gap_hits": critical_external_gap_hits,
+        "critical_persistent_external_gap_hits": critical_persistent_external_gap_hits,
         "benchmark_alignment_score": round(benchmark_alignment_sum, 2),
         "weak_gap_miss": bool(weak_gap_miss_penalty > 0),
         "external_gap_miss": bool(external_gap_miss_penalty > 0),
+        "persistent_external_gap_miss": bool(persistent_external_gap_miss_penalty > 0),
         "risk_balance": risk_balance,
         "has_error": bool(report.get("error")),
     }
@@ -1967,6 +2105,8 @@ merged_plugins.sort(
         promotion_rank.get(str(payload.get("promotion_state", "candidate")).strip().lower(), 3),
         -len(payload.get("targeted_capability_gaps", []) if isinstance(payload.get("targeted_capability_gaps", []), list) else []),
         -sum(1 for family_id in (payload.get("targeted_capability_gaps", []) if isinstance(payload.get("targeted_capability_gaps", []), list) else []) if weak_family_map.get(family_id, {}).get("critical")),
+        -len(payload.get("targeted_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_persistent_external_capability_gaps", []), list) else []),
+        -sum(1 for family_id in (payload.get("targeted_persistent_external_capability_gaps", []) if isinstance(payload.get("targeted_persistent_external_capability_gaps", []), list) else []) if persistent_external_gap_map.get(family_id, {}).get("critical")),
         -len(payload.get("targeted_external_capability_gaps", []) if isinstance(payload.get("targeted_external_capability_gaps", []), list) else []),
         -sum(1 for family_id in (payload.get("targeted_external_capability_gaps", []) if isinstance(payload.get("targeted_external_capability_gaps", []), list) else []) if external_gap_map.get(family_id, {}).get("critical")),
         -float(payload.get("benchmark_alignment_score", 0) or 0),
@@ -2034,6 +2174,8 @@ result = {
         "weak_families": [weak_family_map[family_id] for family_id in weak_family_ids],
         "external_gap_family_ids": external_gap_ids,
         "external_gap_families": [external_gap_map[family_id] for family_id in external_gap_ids],
+        "persistent_external_gap_family_ids": persistent_external_gap_ids,
+        "persistent_external_gaps": [persistent_external_gap_map[family_id] for family_id in persistent_external_gap_ids],
     },
 }
 print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
@@ -2127,6 +2269,10 @@ external_gap_family_ids = capability_benchmark_focus.get("external_gap_family_id
 if not isinstance(external_gap_family_ids, list):
     external_gap_family_ids = []
 external_gap_family_ids = [" ".join(str(item).split()).strip() for item in external_gap_family_ids if str(item).strip()]
+persistent_external_gap_family_ids = capability_benchmark_focus.get("persistent_external_gap_family_ids", [])
+if not isinstance(persistent_external_gap_family_ids, list):
+    persistent_external_gap_family_ids = []
+persistent_external_gap_family_ids = [" ".join(str(item).split()).strip() for item in persistent_external_gap_family_ids if str(item).strip()]
 compare_recommendation = " ".join(str(latest_compare.get("recommendation", "")).split()).strip()
 candidate_promotable = bool(latest_compare.get("candidate_promotable", False))
 external_compare_recommendation = " ".join(str(latest_external_compare.get("recommendation", "")).split()).strip()
@@ -2359,13 +2505,17 @@ for index, plugin in enumerate(plugins, 1):
     if not isinstance(targeted_external_capability_gaps, list):
         targeted_external_capability_gaps = []
     payload["targeted_external_capability_gaps"] = [" ".join(str(tag).split()).strip() for tag in targeted_external_capability_gaps[:6] if str(tag).strip()]
+    targeted_persistent_external_capability_gaps = payload.get("targeted_persistent_external_capability_gaps", [])
+    if not isinstance(targeted_persistent_external_capability_gaps, list):
+        targeted_persistent_external_capability_gaps = []
+    payload["targeted_persistent_external_capability_gaps"] = [" ".join(str(tag).split()).strip() for tag in targeted_persistent_external_capability_gaps[:6] if str(tag).strip()]
     try:
         payload["benchmark_alignment_score"] = round(float(payload.get("benchmark_alignment_score", 0) or 0), 2)
     except Exception:
         payload["benchmark_alignment_score"] = 0.0
     promotion_state = " ".join(str(payload.get("promotion_state", "")).split()).strip().lower()
     if promotion_state not in {"priority", "candidate", "hold"}:
-        if payload["targeted_capability_gaps"] or payload["targeted_external_capability_gaps"]:
+        if payload["targeted_capability_gaps"] or payload["targeted_external_capability_gaps"] or payload["targeted_persistent_external_capability_gaps"]:
             promotion_state = "priority"
         elif payload["benchmark_family_targets"]:
             promotion_state = "candidate"
@@ -2433,7 +2583,7 @@ for index, plugin in enumerate(plugins, 1):
             adoption_state = "trial"
             adoption_reason = "One promotable benchmark compare improved this plugin's targeted families; one more consecutive promotable compare is required before adoption."
     elif compare_recommendation:
-        if candidate_promotable and (payload["targeted_capability_gaps"] or payload["targeted_external_capability_gaps"]):
+        if candidate_promotable and (payload["targeted_capability_gaps"] or payload["targeted_external_capability_gaps"] or payload["targeted_persistent_external_capability_gaps"]):
             adoption_state = "trial"
             adoption_reason = "Latest benchmark compare is promotable overall, but this plugin still needs direct family-level proof."
         elif payload["benchmark_hold_streak"] >= 2:
@@ -2449,6 +2599,9 @@ for index, plugin in enumerate(plugins, 1):
         if payload["targeted_capability_gaps"]:
             adoption_state = "trial"
             adoption_reason = "Targets current benchmark weak families and is waiting for measured compare evidence."
+        elif payload["targeted_persistent_external_capability_gaps"]:
+            adoption_state = "trial"
+            adoption_reason = "Targets recurring families where an external baseline is still ahead and is waiting for measured compare evidence."
         elif payload["targeted_external_capability_gaps"]:
             adoption_state = "trial"
             adoption_reason = "Targets families where an external baseline is still ahead and is waiting for measured compare evidence."
@@ -2482,6 +2635,7 @@ for index, plugin in enumerate(plugins, 1):
         "external_compare_recommendation": external_compare_recommendation,
         "candidate_beats_external": candidate_beats_external,
         "external_gap_family_ids": external_gap_family_ids,
+        "persistent_external_gap_family_ids": persistent_external_gap_family_ids,
         "external_baseline_name": external_baseline_name,
     }
 
@@ -2523,6 +2677,7 @@ last_run = {
         "external_compare_recommendation": external_compare_recommendation,
         "candidate_beats_external": candidate_beats_external,
         "external_gap_family_ids": external_gap_family_ids,
+        "persistent_external_gap_family_ids": persistent_external_gap_family_ids,
         "external_baseline_name": external_baseline_name,
     },
 }
