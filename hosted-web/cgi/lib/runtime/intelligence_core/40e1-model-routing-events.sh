@@ -694,7 +694,9 @@ EOF
     "$running_event_id" \
     "$task_status_json" \
     "$running_anchor" \
-    "$assay_task_id")
+    "$assay_task_id" \
+    "" \
+    "")
   append_run_event_json "$conv_dir" "$event_json"
 }
 
@@ -1010,6 +1012,7 @@ build_run_event_json() {
   message_anchor_override=${17}
   assay_task_id_override=${18}
   assistant_text=${19-}
+  capability_guidance_json_override=${20-}
 
   safe_plan=$(clip_for_run_event "$plan_text" 220 9000)
   safe_stream=$(clip_for_run_event "$stream_text" 260 9000)
@@ -1021,6 +1024,17 @@ build_run_event_json() {
   safe_error=$(clip_for_run_event "$error_text" 80 2600)
   safe_hint=$(clip_for_run_event "$decision_hint_text" 40 1600)
   safe_assistant=$(clip_for_run_event "$assistant_text" 320 24000)
+  capability_guidance_json=$(trim "$capability_guidance_json_override")
+  if [ -z "$capability_guidance_json" ]; then
+    capability_guidance_json='{"summary":"","items":[],"count":0}'
+  fi
+  case "$capability_guidance_json" in
+    \{*\})
+      ;;
+    *)
+      capability_guidance_json='{"summary":"","items":[],"count":0}'
+      ;;
+  esac
   task_status_json=$(trim "$task_status_json_override")
   if [ -z "$task_status_json" ]; then
     task_status_json=$(task_status_empty_json)
@@ -1066,8 +1080,8 @@ build_run_event_json() {
   hint_json=$(json_escape "$safe_hint")
   assistant_json=$(json_escape "$safe_assistant")
 
-  printf '{"id":"%s","status":"%s","started_at":"%s","finished_at":"%s","model":"%s","plan":"%s","assistant":"%s","commands":%s,"stream_text":"%s","failures":"%s","session_log":"%s","state":"%s","git_status":"%s","git_diff":"%s","error":"%s","decision_hint":"%s"%s,"task_status":%s}' \
-    "$event_id_json" "$status_json" "$started_json" "$finished_json" "$model_json" "$plan_json" "$assistant_json" "$commands_json" "$stream_json" "$failures_json" "$session_json" "$state_json" "$git_status_json" "$git_diff_json" "$error_json" "$hint_json" "$message_anchor_json" "$task_status_json"
+  printf '{"id":"%s","status":"%s","started_at":"%s","finished_at":"%s","model":"%s","plan":"%s","assistant":"%s","commands":%s,"stream_text":"%s","failures":"%s","session_log":"%s","state":"%s","git_status":"%s","git_diff":"%s","error":"%s","decision_hint":"%s","capability_guidance":%s%s,"task_status":%s}' \
+    "$event_id_json" "$status_json" "$started_json" "$finished_json" "$model_json" "$plan_json" "$assistant_json" "$commands_json" "$stream_json" "$failures_json" "$session_json" "$state_json" "$git_status_json" "$git_diff_json" "$error_json" "$hint_json" "$capability_guidance_json" "$message_anchor_json" "$task_status_json"
 }
 
 append_run_event_json() {

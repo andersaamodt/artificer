@@ -2110,7 +2110,9 @@ EOF
     "$running_event_id" \
     "$task_status_json" \
     "$running_anchor" \
-    "$assay_task_id")
+    "$assay_task_id" \
+    "" \
+    "")
   append_run_event_json "$conv_dir" "$event_json"
 }
 

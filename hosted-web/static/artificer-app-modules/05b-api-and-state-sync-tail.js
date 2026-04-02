@@ -863,6 +863,7 @@
           pendingEvent.failures = response.failures || "";
           pendingEvent.session_log = response.session_log || "";
           pendingEvent.task_status = normalizeRunTaskStatusSnapshot(response.task_status);
+          pendingEvent.capability_guidance = normalizeCapabilityGuidanceTrace(response.capability_guidance);
           pendingEvent.awaiting_assistant = (!assistantText && !awaitingApproval && !awaitingDecision) ? 1 : 0;
           pendingEvent.finished_at = new Date().toISOString();
           pendingEvent.last_activity_at = pendingEvent.finished_at;

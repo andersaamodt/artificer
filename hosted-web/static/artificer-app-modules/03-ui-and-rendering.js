@@ -50,6 +50,32 @@
     return html;
   }
 
+  function formatCapabilityGuidanceTrace(trace) {
+    var guidance = trace && typeof trace === "object" ? trace : null;
+    var items = guidance && Array.isArray(guidance.items) ? guidance.items : [];
+    if (!items.length) {
+      return "";
+    }
+    var html = "<div class='run-trace-block'><p class='run-trace-title'>Capability Guidance</p>";
+    if (trim(guidance.summary || "")) {
+      html += "<p class='run-line subtle'>" + escHtml(guidance.summary || "") + "</p>";
+    }
+    html += "<ul class='run-lines'>";
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i] || {};
+      html += "<li><strong>" + escHtml(item.id || "") + "</strong>";
+      if (trim(item.reason || "")) {
+        html += ": " + escHtml(item.reason || "");
+      }
+      if (trim(item.guidance || "")) {
+        html += " — " + escHtml(item.guidance || "");
+      }
+      html += "</li>";
+    }
+    html += "</ul></div>";
+    return html;
+  }
+
   function runTraceAttemptCount(event) {
     var combined = trim(String((event && event.failures) || "")) + "\n" + trim(String((event && event.session_log) || ""));
     if (!trim(combined)) {
@@ -1048,6 +1074,9 @@
 
   function formatRunAdvancedTrace(event) {
     var sections = "";
+    if (event && event.capability_guidance && event.capability_guidance.items && event.capability_guidance.items.length) {
+      sections += formatCapabilityGuidanceTrace(event.capability_guidance);
+    }
     if (event && event.commands && event.commands.length) {
       sections += "<div class='run-trace-block'><p class='run-trace-title'>Command runs</p>" + formatRunCommands(event.commands || []) + "</div>";
     }

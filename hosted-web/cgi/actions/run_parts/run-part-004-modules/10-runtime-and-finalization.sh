@@ -2,6 +2,7 @@
     programming_followup_slice_completed_count=0
     programming_followup_slice_limit=0
     programming_followup_slice_budget_extension_used=0
+    run_capability_guidance_trace_json='{"summary":"","items":[],"count":0}'
     if [ "$programming_quick_post_verification_safe_followup_slice_run" -eq 1 ]; then
       programming_followup_slice_limit=4
     elif [ "$programming_quick_verification_followup_slice_run" -eq 1 ]; then
@@ -757,14 +758,31 @@ EOF
         fi
       fi
       runtime_capability_guidance_block="NONE"
+      runtime_capability_guidance_trace_json='{"summary":"","items":[],"count":0}'
+      runtime_capability_guidance_summary=""
       if command -v self_improve_capability_guidance_prompt_block >/dev/null 2>&1; then
         runtime_capability_guidance_block=$(self_improve_capability_guidance_prompt_block "$run_mode" "$augmented_user_prompt")
       fi
       if [ -n "$(trim "$runtime_capability_guidance_block")" ] && [ "$runtime_capability_guidance_block" != "NONE" ]; then
         runtime_capability_guidance_block=$(compact_text_block "Runtime capability guidance" "$runtime_capability_guidance_block" 180)
+        if command -v self_improve_capability_guidance_trace_json_from_block >/dev/null 2>&1; then
+          runtime_capability_guidance_trace_json=$(self_improve_capability_guidance_trace_json_from_block "$runtime_capability_guidance_block")
+        fi
+        if command -v self_improve_capability_guidance_trace_summary_text >/dev/null 2>&1; then
+          runtime_capability_guidance_summary=$(self_improve_capability_guidance_trace_summary_text "$runtime_capability_guidance_trace_json")
+        fi
       fi
       if [ -z "$(trim "$runtime_capability_guidance_block")" ]; then
         runtime_capability_guidance_block="NONE"
+      fi
+      if [ -n "$(trim "$runtime_capability_guidance_summary")" ]; then
+        stream_emit_line "$stream_output_file" "Step $iteration capability focus: $runtime_capability_guidance_summary"
+        append_session_entry "$session_log_file" "capability guidance iteration $iteration" "$(cat <<EOF
+Summary: $runtime_capability_guidance_summary
+$runtime_capability_guidance_block
+EOF
+)"
+        run_capability_guidance_trace_json=$runtime_capability_guidance_trace_json
       fi
       command_slot_guidance_file=$(mktemp)
       {
@@ -4445,11 +4463,12 @@ EOF
       "$final_task_status_json" \
       "$run_message_anchor" \
       "$assay_task_id" \
-      "$assistant_output")
+      "$assistant_output" \
+      "$run_capability_guidance_trace_json")
     append_run_event_json "$conv_dir" "$agent_event_json"
     run_runtime_mark_finalized
 
-    printf '{"success":true,"model":"%s","plan":"%s","assistant":"%s","git_status":"%s","git_diff":"%s","commands":[%s],"blocked_commands":%s,"decision_request":%s,"failures":"%s","session_log":"%s","state":"%s","task_status":%s}\n' \
-      "$model_json" "$plan_json" "$assistant_json" "$git_status_json" "$git_diff_json" "$commands_json" "$blocked_commands_json" "$decision_request_json" "$failures_json" "$session_json" "$state_json" "$final_task_status_json"
+    printf '{"success":true,"model":"%s","plan":"%s","assistant":"%s","git_status":"%s","git_diff":"%s","commands":[%s],"blocked_commands":%s,"decision_request":%s,"failures":"%s","session_log":"%s","state":"%s","task_status":%s,"capability_guidance":%s}\n' \
+      "$model_json" "$plan_json" "$assistant_json" "$git_status_json" "$git_diff_json" "$commands_json" "$blocked_commands_json" "$decision_request_json" "$failures_json" "$session_json" "$state_json" "$final_task_status_json" "$run_capability_guidance_trace_json"
     rm -f "$valid_attachment_ids" "$blocked_commands_file" "$queue_explicit_skills_override_file" "$request_explicit_skills_file" "$prompt_explicit_skills_file" "$explicit_skills_file"
     exit 0

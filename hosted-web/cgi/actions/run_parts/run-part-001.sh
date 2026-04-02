@@ -709,6 +709,7 @@ EOF
         "$abort_task_status_json" \
         "$run_message_anchor" \
         "$assay_task_id" \
+        "" \
         "")
       append_run_event_json "$conv_dir" "$abort_event_json"
       run_event_finalized=1

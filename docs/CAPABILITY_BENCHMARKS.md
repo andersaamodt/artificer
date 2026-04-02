@@ -98,6 +98,16 @@ Artificer does not dump the whole benchmark battery into every run.
 
 It selects only the families that are both measured as weak and relevant to the current task or run mode, so benchmark evidence changes ordinary behavior without turning the controller prompt into generic noise.
 
+Artificer now also records that capability-guidance focus into the run record.
+
+That means a completed run can show:
+
+- which benchmark families influenced the run
+- why those families were selected
+- the concrete operating guidance derived from them
+
+This matters because benchmark-aware reasoning should be inspectable, not invisible. If a run was influenced by a measured weak family or sustained external deficit, the operator should be able to see that instead of guessing.
+
 ## External Baseline Lane
 
 Internal compare results answer:

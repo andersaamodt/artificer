@@ -140,7 +140,8 @@ EOF
         "$hello_task_status_json" \
         "$run_message_anchor" \
         "$assay_task_id" \
-        "$assistant_output")
+        "$assistant_output" \
+        "")
       append_run_event_json "$conv_dir" "$hello_event_json"
       run_runtime_mark_finalized
       session_json=$(json_escape "$session_log")
@@ -259,7 +260,8 @@ EOF
         "$preflight_task_status_json" \
         "$run_message_anchor" \
         "$assay_task_id" \
-        "$assistant_output")
+        "$assistant_output" \
+        "")
       append_run_event_json "$conv_dir" "$preflight_event_json"
       run_runtime_mark_finalized
 

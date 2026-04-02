@@ -1873,7 +1873,8 @@ $explicit_skill_context_text"
         "$quick_task_status_json" \
         "$run_message_anchor" \
         "$assay_task_id" \
-        "$assistant_output")
+        "$assistant_output" \
+        "")
       append_run_event_json "$conv_dir" "$quick_event_json"
       run_runtime_mark_finalized
       printf '{"success":true,"model":"%s","plan":"%s","assistant":"%s","git_status":"%s","git_diff":"%s","commands":%s,"blocked_commands":%s,"decision_request":null,"failures":"","session_log":"%s","state":"%s","task_status":%s}\n' \

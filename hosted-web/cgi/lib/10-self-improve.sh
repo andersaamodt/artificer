@@ -1527,6 +1527,73 @@ else:
 PY
 }
 
+self_improve_capability_guidance_trace_json_from_block() {
+  guidance_block=${1-}
+  SELF_IMPROVE_GUIDANCE_BLOCK=$guidance_block python3 - <<'PY'
+import json
+import os
+
+raw_block = str(os.environ.get("SELF_IMPROVE_GUIDANCE_BLOCK", "") or "")
+lines = [line.strip() for line in raw_block.splitlines() if line.strip()]
+items = []
+summary_parts = []
+for raw_line in lines:
+    line = raw_line
+    if line.upper() == "NONE":
+        continue
+    if line.startswith("- "):
+        line = line[2:].strip()
+    family_id = line
+    remainder = ""
+    if ":" in line:
+        family_id, remainder = line.split(":", 1)
+        family_id = family_id.strip()
+        remainder = remainder.strip()
+    reason = remainder
+    guidance = ""
+    if ";" in remainder:
+        reason, guidance = remainder.split(";", 1)
+        reason = reason.strip()
+        guidance = guidance.strip()
+    if not family_id:
+        continue
+    item = {
+        "id": family_id,
+        "reason": reason,
+        "guidance": guidance,
+    }
+    items.append(item)
+    if reason:
+        summary_parts.append(f"{family_id} ({reason})")
+    else:
+        summary_parts.append(family_id)
+
+payload = {
+    "summary": "; ".join(summary_parts),
+    "items": items[:6],
+    "count": len(items[:6]),
+}
+print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+PY
+}
+
+self_improve_capability_guidance_trace_summary_text() {
+  trace_json=${1-}
+  SELF_IMPROVE_GUIDANCE_TRACE_JSON=$trace_json python3 - <<'PY'
+import json
+import os
+
+try:
+    payload = json.loads(os.environ.get("SELF_IMPROVE_GUIDANCE_TRACE_JSON", "") or "{}")
+except Exception:
+    payload = {}
+if not isinstance(payload, dict):
+    payload = {}
+summary = " ".join(str(payload.get("summary", "")).split()).strip()
+print(summary)
+PY
+}
+
 self_improve_repo_signals_json() {
   repo_root=$(artificer_app_root_for_runtime)
   if [ -z "$repo_root" ]; then

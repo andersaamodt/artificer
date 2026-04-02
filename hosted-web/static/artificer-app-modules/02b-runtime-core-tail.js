@@ -127,6 +127,9 @@
     if (!merged.task_status && fallback.task_status) {
       merged.task_status = fallback.task_status;
     }
+    if (!merged.capability_guidance && fallback.capability_guidance) {
+      merged.capability_guidance = fallback.capability_guidance;
+    }
     if ((!Array.isArray(merged.commands) || !merged.commands.length) && Array.isArray(fallback.commands) && fallback.commands.length) {
       merged.commands = fallback.commands.slice(0, 12);
     }

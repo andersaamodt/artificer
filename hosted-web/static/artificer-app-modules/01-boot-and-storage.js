@@ -207,6 +207,34 @@
     };
   }
 
+  function normalizeCapabilityGuidanceTrace(trace) {
+    if (!trace || typeof trace !== "object") {
+      return null;
+    }
+    var inputItems = Array.isArray(trace.items) ? trace.items : [];
+    var items = [];
+    for (var i = 0; i < inputItems.length && items.length < 6; i += 1) {
+      var item = inputItems[i] || {};
+      var id = clipTextForStorage(item.id || "", 120);
+      if (!id) {
+        continue;
+      }
+      items.push({
+        id: id,
+        reason: clipTextForStorage(item.reason || "", 240),
+        guidance: clipTextForStorage(item.guidance || "", 520)
+      });
+    }
+    if (!items.length) {
+      return null;
+    }
+    return {
+      summary: clipTextForStorage(trace.summary || "", 900),
+      count: items.length,
+      items: items
+    };
+  }
+
   function sanitizeRunEventForStorage(event) {
     if (!event || typeof event !== "object") {
       return null;
@@ -251,6 +279,10 @@
     var taskStatus = normalizeRunTaskStatusSnapshot(event.task_status);
     if (taskStatus && taskStatus.total > 0) {
       cleaned.task_status = taskStatus;
+    }
+    var capabilityGuidance = normalizeCapabilityGuidanceTrace(event.capability_guidance);
+    if (capabilityGuidance && capabilityGuidance.items && capabilityGuidance.items.length) {
+      cleaned.capability_guidance = capabilityGuidance;
     }
     var commands = Array.isArray(event.commands) ? event.commands : [];
     if (commands.length) {
