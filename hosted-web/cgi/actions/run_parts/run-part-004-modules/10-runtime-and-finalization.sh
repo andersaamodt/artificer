@@ -272,8 +272,20 @@ Team metadata:
 - recommended_skills: ${assistant_mode_skills:-none}
 - subscriptions: ${assistant_mode_subscriptions:-none}"
     fi
+    structured_runtime_evidence_block="NONE"
+    if command -v artificer_structured_prompt_evidence_block >/dev/null 2>&1; then
+      structured_runtime_evidence_block=$(artificer_structured_prompt_evidence_block "$workspace_path" "$augmented_user_prompt" "$changed_paths_file" "$run_mode")
+      if [ -n "$(trim "$structured_runtime_evidence_block")" ] && [ "$structured_runtime_evidence_block" != "NONE" ]; then
+        augmented_user_prompt="${augmented_user_prompt}
+
+Structured runtime evidence:
+$structured_runtime_evidence_block"
+      fi
+    fi
 
     ensure_agent_files "$agent_dir"
+    ARTIFICER_TOOL_HOOK_LOG_FILE="$agent_dir/.tool-hooks.jsonl"
+    export ARTIFICER_TOOL_HOOK_LOG_FILE
     : > "$changed_paths_file"
     ARTIFICER_PROGRAMMING_CHANGED_PATHS=""
     if [ "$programming_followup_resume_prompt" -eq 1 ]; then

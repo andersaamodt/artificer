@@ -81,6 +81,7 @@ The launcher will:
 
 - [docs/README.md](docs/README.md): user and contributor docs
 - [hosted-web/README.md](hosted-web/README.md): developer-facing app internals
+- [docs/HEADLESS_RUNTIME_API.md](docs/HEADLESS_RUNTIME_API.md): headless embedding and operator-control runtime
 - [tools/release](tools/release): installers, packagers, publish audit helpers
 - [scripts/artificer-backend.sh](scripts/artificer-backend.sh): internal launcher/runtime helper
 
@@ -102,6 +103,7 @@ Human-facing docs, by intent:
 - Intelligence and reasoning: [docs/HOW_ARTIFICER_LLMS_WORK.md](docs/HOW_ARTIFICER_LLMS_WORK.md), [docs/OLLAMA_CONTRIBUTOR_PATH.md](docs/OLLAMA_CONTRIBUTOR_PATH.md), [docs/INTELLIGENCE_MENTORING_EXPLAINED.md](docs/INTELLIGENCE_MENTORING_EXPLAINED.md), [docs/CAPABILITY_ROADMAP.md](docs/CAPABILITY_ROADMAP.md)
 - Capability measurement: [docs/CAPABILITY_BENCHMARKS.md](docs/CAPABILITY_BENCHMARKS.md)
 - Reference: [docs/GLOSSARY.md](docs/GLOSSARY.md), [docs/REPO_OVERVIEW.md](docs/REPO_OVERVIEW.md), [docs/PROJECT_LAYOUT.md](docs/PROJECT_LAYOUT.md)
+- Headless embedding/runtime API: [docs/HEADLESS_RUNTIME_API.md](docs/HEADLESS_RUNTIME_API.md)
 - Release and contribution: [docs/release-notes/v0.1.0.md](docs/release-notes/v0.1.0.md), [docs/PUBLISHING_AUDIT.md](docs/PUBLISHING_AUDIT.md), [docs/CODEBASE_HARDENING_CHECKLIST.md](docs/CODEBASE_HARDENING_CHECKLIST.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md)
 - Runtime/tooling dependencies: [docs/RUNTIME_DEPENDENCIES.md](docs/RUNTIME_DEPENDENCIES.md)
 - Third-party bundle attribution: [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md)

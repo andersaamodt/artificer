@@ -10,3 +10,4 @@ set -eu
 . "$ARTIFICER_SCRIPT_DIR/lib/runtime/40g-state-ui.sh"
 . "$ARTIFICER_SCRIPT_DIR/lib/runtime/40h-self-knowledge.sh"
 . "$ARTIFICER_SCRIPT_DIR/lib/runtime/40i-self-actuation.sh"
+. "$ARTIFICER_SCRIPT_DIR/lib/runtime/40j-control-plane.sh"

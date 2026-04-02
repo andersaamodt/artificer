@@ -1740,6 +1740,10 @@ execute_mediated_command() {
     printf '%s' "$decision_hint" > "$decision_hint_file"
   fi
   rm -f "$decision_file" "$source_file" "$matched_pattern_file" "$matched_scope_file"
+  if command -v artificer_tool_hook_pre_json >/dev/null 2>&1; then
+    pre_hook_json=$(artificer_tool_hook_pre_json "$workspace_id" "$workspace_path" "$original_tool_command" "$tool_command" "$command_mode" "$decision" "$source")
+    artificer_tool_hook_append_json "$pre_hook_json"
+  fi
 
   if [ "$decision" = "deny" ]; then
     {
@@ -1752,6 +1756,9 @@ execute_mediated_command() {
     if [ -n "$blocked_file" ]; then
       printf '%s\t%s\n' "$tool_command" "denied" >> "$blocked_file"
     fi
+    if command -v artificer_tool_hook_post_json >/dev/null 2>&1; then
+      artificer_tool_hook_append_json "$(artificer_tool_hook_post_json "$workspace_id" "$tool_command" "blocked" "$output_file")"
+    fi
     return 0
   fi
 
@@ -1762,6 +1769,9 @@ execute_mediated_command() {
     printf 'approval_required' > "$status_file"
     if [ -n "$blocked_file" ]; then
       printf '%s\t%s\n' "$tool_command" "approval-required" >> "$blocked_file"
+    fi
+    if command -v artificer_tool_hook_post_json >/dev/null 2>&1; then
+      artificer_tool_hook_append_json "$(artificer_tool_hook_post_json "$workspace_id" "$tool_command" "approval_required" "$output_file")"
     fi
     return 0
   fi
@@ -1779,6 +1789,10 @@ execute_mediated_command() {
         printf 'failed' > "$status_file"
       else
         printf 'ok' > "$status_file"
+      fi
+      if command -v artificer_tool_hook_post_json >/dev/null 2>&1; then
+        final_status=$(read_file_line "$status_file" "ok")
+        artificer_tool_hook_append_json "$(artificer_tool_hook_post_json "$workspace_id" "$tool_command" "$final_status" "$output_file")"
       fi
     else
       rc=$?
@@ -1815,12 +1829,19 @@ execute_mediated_command() {
         printf '\n(exit code %s)\n' "$rc" >> "$output_file"
         printf 'failed' > "$status_file"
       fi
+      if command -v artificer_tool_hook_post_json >/dev/null 2>&1; then
+        final_status=$(read_file_line "$status_file" "failed")
+        artificer_tool_hook_append_json "$(artificer_tool_hook_post_json "$workspace_id" "$tool_command" "$final_status" "$output_file")"
+      fi
     fi
   else
     printf '%s\n' "Blocked by safety policy. Allowed: read-only shell tools, selected git read commands, lightweight syntax/version checks, and approved local script verify commands." > "$output_file"
     printf 'blocked' > "$status_file"
     if [ -n "$blocked_file" ]; then
       printf '%s\t%s\n' "$tool_command" "safety-policy" >> "$blocked_file"
+    fi
+    if command -v artificer_tool_hook_post_json >/dev/null 2>&1; then
+      artificer_tool_hook_append_json "$(artificer_tool_hook_post_json "$workspace_id" "$tool_command" "blocked" "$output_file")"
     fi
   fi
 }

@@ -15,14 +15,15 @@ PY
     sa_call_action() {
       action_name=$1
       shift
-      query="action=$(sa_url_encode "$action_name")"
+      body="action=$(sa_url_encode "$action_name")"
       while [ "$#" -gt 0 ]; do
         key=$1
         value=$2
         shift 2
-        query="${query}&$(sa_url_encode "$key")=$(sa_url_encode "$value")"
+        body="${body}&$(sa_url_encode "$key")=$(sa_url_encode "$value")"
       done
-      response=$(REQUEST_METHOD=GET QUERY_STRING="$query" "$ARTIFICER_API_SCRIPT" 2>&1 || true)
+      body_length=$(printf '%s' "$body" | wc -c | tr -d ' ')
+      response=$(printf '%s' "$body" | REQUEST_METHOD=POST CONTENT_TYPE='application/x-www-form-urlencoded' CONTENT_LENGTH="$body_length" "$ARTIFICER_API_SCRIPT" 2>&1 || true)
       json_payload=$(printf '%s\n' "$response" | awk '
         BEGIN { body = 0 }
         {
@@ -229,7 +230,8 @@ PY
       if [ -z "$path_raw" ]; then
         return 1
       fi
-      create_workspace_response=$(sa_call_action "add_workspace" \
+      create_workspace_response=$(sa_call_action "control_plane_projects" \
+        "op" "add" \
         "path" "$path_raw" \
         "name" "$name_raw" \
         "command_exec_mode" "$command_exec_mode_raw")
@@ -245,7 +247,8 @@ PY
     }
 
     sa_apply_rename_workspace() {
-      rename_response=$(sa_call_action "rename_workspace" \
+      rename_response=$(sa_call_action "control_plane_projects" \
+        "op" "rename" \
         "workspace_id" "$workspace_id_resolved" \
         "name" "$name_raw")
       if ! sa_json_success "$rename_response"; then
@@ -256,7 +259,9 @@ PY
     }
 
     sa_apply_delete_workspace() {
-      delete_response=$(sa_call_action "delete_workspace" "workspace_id" "$workspace_id_resolved")
+      delete_response=$(sa_call_action "control_plane_projects" \
+        "op" "delete" \
+        "workspace_id" "$workspace_id_resolved")
       if ! sa_json_success "$delete_response"; then
         return 1
       fi
@@ -269,14 +274,15 @@ PY
         sa_append_change "{\"step\":\"thread\",\"status\":\"exists\",\"workspace_id\":\"$(json_escape "$workspace_id_resolved")\",\"conversation_id\":\"$(json_escape "$conversation_id_resolved")\"}"
         return 0
       fi
-      thread_response=$(sa_call_action "new_conversation" \
+      thread_response=$(sa_call_action "control_plane_sessions" \
+        "op" "create" \
         "workspace_id" "$workspace_id_resolved" \
         "title" "$title_raw" \
         "model" "$model_raw")
       if ! sa_json_success "$thread_response"; then
         return 1
       fi
-      conversation_id_resolved=$(sa_json_query "$thread_response" '((data.get("conversation") or {}).get("id") or "")')
+      conversation_id_resolved=$(sa_json_query "$thread_response" '((data.get("session") or {}).get("id") or "")')
       if [ -z "$conversation_id_resolved" ]; then
         return 1
       fi
@@ -285,7 +291,8 @@ PY
     }
 
     sa_apply_archive_thread() {
-      archive_response=$(sa_call_action "archive_conversation" \
+      archive_response=$(sa_call_action "control_plane_sessions" \
+        "op" "archive" \
         "workspace_id" "$workspace_id_resolved" \
         "conversation_id" "$conversation_id_resolved")
       if ! sa_json_success "$archive_response"; then
@@ -297,7 +304,8 @@ PY
 
     sa_apply_ensure_automation() {
       if [ -n "$automation_id_resolved" ]; then
-        upsert_response=$(sa_call_action "automation_upsert" \
+        upsert_response=$(sa_call_action "control_plane_automations" \
+          "op" "upsert" \
           "automation_id" "$automation_id_resolved" \
           "name" "$name_raw" \
           "workspace_id" "$workspace_id_resolved" \
@@ -313,7 +321,8 @@ PY
         sa_append_change "{\"step\":\"automation\",\"status\":\"updated\",\"automation_id\":\"$(json_escape "$automation_id_resolved")\"}"
         return 0
       fi
-      upsert_response=$(sa_call_action "automation_upsert" \
+      upsert_response=$(sa_call_action "control_plane_automations" \
+        "op" "upsert" \
         "name" "$name_raw" \
         "workspace_id" "$workspace_id_resolved" \
         "conversation_id" "$conversation_id_resolved" \
@@ -334,7 +343,8 @@ PY
     }
 
     sa_apply_toggle_automation() {
-      toggle_response=$(sa_call_action "automation_toggle" \
+      toggle_response=$(sa_call_action "control_plane_automations" \
+        "op" "toggle" \
         "automation_id" "$automation_id_resolved" \
         "enabled" "$enabled_raw")
       if ! sa_json_success "$toggle_response"; then
@@ -345,7 +355,8 @@ PY
     }
 
     sa_apply_run_automation_now() {
-      run_response=$(sa_call_action "automation_run_now" \
+      run_response=$(sa_call_action "control_plane_automations" \
+        "op" "run-now" \
         "automation_id" "$automation_id_resolved")
       if ! sa_json_success "$run_response"; then
         return 1
@@ -355,7 +366,8 @@ PY
     }
 
     sa_apply_delete_automation() {
-      delete_response=$(sa_call_action "automation_delete" \
+      delete_response=$(sa_call_action "control_plane_automations" \
+        "op" "delete" \
         "automation_id" "$automation_id_resolved")
       if ! sa_json_success "$delete_response"; then
         return 1
@@ -539,10 +551,6 @@ EOF
       exit 0
     fi
 
-    if [ -z "$confirm_token" ] || [ "$confirm_token" != "$expected_confirm_token" ]; then
-      sa_emit_error_with_audit "confirm_token mismatch; run with dry_run=1 and use returned confirm_token" "blocked-confirm-token"
-    fi
-
     if [ -n "$idempotency_key" ]; then
       if ! self_actuation_idempotency_key_valid "$idempotency_key"; then
         emit_error "invalid idempotency_key"
@@ -565,6 +573,10 @@ PY
         printf '%s\n' "$existing_idempotent_payload"
         exit 0
       fi
+    fi
+
+    if [ -z "$confirm_token" ] || [ "$confirm_token" != "$expected_confirm_token" ]; then
+      sa_emit_error_with_audit "confirm_token mismatch; run with dry_run=1 and use returned confirm_token" "blocked-confirm-token"
     fi
 
     if ! self_actuation_policy_allows "$operation" "$workspace_id_resolved"; then
