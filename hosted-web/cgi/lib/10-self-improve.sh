@@ -265,6 +265,7 @@ import os
 import sys
 
 plugins_dir = sys.argv[1]
+adoption_rank = {"adopted": 0, "trial": 1, "review": 2, "rejected": 3}
 promotion_rank = {"priority": 0, "candidate": 1, "hold": 2}
 
 
@@ -273,6 +274,20 @@ def safe_number(value):
         return float(value or 0)
     except Exception:
         return 0.0
+
+
+def normalize_adoption_state(payload):
+    adoption_state = str(payload.get("adoption_state", "")).strip().lower()
+    if adoption_state in adoption_rank:
+        return adoption_state
+    if bool(payload.get("enabled", False)):
+        return "trial"
+    promotion_state = str(payload.get("promotion_state", "candidate")).strip().lower()
+    if promotion_state == "hold":
+        return "rejected"
+    if payload.get("benchmark_family_targets"):
+        return "review"
+    return "rejected"
 
 
 items = []
@@ -303,9 +318,17 @@ if os.path.isdir(plugins_dir):
             promotion_state = "candidate"
         payload["promotion_state"] = promotion_state
         payload.setdefault("promotion_reason", "")
+        payload.setdefault("benchmark_compare_recommendation", "")
+        payload["benchmark_candidate_promotable"] = bool(payload.get("benchmark_candidate_promotable", False))
+        payload.setdefault("benchmark_recovered_family_hits", [])
+        payload.setdefault("benchmark_improved_family_hits", [])
+        payload.setdefault("benchmark_new_weak_family_hits", [])
+        payload["adoption_state"] = normalize_adoption_state(payload)
+        payload.setdefault("adoption_reason", "")
         items.append(payload)
 items.sort(
     key=lambda payload: (
+        adoption_rank.get(payload.get("adoption_state", "review"), 4),
         promotion_rank.get(payload.get("promotion_state", "candidate"), 3),
         -safe_number(payload.get("benchmark_alignment_score", 0)),
         -safe_number(payload.get("competition_score", 0)),
@@ -318,7 +341,7 @@ PY
 
 self_improve_last_run_json() {
   if [ ! -f "$self_improve_last_run_file" ]; then
-    printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[],"capability_benchmark":{}}'
+    printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[],"capability_benchmark":{"latest_recommendation":"","compare_recommendation":"","candidate_promotable":false,"weak_family_ids":[],"recovered_families":[],"new_weak_families":[],"scorecard_count":0,"compare_count":0}}'
     return 0
   fi
   python3 - "$self_improve_last_run_file" <<'PY'
@@ -347,6 +370,16 @@ payload.setdefault("evidence_counts", {})
 payload.setdefault("run_options", {})
 payload.setdefault("lanes", [])
 payload.setdefault("capability_benchmark", {})
+if not isinstance(payload["capability_benchmark"], dict):
+    payload["capability_benchmark"] = {}
+payload["capability_benchmark"].setdefault("latest_recommendation", "")
+payload["capability_benchmark"].setdefault("compare_recommendation", "")
+payload["capability_benchmark"].setdefault("candidate_promotable", False)
+payload["capability_benchmark"].setdefault("weak_family_ids", [])
+payload["capability_benchmark"].setdefault("recovered_families", [])
+payload["capability_benchmark"].setdefault("new_weak_families", [])
+payload["capability_benchmark"].setdefault("scorecard_count", 0)
+payload["capability_benchmark"].setdefault("compare_count", 0)
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 PY
 }
@@ -1846,10 +1879,36 @@ if not isinstance(runtime_signals, dict):
 benchmark_runtime = runtime_signals.get("capability_benchmark", {})
 if not isinstance(benchmark_runtime, dict):
     benchmark_runtime = {}
+latest_compare = benchmark_runtime.get("latest_compare", {})
+if not isinstance(latest_compare, dict):
+    latest_compare = {}
 weak_family_ids = capability_benchmark_focus.get("weak_family_ids", [])
 if not isinstance(weak_family_ids, list):
     weak_family_ids = []
 weak_family_ids = [" ".join(str(item).split()).strip() for item in weak_family_ids if str(item).strip()]
+compare_recommendation = " ".join(str(latest_compare.get("recommendation", "")).split()).strip()
+candidate_promotable = bool(latest_compare.get("candidate_promotable", False))
+
+
+def clean_family_ids(values):
+    clean = []
+    if not isinstance(values, list):
+        return clean
+    for item in values:
+        value = ""
+        if isinstance(item, dict):
+            value = item.get("id", "")
+        else:
+            value = item
+        text = " ".join(str(value).split()).strip()
+        if text and text not in clean:
+            clean.append(text)
+    return clean
+
+
+recovered_families = clean_family_ids(latest_compare.get("recovered_families", []))
+improved_families = clean_family_ids(latest_compare.get("improved_families", []))
+new_weak_families = clean_family_ids(latest_compare.get("new_weak_families", []))
 
 generated_at = dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 saved_ids = []
@@ -1902,7 +1961,6 @@ for index, plugin in enumerate(plugins, 1):
             promotion_state = "hold"
     payload["promotion_state"] = promotion_state
     payload["promotion_reason"] = " ".join(str(payload.get("promotion_reason", "")).split()).strip()
-    payload["enabled"] = promotion_state != "hold"
     evidence_refs = payload.get("evidence_refs", [])
     if not isinstance(evidence_refs, list):
         evidence_refs = []
@@ -1915,9 +1973,48 @@ for index, plugin in enumerate(plugins, 1):
     payload["papers"] = papers
     payload["web_signals"] = web_signals
     payload["evidence_counts"] = evidence_counts
+    payload["benchmark_compare_recommendation"] = compare_recommendation
+    payload["benchmark_candidate_promotable"] = candidate_promotable
+    benchmark_targets_set = set(payload["benchmark_family_targets"])
+    payload["benchmark_recovered_family_hits"] = [family_id for family_id in recovered_families if family_id in benchmark_targets_set]
+    payload["benchmark_improved_family_hits"] = [family_id for family_id in improved_families if family_id in benchmark_targets_set and family_id not in payload["benchmark_recovered_family_hits"]]
+    payload["benchmark_new_weak_family_hits"] = [family_id for family_id in new_weak_families if family_id in benchmark_targets_set]
+    if payload["benchmark_new_weak_family_hits"]:
+        adoption_state = "rejected"
+        adoption_reason = "Latest benchmark compare still shows the targeted family as weak."
+    elif candidate_promotable and (payload["benchmark_recovered_family_hits"] or payload["benchmark_improved_family_hits"]):
+        adoption_state = "adopted"
+        adoption_reason = "Latest promotable benchmark compare improved this plugin's targeted families."
+    elif compare_recommendation:
+        if candidate_promotable and payload["targeted_capability_gaps"]:
+            adoption_state = "trial"
+            adoption_reason = "Latest benchmark compare is promotable overall, but this plugin still needs isolated family-level proof."
+        elif payload["benchmark_family_targets"]:
+            adoption_state = "review"
+            adoption_reason = "Latest benchmark compare did not yet prove this plugin should stay active."
+        else:
+            adoption_state = "rejected"
+            adoption_reason = "No measurable benchmark family mapping."
+    else:
+        if payload["targeted_capability_gaps"]:
+            adoption_state = "trial"
+            adoption_reason = "Targets current benchmark weak families and is waiting for measured compare evidence."
+        elif payload["benchmark_family_targets"]:
+            adoption_state = "review"
+            adoption_reason = "Maps to benchmark families and is waiting for measured compare evidence."
+        else:
+            adoption_state = "rejected"
+            adoption_reason = "No measurable benchmark family mapping."
+    payload["adoption_state"] = adoption_state
+    payload["adoption_reason"] = adoption_reason
+    payload["enabled"] = adoption_state in {"adopted", "trial"}
     payload["capability_benchmark"] = {
         "latest_recommendation": " ".join(str(benchmark_runtime.get("latest_scorecard", {}).get("recommendation", "")).split()).strip() if isinstance(benchmark_runtime.get("latest_scorecard", {}), dict) else "",
+        "compare_recommendation": compare_recommendation,
+        "candidate_promotable": candidate_promotable,
         "weak_family_ids": weak_family_ids,
+        "recovered_families": recovered_families,
+        "new_weak_families": new_weak_families,
     }
 
     with open(os.path.join(plugins_dir, final_id + ".json"), "w", encoding="utf-8") as handle:
@@ -1941,7 +2038,11 @@ last_run = {
     "plugin_ids": saved_ids,
     "capability_benchmark": {
         "latest_recommendation": " ".join(str(benchmark_runtime.get("latest_scorecard", {}).get("recommendation", "")).split()).strip() if isinstance(benchmark_runtime.get("latest_scorecard", {}), dict) else "",
+        "compare_recommendation": compare_recommendation,
+        "candidate_promotable": candidate_promotable,
         "weak_family_ids": weak_family_ids,
+        "recovered_families": recovered_families,
+        "new_weak_families": new_weak_families,
         "scorecard_count": int(benchmark_runtime.get("scorecard_count", 0) or 0),
         "compare_count": int(benchmark_runtime.get("compare_count", 0) or 0),
     },
@@ -1997,6 +2098,7 @@ import sys
 plugins_dir = sys.argv[1]
 lines = []
 items = []
+adoption_rank = {"adopted": 0, "trial": 1, "review": 2, "rejected": 3}
 promotion_rank = {"priority": 0, "candidate": 1, "hold": 2}
 
 
@@ -2005,6 +2107,20 @@ def safe_number(value):
         return float(value or 0)
     except Exception:
         return 0.0
+
+
+def normalize_adoption_state(payload):
+    adoption_state = str(payload.get("adoption_state", "")).strip().lower()
+    if adoption_state in adoption_rank:
+        return adoption_state
+    if bool(payload.get("enabled", False)):
+        return "trial"
+    promotion_state = str(payload.get("promotion_state", "candidate")).strip().lower()
+    if promotion_state == "hold":
+        return "rejected"
+    if payload.get("benchmark_family_targets"):
+        return "review"
+    return "rejected"
 
 
 if os.path.isdir(plugins_dir):
@@ -2023,9 +2139,11 @@ if os.path.isdir(plugins_dir):
         if promotion_state not in promotion_rank:
             promotion_state = "candidate"
         payload["promotion_state"] = promotion_state
+        payload["adoption_state"] = normalize_adoption_state(payload)
         items.append(payload)
 items.sort(
     key=lambda payload: (
+        adoption_rank.get(payload.get("adoption_state", "review"), 4),
         promotion_rank.get(payload.get("promotion_state", "candidate"), 3),
         -safe_number(payload.get("benchmark_alignment_score", 0)),
         str(payload.get("name", payload.get("id", ""))).strip().lower(),
@@ -2041,8 +2159,16 @@ for payload in items:
         targets = []
     target_text = ", ".join([" ".join(str(target).split()).strip() for target in targets if str(target).strip()][:3])
     promotion_state = " ".join(str(payload.get("promotion_state", "")).split()).strip()
-    if target_text and promotion_state:
-        lines.append(f"- {title} [{promotion_state}; targets {target_text}]: {instructions}")
+    adoption_state = " ".join(str(payload.get("adoption_state", "")).split()).strip()
+    label_bits = []
+    if adoption_state:
+        label_bits.append(adoption_state)
+    if promotion_state:
+        label_bits.append(promotion_state)
+    if target_text:
+        label_bits.append(f"targets {target_text}")
+    if label_bits:
+        lines.append(f"- {title} [{'; '.join(label_bits)}]: {instructions}")
     elif promotion_state:
         lines.append(f"- {title} [{promotion_state}]: {instructions}")
     else:

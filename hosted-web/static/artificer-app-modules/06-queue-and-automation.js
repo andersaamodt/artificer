@@ -1168,7 +1168,11 @@
       plugin_ids: Array.isArray(data.plugin_ids) ? data.plugin_ids : [],
       capability_benchmark: {
         latest_recommendation: trim(String(capabilityBenchmark.latest_recommendation || "")),
+        compare_recommendation: trim(String(capabilityBenchmark.compare_recommendation || "")),
+        candidate_promotable: !!capabilityBenchmark.candidate_promotable,
         weak_family_ids: Array.isArray(capabilityBenchmark.weak_family_ids) ? capabilityBenchmark.weak_family_ids : [],
+        recovered_families: Array.isArray(capabilityBenchmark.recovered_families) ? capabilityBenchmark.recovered_families : [],
+        new_weak_families: Array.isArray(capabilityBenchmark.new_weak_families) ? capabilityBenchmark.new_weak_families : [],
         scorecard_count: Number(capabilityBenchmark.scorecard_count || 0),
         compare_count: Number(capabilityBenchmark.compare_count || 0)
       }
@@ -1184,6 +1188,7 @@
       var benchmarkFamilyTargets = Array.isArray(item.benchmark_family_targets) ? item.benchmark_family_targets : [];
       var targetedCapabilityGaps = Array.isArray(item.targeted_capability_gaps) ? item.targeted_capability_gaps : [];
       var promotionState = trim(String(item.promotion_state || "candidate")).toLowerCase();
+      var adoptionState = trim(String(item.adoption_state || "")).toLowerCase();
       if (!pluginId) {
         continue;
       }
@@ -1191,6 +1196,17 @@
         promotionState = targetedCapabilityGaps.length
           ? "priority"
           : (benchmarkFamilyTargets.length ? "candidate" : "hold");
+      }
+      if (adoptionState !== "adopted" && adoptionState !== "trial" && adoptionState !== "review" && adoptionState !== "rejected") {
+        if (item.enabled !== false) {
+          adoptionState = "trial";
+        } else if (promotionState === "hold") {
+          adoptionState = "rejected";
+        } else if (benchmarkFamilyTargets.length) {
+          adoptionState = "review";
+        } else {
+          adoptionState = "rejected";
+        }
       }
       clean.push({
         id: pluginId,
@@ -1214,15 +1230,33 @@
         targeted_capability_gaps: targetedCapabilityGaps,
         benchmark_alignment_score: Number(item.benchmark_alignment_score || 0),
         promotion_state: promotionState,
-        promotion_reason: trim(String(item.promotion_reason || ""))
+        promotion_reason: trim(String(item.promotion_reason || "")),
+        benchmark_compare_recommendation: trim(String(item.benchmark_compare_recommendation || "")),
+        benchmark_candidate_promotable: !!item.benchmark_candidate_promotable,
+        benchmark_recovered_family_hits: Array.isArray(item.benchmark_recovered_family_hits) ? item.benchmark_recovered_family_hits : [],
+        benchmark_improved_family_hits: Array.isArray(item.benchmark_improved_family_hits) ? item.benchmark_improved_family_hits : [],
+        benchmark_new_weak_family_hits: Array.isArray(item.benchmark_new_weak_family_hits) ? item.benchmark_new_weak_family_hits : [],
+        adoption_state: adoptionState,
+        adoption_reason: trim(String(item.adoption_reason || ""))
       });
     }
     clean.sort(function (a, b) {
+      var adoptionRank = {
+        adopted: 0,
+        trial: 1,
+        review: 2,
+        rejected: 3
+      };
       var stateRank = {
         priority: 0,
         candidate: 1,
         hold: 2
       };
+      var aAdoptionRank = adoptionRank.hasOwnProperty(a.adoption_state) ? adoptionRank[a.adoption_state] : 4;
+      var bAdoptionRank = adoptionRank.hasOwnProperty(b.adoption_state) ? adoptionRank[b.adoption_state] : 4;
+      if (aAdoptionRank !== bAdoptionRank) {
+        return aAdoptionRank - bAdoptionRank;
+      }
       var aRank = stateRank.hasOwnProperty(a.promotion_state) ? stateRank[a.promotion_state] : 3;
       var bRank = stateRank.hasOwnProperty(b.promotion_state) ? stateRank[b.promotion_state] : 3;
       if (aRank !== bRank) {
@@ -1380,11 +1414,22 @@
       ? state.selfImproveLastRun.capability_benchmark
       : {};
     var weakFamilies = Array.isArray(benchmarkSummary.weak_family_ids) ? benchmarkSummary.weak_family_ids : [];
+    var recoveredFamilies = Array.isArray(benchmarkSummary.recovered_families) ? benchmarkSummary.recovered_families : [];
+    var newWeakFamilies = Array.isArray(benchmarkSummary.new_weak_families) ? benchmarkSummary.new_weak_families : [];
     if (benchmarkSummary.latest_recommendation) {
       summaryParts.push("Capability benchmark: " + benchmarkSummary.latest_recommendation);
     }
+    if (benchmarkSummary.compare_recommendation) {
+      summaryParts.push("Latest compare: " + benchmarkSummary.compare_recommendation + (benchmarkSummary.candidate_promotable ? " (promotable)" : ""));
+    }
     if (weakFamilies.length) {
       summaryParts.push("Weak families: " + weakFamilies.join(" | "));
+    }
+    if (recoveredFamilies.length) {
+      summaryParts.push("Recovered families: " + recoveredFamilies.join(" | "));
+    }
+    if (newWeakFamilies.length) {
+      summaryParts.push("Still weak in compare: " + newWeakFamilies.join(" | "));
     }
     el.selfImproveSummary.textContent = summaryParts.join(" ");
 
@@ -1421,6 +1466,15 @@
         if (plugin.targeted_capability_gaps && plugin.targeted_capability_gaps.length) {
           html += "<p class='settings-hint'><strong>Active benchmark gaps:</strong> " + escHtml(plugin.targeted_capability_gaps.join(" | ")) + "</p>";
         }
+        if (plugin.benchmark_recovered_family_hits && plugin.benchmark_recovered_family_hits.length) {
+          html += "<p class='settings-hint'><strong>Recovered compare hits:</strong> " + escHtml(plugin.benchmark_recovered_family_hits.join(" | ")) + "</p>";
+        }
+        if (plugin.benchmark_improved_family_hits && plugin.benchmark_improved_family_hits.length) {
+          html += "<p class='settings-hint'><strong>Improved compare hits:</strong> " + escHtml(plugin.benchmark_improved_family_hits.join(" | ")) + "</p>";
+        }
+        if (plugin.benchmark_new_weak_family_hits && plugin.benchmark_new_weak_family_hits.length) {
+          html += "<p class='settings-hint'><strong>Weak compare hits:</strong> " + escHtml(plugin.benchmark_new_weak_family_hits.join(" | ")) + "</p>";
+        }
         if (plugin.evidence_refs && plugin.evidence_refs.length) {
           html += "<p class='settings-hint'><strong>Evidence refs:</strong> " + escHtml(plugin.evidence_refs.join(" | ")) + "</p>";
         }
@@ -1437,6 +1491,9 @@
         if (plugin.risk_level) {
           metadataBits.push("risk " + plugin.risk_level);
         }
+        if (plugin.adoption_state) {
+          metadataBits.push("adoption " + plugin.adoption_state);
+        }
         if (plugin.promotion_state) {
           metadataBits.push("benchmark " + plugin.promotion_state);
         }
@@ -1451,6 +1508,9 @@
         }
         if (plugin.promotion_reason) {
           html += "<p class='settings-hint'><strong>Benchmark rationale:</strong> " + escHtml(plugin.promotion_reason) + "</p>";
+        }
+        if (plugin.adoption_reason) {
+          html += "<p class='settings-hint'><strong>Adoption rationale:</strong> " + escHtml(plugin.adoption_reason) + "</p>";
         }
         html += "<div class='mode-runtime-actions'>";
         html += "<label class='toggle-row' style='margin:0;'><input type='checkbox' data-action='self-improve-plugin-toggle' data-plugin-id='" + escAttr(plugin.id) + "' " + (plugin.enabled ? "checked" : "") + " /> Enabled</label>";

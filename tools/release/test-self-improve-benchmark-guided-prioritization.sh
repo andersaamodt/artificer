@@ -47,7 +47,8 @@ self_improve_last_run_file="$last_run_file" \
 . "$self_improve_lib"
 
 empty_last_run_json=$(self_improve_last_run_json)
-[ "$(json_query "$empty_last_run_json" 'data.get("capability_benchmark", "__missing__") == {}')" = "true" ] || fail "default last-run payload should expose an empty capability benchmark object"
+[ "$(json_query "$empty_last_run_json" 'data.get("capability_benchmark", {}).get("compare_recommendation", "__missing__")')" = "" ] || fail "default last-run payload should expose a structured capability benchmark object"
+[ "$(json_query "$empty_last_run_json" 'data.get("capability_benchmark", {}).get("candidate_promotable")')" = "false" ] || fail "default last-run payload should expose compare promotion state defaults"
 
 evidence_json=$(cat <<'EOF_JSON'
 {"runtime_signals":{"capability_benchmark":{"high_leverage_gaps":[{"id":"planning_architecture","critical":true,"reason":"gate-failed"},{"id":"coding_mutation","critical":true,"reason":"score-below-threshold"}],"latest_scorecard":{"recommendation":"hold","weak_families":[{"id":"planning_architecture","critical":true,"score":62.0,"reason":"gate-failed"},{"id":"coding_mutation","critical":true,"score":68.0,"reason":"score-below-threshold"}]}}},"counts":{"failure_events":2,"quality_entries":14,"proposal_items":0}}
@@ -86,9 +87,10 @@ store_json=$(self_improve_store_report_and_plugins "mistral:latest" '{"objective
 
 plugins_payload=$(self_improve_plugins_json)
 [ "$(json_query "$plugins_payload" 'len(data)')" = "3" ] || fail "expected three stored plugins"
+[ "$(json_query "$plugins_payload" '[item.get("adoption_state") for item in data]')" = "[\"trial\",\"trial\",\"review\"]" ] || fail "plugins without compare evidence should stage weak-gap plugins as trials and leave the rest for review"
 [ "$(json_query "$plugins_payload" '[item.get("promotion_state") for item in data]')" = "[\"priority\",\"priority\",\"candidate\"]" ] || fail "stored plugins should return priority-ranked plugins first"
 [ "$(json_query "$plugins_payload" 'sorted([item.get("promotion_state") for item in data])')" = "[\"candidate\",\"priority\",\"priority\"]" ] || fail "stored plugins should preserve benchmark promotion states"
-[ "$(json_query "$plugins_payload" 'sum(1 for item in data if item.get("enabled") is True)')" = "3" ] || fail "benchmark-priority and candidate plugins should remain enabled"
+[ "$(json_query "$plugins_payload" 'sum(1 for item in data if item.get("enabled") is True)')" = "2" ] || fail "only trial plugins should auto-enable before compare evidence exists"
 [ "$(json_query "$store_json" 'data.get("capability_benchmark", {}).get("latest_recommendation")')" = "hold" ] || fail "last-run payload should preserve capability benchmark recommendation"
 [ "$(json_query "$store_json" 'len(data.get("capability_benchmark", {}).get("weak_family_ids", []))')" = "2" ] || fail "last-run payload should preserve weak family ids"
 

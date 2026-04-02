@@ -70,6 +70,19 @@ This is the intended loop:
 3. measure them against the battery
 4. keep only the changes that improve holdout performance
 
+## Automatic Adoption Policy
+
+Self-improvement plugins are no longer treated as active just because they were proposed.
+
+Artificer now stores an explicit adoption state for each plugin:
+
+- `adopted`: latest benchmark compare is promotable and improved or recovered the plugin's targeted families
+- `trial`: targets live weak families, but still needs more isolated family-level proof
+- `review`: mapped to a benchmark family, but the latest compare did not prove it should stay active
+- `rejected`: latest compare still shows the targeted family as weak or the plugin did not map to a measurable family
+
+This keeps the self-improvement loop aligned with the standard above: measured transfer beats plausibility.
+
 ## Why This Matters
 
 This is the difference between:

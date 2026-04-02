@@ -25,8 +25,18 @@ if ! grep -q 'summaryParts.push("Capability benchmark: " + benchmarkSummary.late
   exit 1
 fi
 
+if ! grep -q 'summaryParts.push("Latest compare: " + benchmarkSummary.compare_recommendation + (benchmarkSummary.candidate_promotable ? " (promotable)" : ""));' "$render_file"; then
+  printf '%s\n' "self-improvement summary is missing benchmark compare recommendation copy" >&2
+  exit 1
+fi
+
 if ! grep -q 'summaryParts.push("Weak families: " + weakFamilies.join(" | "));' "$render_file"; then
   printf '%s\n' "self-improvement summary is missing weak-family copy" >&2
+  exit 1
+fi
+
+if ! grep -q 'summaryParts.push("Recovered families: " + recoveredFamilies.join(" | "));' "$render_file"; then
+  printf '%s\n' "self-improvement summary is missing recovered-family copy" >&2
   exit 1
 fi
 
@@ -37,6 +47,21 @@ fi
 
 if ! grep -q "<strong>Active benchmark gaps:</strong>" "$render_file"; then
   printf '%s\n' "self-improvement plugin cards are missing active benchmark gap rendering" >&2
+  exit 1
+fi
+
+if ! grep -q "<strong>Recovered compare hits:</strong>" "$render_file"; then
+  printf '%s\n' "self-improvement plugin cards are missing recovered compare-hit rendering" >&2
+  exit 1
+fi
+
+if ! grep -q "<strong>Weak compare hits:</strong>" "$render_file"; then
+  printf '%s\n' "self-improvement plugin cards are missing weak compare-hit rendering" >&2
+  exit 1
+fi
+
+if ! grep -q 'metadataBits.push("adoption " + plugin.adoption_state);' "$render_file"; then
+  printf '%s\n' "self-improvement plugin cards are missing adoption-state metadata" >&2
   exit 1
 fi
 
@@ -52,6 +77,11 @@ fi
 
 if ! grep -q "<strong>Benchmark rationale:</strong>" "$render_file"; then
   printf '%s\n' "self-improvement plugin cards are missing benchmark rationale copy" >&2
+  exit 1
+fi
+
+if ! grep -q "<strong>Adoption rationale:</strong>" "$render_file"; then
+  printf '%s\n' "self-improvement plugin cards are missing adoption rationale copy" >&2
   exit 1
 fi
 
