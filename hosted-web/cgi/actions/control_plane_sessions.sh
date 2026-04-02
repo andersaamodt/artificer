@@ -92,7 +92,7 @@
         fi
         effective_stream_session=$stream_session
         if ! valid_id "$effective_stream_session"; then
-          effective_stream_session=$(control_plane_stream_session_id)
+          effective_stream_session=""
         fi
         take_json=$(control_plane_call_action_post_json "queue_take" \
           "workspace_id" "$workspace_id" \
@@ -109,6 +109,9 @@
         esac
         case "$take_has_item" in
           true)
+            if ! valid_id "$effective_stream_session"; then
+              effective_stream_session=$(control_plane_stream_session_id)
+            fi
             item_id=$(control_plane_json_extract_scalar "$take_json" '((data.get("item") or {}).get("id") or "")')
             item_prompt=$(control_plane_json_extract_scalar "$take_json" '((data.get("item") or {}).get("prompt") or "")')
             attachment_ids_csv=$(control_plane_json_array_csv "$take_json" '[(item.get("id") or "") for item in (((data.get("item") or {}).get("attachments") or [])) if (item.get("id") or "")]')
@@ -149,6 +152,14 @@
             queue_first_id=$(control_plane_json_extract_scalar "$take_json" 'data.get("queue_first_id", "")')
             queue_last_status=$(control_plane_json_extract_scalar "$take_json" 'data.get("queue_last_status", "")')
             session_json=$(control_plane_session_object_json "$workspace_id" "$conversation_id" 1 1 || true)
+            if [ "$take_busy_json" = "true" ]; then
+              running_stream_session=$(trim "$(read_file_line "$(queue_running_stream_session_file_for "$conv_dir")" "")")
+              if valid_id "$running_stream_session"; then
+                effective_stream_session=$running_stream_session
+              else
+                effective_stream_session=""
+              fi
+            fi
             printf '{"success":true,"api_version":"%s","busy":%s,"has_item":false,"item_id":"","running_item_id":"%s","stream_session":"%s","queue_pending":%s,"queue_running":%s,"queue_done":%s,"queue_first_id":"%s","queue_last_status":"%s","session":%s}\n' \
               "$(json_escape "$(control_plane_api_version)")" \
               "$take_busy_json" \

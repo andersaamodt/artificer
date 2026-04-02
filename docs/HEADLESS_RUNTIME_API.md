@@ -63,6 +63,7 @@ hosted-web/scripts/artificer-runtime-client session run-next --workspace-id "$wo
   - dequeues the next queued session item and executes it through the same backend `run` action the GUI uses
   - returns the refreshed session envelope plus nested run result JSON
   - accepts optional `stream_session` so embedding clients can poll `stream` concurrently or after completion
+  - returns an empty `stream_session` when no new run starts, and the actual running stream session when the session is already busy
 - `events`
   - run/event trace only
 - `stream`
