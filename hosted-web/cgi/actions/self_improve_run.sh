@@ -120,9 +120,10 @@ PY
       exit 0
     fi
     store_json=$(self_improve_store_report_and_plugins "$model_name" "$run_options_json" "$evidence_json" "$final_report_json")
-    printf '{"success":true,"selected_model":"%s","run_options":%s,"last_run":%s,"plugins":%s}\n' \
+    printf '{"success":true,"selected_model":"%s","run_options":%s,"last_run":%s,"plugins":%s,"plugin_inventory":%s}\n' \
       "$(json_escape "$model_name")" \
       "$run_options_json" \
       "$store_json" \
-      "$(self_improve_plugins_json)"
+      "$(self_improve_plugins_json)" \
+      "$(self_improve_plugin_inventory_json)"
     exit 0

@@ -4,9 +4,15 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 render_file="$repo_root/hosted-web/static/artificer-app-modules/06-queue-and-automation.js"
+run_action_file="$repo_root/hosted-web/cgi/actions/self_improve_run.sh"
 
 [ -f "$render_file" ] || {
   printf '%s\n' "missing self-improvement UI source: $render_file" >&2
+  exit 1
+}
+
+[ -f "$run_action_file" ] || {
+  printf '%s\n' "missing self-improvement run action: $run_action_file" >&2
   exit 1
 }
 
@@ -32,6 +38,16 @@ fi
 
 if ! grep -q 'summaryParts.push("Compare cycles: " + String(Number(benchmarkSummary.compare_count || 0)));' "$render_file"; then
   printf '%s\n' "self-improvement summary is missing compare-count copy" >&2
+  exit 1
+fi
+
+if ! grep -q 'summaryParts.push("Active plugins: " + String(pluginInventory.active_count));' "$render_file"; then
+  printf '%s\n' "self-improvement summary is missing active-plugin inventory copy" >&2
+  exit 1
+fi
+
+if ! grep -q 'summaryParts.push("Archived stale plugins: " + String(pluginInventory.archived_auto_stale_count));' "$render_file"; then
+  printf '%s\n' "self-improvement summary is missing archived stale-plugin copy" >&2
   exit 1
 fi
 
@@ -122,6 +138,16 @@ fi
 
 if ! grep -q "<strong>Automatic benchmark rationale:</strong>" "$render_file"; then
   printf '%s\n' "self-improvement plugin cards are missing automatic benchmark rationale copy" >&2
+  exit 1
+fi
+
+if ! grep -q 'state.selfImprovePluginInventory = normalizeSelfImprovePluginInventory(response.plugin_inventory);' "$render_file"; then
+  printf '%s\n' "self-improvement settings load is missing plugin inventory hydration" >&2
+  exit 1
+fi
+
+if ! grep -q '"plugin_inventory":%s' "$run_action_file"; then
+  printf '%s\n' "self-improvement run action is missing plugin inventory in its response payload" >&2
   exit 1
 fi
 

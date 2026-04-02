@@ -1290,12 +1290,35 @@
     return clean;
   }
 
+  function normalizeSelfImprovePluginInventory(value) {
+    var inventory = value && typeof value === "object" ? value : {};
+    var activeCount = Number(inventory.active_count || 0);
+    var archivedCount = Number(inventory.archived_count || 0);
+    var archivedAutoStaleCount = Number(inventory.archived_auto_stale_count || 0);
+    if (!isFinite(activeCount) || activeCount < 0) {
+      activeCount = 0;
+    }
+    if (!isFinite(archivedCount) || archivedCount < 0) {
+      archivedCount = 0;
+    }
+    if (!isFinite(archivedAutoStaleCount) || archivedAutoStaleCount < 0) {
+      archivedAutoStaleCount = 0;
+    }
+    return {
+      active_count: activeCount,
+      archived_count: archivedCount,
+      archived_auto_stale_count: archivedAutoStaleCount
+    };
+  }
+
   function renderSelfImproveSettings() {
     if (!el.selfImproveModelSelect || !el.selfImprovePluginsList || !el.selfImproveStatus || !el.selfImproveSummary) {
       return;
     }
     var runOptions = normalizeSelfImproveRunOptions(state.selfImproveRunOptions);
+    var pluginInventory = normalizeSelfImprovePluginInventory(state.selfImprovePluginInventory);
     state.selfImproveRunOptions = runOptions;
+    state.selfImprovePluginInventory = pluginInventory;
 
     var optionsHtml = "";
     if (!state.models.length) {
@@ -1442,6 +1465,12 @@
     if (Number(benchmarkSummary.compare_count || 0) > 0) {
       summaryParts.push("Compare cycles: " + String(Number(benchmarkSummary.compare_count || 0)));
     }
+    if (pluginInventory.active_count > 0) {
+      summaryParts.push("Active plugins: " + String(pluginInventory.active_count));
+    }
+    if (pluginInventory.archived_auto_stale_count > 0) {
+      summaryParts.push("Archived stale plugins: " + String(pluginInventory.archived_auto_stale_count));
+    }
     if (weakFamilies.length) {
       summaryParts.push("Weak families: " + weakFamilies.join(" | "));
     }
@@ -1570,6 +1599,7 @@
       state.selfImproveModel = trim(String(response.selected_model || ""));
       state.selfImproveRunOptions = normalizeSelfImproveRunOptions(response.run_options);
       state.selfImprovePlugins = normalizeSelfImprovePlugins(response.plugins);
+      state.selfImprovePluginInventory = normalizeSelfImprovePluginInventory(response.plugin_inventory);
       state.selfImproveLastRun = normalizeSelfImproveLastRun(response.last_run);
       state.selfImproveError = "";
       renderSelfImproveSettings();
@@ -1605,6 +1635,7 @@
         state.selfImproveModel = trim(String(response.selected_model || state.selfImproveModel || ""));
         state.selfImproveRunOptions = normalizeSelfImproveRunOptions(response.run_options || state.selfImproveRunOptions);
         state.selfImprovePlugins = normalizeSelfImprovePlugins(response.plugins);
+        state.selfImprovePluginInventory = normalizeSelfImprovePluginInventory(response.plugin_inventory || state.selfImprovePluginInventory);
         state.selfImproveLastRun = normalizeSelfImproveLastRun(response.last_run);
         showTransientNotice(state.selfImproveRunOptions.competition_enabled ? "Self-improvement match complete" : "Self-improvement plugins generated");
         return response;

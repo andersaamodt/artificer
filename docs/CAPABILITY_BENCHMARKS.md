@@ -97,6 +97,21 @@ If the operator also enables `Lock override`, that manual policy survives future
 
 The automatic benchmark judgment is still stored and shown alongside the effective forced state, so manual intervention does not erase the evidence that automation would have used on its own.
 
+## Automatic Stale-Pruning
+
+Review and rejected plugins no longer accumulate forever.
+
+Artificer now archives stale auto-managed plugins by benchmark compare-cycle age:
+
+- `review` plugins archive after 3 later compare cycles without being refreshed
+- `rejected` plugins archive after 2 later compare cycles without being refreshed
+- manually forced plugins are excluded from this pruning path
+- adopted and trial plugins are excluded from this pruning path
+
+Archived plugins move into the self-improvement archive under the plugin state directory instead of staying mixed into the active set.
+
+The settings surface now reports active plugin count plus archived stale-plugin count so the pruning is inspectable instead of silent.
+
 ## Why This Matters
 
 This is the difference between:

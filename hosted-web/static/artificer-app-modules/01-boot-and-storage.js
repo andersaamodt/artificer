@@ -701,6 +701,11 @@
     llmUseGpu: storageGet("artificer.llmUseGpu", "1") !== "0",
     selfImproveModel: "",
     selfImprovePlugins: [],
+    selfImprovePluginInventory: {
+      active_count: 0,
+      archived_count: 0,
+      archived_auto_stale_count: 0
+    },
     selfImproveRunOptions: {
       objective: "",
       competition_enabled: true,

@@ -354,6 +354,8 @@ if os.path.isdir(plugins_dir):
         payload["benchmark_hold_count"] = int(payload.get("benchmark_hold_count", 0) or 0)
         payload["benchmark_success_streak"] = int(payload.get("benchmark_success_streak", 0) or 0)
         payload["benchmark_hold_streak"] = int(payload.get("benchmark_hold_streak", 0) or 0)
+        payload["last_benchmark_compare_count"] = int(payload.get("last_benchmark_compare_count", 0) or 0)
+        payload["stale_compare_cycles"] = int(payload.get("stale_compare_cycles", 0) or 0)
         payload.setdefault("lineage_key", "")
         payload["operator_policy"] = normalize_operator_policy(payload.get("operator_policy", "auto"))
         payload["operator_lock"] = bool(payload.get("operator_lock", False)) and payload["operator_policy"] != "auto"
@@ -372,6 +374,43 @@ items.sort(
     )
 )
 print(json.dumps(items, ensure_ascii=False, separators=(",", ":")))
+PY
+}
+
+self_improve_plugin_inventory_json() {
+  python3 - "$self_improve_plugins_dir" <<'PY'
+import json
+import os
+import sys
+
+plugins_dir = sys.argv[1]
+archive_dir = os.path.join(plugins_dir, "archive")
+inventory = {
+    "active_count": 0,
+    "archived_count": 0,
+    "archived_auto_stale_count": 0,
+}
+
+if os.path.isdir(plugins_dir):
+    for name in os.listdir(plugins_dir):
+        if name.endswith(".json"):
+            inventory["active_count"] += 1
+
+if os.path.isdir(archive_dir):
+    for name in os.listdir(archive_dir):
+        if not name.endswith(".json"):
+            continue
+        inventory["archived_count"] += 1
+        path = os.path.join(archive_dir, name)
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except Exception:
+            payload = {}
+        if str(payload.get("archived_via", "")).strip() == "stale-benchmark-prune":
+            inventory["archived_auto_stale_count"] += 1
+
+print(json.dumps(inventory, ensure_ascii=False, separators=(",", ":")))
 PY
 }
 
@@ -397,6 +436,7 @@ payload.setdefault("model", "")
 payload.setdefault("papers", [])
 payload.setdefault("web_signals", [])
 payload.setdefault("plugin_ids", [])
+payload.setdefault("archived_plugin_ids", [])
 payload.setdefault("objective", "")
 payload.setdefault("competition_enabled", False)
 payload.setdefault("winner_lane", "")
@@ -423,12 +463,14 @@ PY
 self_improve_settings_json() {
   selected_model=$(self_improve_selected_model)
   plugins_json=$(self_improve_plugins_json)
+  plugin_inventory_json=$(self_improve_plugin_inventory_json)
   last_run_json=$(self_improve_last_run_json)
   run_options_json=$(self_improve_run_options_json)
-  printf '{"success":true,"selected_model":"%s","run_options":%s,"plugins":%s,"last_run":%s}\n' \
+  printf '{"success":true,"selected_model":"%s","run_options":%s,"plugins":%s,"plugin_inventory":%s,"last_run":%s}\n' \
     "$(json_escape "$selected_model")" \
     "$run_options_json" \
     "$plugins_json" \
+    "$plugin_inventory_json" \
     "$last_run_json"
 }
 
@@ -1931,6 +1973,7 @@ if not isinstance(weak_family_ids, list):
 weak_family_ids = [" ".join(str(item).split()).strip() for item in weak_family_ids if str(item).strip()]
 compare_recommendation = " ".join(str(latest_compare.get("recommendation", "")).split()).strip()
 candidate_promotable = bool(latest_compare.get("candidate_promotable", False))
+current_benchmark_compare_count = int(benchmark_runtime.get("compare_count", 0) or 0)
 
 
 def clean_family_ids(values):
@@ -1989,6 +2032,29 @@ def current_timestamp():
     return dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 
+def normalize_existing_adoption_state(payload):
+    adoption_state = " ".join(str(payload.get("adoption_state", "")).split()).strip().lower()
+    if adoption_state in {"adopted", "trial", "review", "rejected"}:
+        return adoption_state
+    if bool(payload.get("enabled", False)):
+        return "trial"
+    if payload.get("benchmark_family_targets"):
+        return "review"
+    return "rejected"
+
+
+def report_plugin_lineage_key(plugin, index):
+    if not isinstance(plugin, dict):
+        return ""
+    base_id = str(plugin.get("id", "")).strip().lower()
+    if not base_id:
+        base_id = str(plugin.get("name", "")).strip().lower()
+    base_id = re.sub(r"[^a-z0-9-]+", "-", base_id).strip("-")
+    if not base_id:
+        base_id = f"plugin-{index}"
+    return base_id
+
+
 def prior_lineage_records(plugins_dir, lineage_key):
     records = []
     if not lineage_key or not os.path.isdir(plugins_dir):
@@ -2010,21 +2076,93 @@ def prior_lineage_records(plugins_dir, lineage_key):
     return records
 
 
+def archive_payload(archive_dir, source_name, payload):
+    archive_name = source_name
+    archive_path = os.path.join(archive_dir, archive_name)
+    suffix = 2
+    while os.path.exists(archive_path):
+        archive_base = os.path.splitext(source_name)[0]
+        archive_name = f"{archive_base}-{suffix}.json"
+        archive_path = os.path.join(archive_dir, archive_name)
+        suffix += 1
+    with open(archive_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+    return archive_name
+
+
+def prune_stale_plugins(plugins_dir, compare_count, incoming_lineage_keys, archived_at):
+    archived_ids = []
+    if compare_count <= 0 or not os.path.isdir(plugins_dir):
+        return archived_ids
+    archive_dir = os.path.join(plugins_dir, "archive")
+    os.makedirs(archive_dir, exist_ok=True)
+    for name in sorted(os.listdir(plugins_dir)):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(plugins_dir, name)
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        lineage_key = lineage_key_for_payload(payload)
+        if lineage_key and lineage_key in incoming_lineage_keys:
+            continue
+        operator_policy = normalize_operator_policy(payload.get("operator_policy", "auto"))
+        if operator_policy != "auto":
+            continue
+        adoption_state = normalize_existing_adoption_state(payload)
+        if adoption_state not in {"review", "rejected"}:
+            continue
+        last_compare_count = int(payload.get("last_benchmark_compare_count", 0) or 0)
+        if last_compare_count <= 0:
+            payload["last_benchmark_compare_count"] = compare_count
+            payload["stale_compare_cycles"] = 0
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False, indent=2)
+            continue
+        stale_compare_cycles = compare_count - last_compare_count
+        if stale_compare_cycles < 0:
+            stale_compare_cycles = 0
+        payload["stale_compare_cycles"] = stale_compare_cycles
+        archive_threshold = 3 if adoption_state == "review" else 2
+        if stale_compare_cycles < archive_threshold:
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False, indent=2)
+            continue
+        payload["archived"] = True
+        payload["archived_at"] = archived_at
+        payload["archived_via"] = "stale-benchmark-prune"
+        payload["archived_from_state"] = adoption_state
+        payload["archived_after_compare_cycles"] = stale_compare_cycles
+        payload["archived_reason"] = f"Automatic archive after {stale_compare_cycles} later benchmark compare cycles left this {adoption_state} plugin stale without operator intervention."
+        archive_payload(archive_dir, name, payload)
+        try:
+            os.remove(path)
+        except OSError:
+            continue
+        archived_ids.append(" ".join(str(payload.get("id", os.path.splitext(name)[0])).split()).strip() or os.path.splitext(name)[0])
+    return archived_ids
+
+
 recovered_families = clean_family_ids(latest_compare.get("recovered_families", []))
 improved_families = clean_family_ids(latest_compare.get("improved_families", []))
 new_weak_families = clean_family_ids(latest_compare.get("new_weak_families", []))
 
 generated_at = current_timestamp()
+incoming_lineage_keys = set()
+for index, plugin in enumerate(plugins, 1):
+    lineage_key = report_plugin_lineage_key(plugin, index)
+    if lineage_key:
+        incoming_lineage_keys.add(lineage_key)
+archived_plugin_ids = prune_stale_plugins(plugins_dir, current_benchmark_compare_count, incoming_lineage_keys, generated_at)
 saved_ids = []
 for index, plugin in enumerate(plugins, 1):
     if not isinstance(plugin, dict):
         continue
-    base_id = str(plugin.get("id", "")).strip().lower()
-    if not base_id:
-        base_id = str(plugin.get("name", "")).strip().lower()
-    base_id = re.sub(r"[^a-z0-9-]+", "-", base_id).strip("-")
-    if not base_id:
-        base_id = f"plugin-{index}"
+    base_id = report_plugin_lineage_key(plugin, index)
     lineage_key = base_id
     prior_records = prior_lineage_records(plugins_dir, lineage_key)
     prior_payload = prior_records[0][2] if prior_records else {}
@@ -2097,6 +2235,8 @@ for index, plugin in enumerate(plugins, 1):
     payload["benchmark_compare_count"] = previous_compare_count + (1 if compare_present else 0)
     payload["benchmark_promotable_hit_count"] = previous_promotable_hit_count + (1 if direct_compare_win else 0)
     payload["benchmark_hold_count"] = previous_hold_count + (1 if compare_present and (not candidate_promotable or payload["benchmark_new_weak_family_hits"]) else 0)
+    payload["last_benchmark_compare_count"] = current_benchmark_compare_count if current_benchmark_compare_count > 0 else int(prior_payload.get("last_benchmark_compare_count", 0) or 0)
+    payload["stale_compare_cycles"] = 0
     if direct_compare_win:
         payload["benchmark_success_streak"] = previous_success_streak + 1
         payload["benchmark_hold_streak"] = 0
@@ -2196,6 +2336,7 @@ last_run = {
     "evidence_counts": evidence_counts,
     "run_options": run_options,
     "plugin_ids": saved_ids,
+    "archived_plugin_ids": archived_plugin_ids,
     "capability_benchmark": {
         "latest_recommendation": " ".join(str(benchmark_runtime.get("latest_scorecard", {}).get("recommendation", "")).split()).strip() if isinstance(benchmark_runtime.get("latest_scorecard", {}), dict) else "",
         "compare_recommendation": compare_recommendation,
