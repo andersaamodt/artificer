@@ -25,13 +25,16 @@ Each family maps to an existing Artificer assay cycle. That keeps the benchmark 
 
 ## What The Driver Does
 
-The benchmark driver supports four workflows:
+The benchmark driver supports these workflows:
 
 1. `manifest`
 2. `plan`
 3. `score`
 4. `compare`
 5. `external-compare`
+6. `external-adapters`
+7. `external-plan`
+8. `external-run`
 
 Use it like this:
 
@@ -40,6 +43,9 @@ sh hosted-web/scripts/capability-benchmark-cycle.sh manifest
 sh hosted-web/scripts/capability-benchmark-cycle.sh plan --label candidate-a
 sh hosted-web/scripts/capability-benchmark-cycle.sh score --label candidate-a
 sh hosted-web/scripts/capability-benchmark-cycle.sh compare --baseline ~/.local/state/artificer/assay-reports/baseline-a-capability-benchmark-scorecard.json --candidate ~/.local/state/artificer/assay-reports/candidate-a-capability-benchmark-scorecard.json --label candidate-a-vs-baseline-a
+sh hosted-web/scripts/capability-benchmark-cycle.sh external-adapters
+sh hosted-web/scripts/capability-benchmark-cycle.sh external-plan --adapter mock-frontier --label frontier-a
+sh hosted-web/scripts/capability-benchmark-cycle.sh external-run --adapter mock-frontier --label frontier-a
 sh hosted-web/scripts/capability-benchmark-cycle.sh external-compare --external-baseline ~/.local/state/artificer/assay-reports/frontier-a-capability-benchmark-scorecard.json --candidate ~/.local/state/artificer/assay-reports/candidate-a-capability-benchmark-scorecard.json --external-name "Frontier Reference" --external-kind model --external-model gpt-5.4 --label candidate-a-vs-frontier-a
 ```
 
@@ -107,6 +113,22 @@ That lets self-improvement distinguish:
 Persistent external gaps are the higher-leverage target because they are less likely to be noise.
 
 Self-improvement now reads those artifacts and treats the reported family gaps as measured targets, not vague aspirations.
+
+## External Adapter Registry
+
+Artificer now has a registry-backed adapter surface for external references.
+
+That surface lets it:
+
+- list named external adapters
+- plan the exact command and output artifacts for a chosen adapter
+- run the adapter into a validated external scorecard without ad hoc shell construction
+
+The registry currently lives at:
+
+- `hosted-web/tests/fixtures/artificer-capability-external-adapters-v1.tsv`
+
+The important property is control, not the mock fixture itself. The adapter id is chosen from a trusted registry, and the resulting command is constructed from trusted template tokens rather than arbitrary user shell text.
 
 ## Automatic Adoption Policy
 

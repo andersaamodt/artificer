@@ -476,7 +476,7 @@ PY
 
 self_improve_last_run_json() {
   if [ ! -f "$self_improve_last_run_file" ]; then
-    printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[],"capability_benchmark":{"latest_recommendation":"","compare_recommendation":"","candidate_promotable":false,"weak_family_ids":[],"recovered_families":[],"new_weak_families":[],"scorecard_count":0,"compare_count":0,"external_compare_count":0,"external_compare_recommendation":"","candidate_beats_external":false,"external_gap_family_ids":[],"persistent_external_gap_family_ids":[],"external_baseline_name":""}}'
+    printf '{"summary":"","generated_at":"","model":"","papers":[],"web_signals":[],"objective":"","competition_enabled":false,"winner_lane":"","winner_model":"","lane_scores":{},"evidence_counts":{},"run_options":{},"lanes":[],"plugin_ids":[],"capability_benchmark":{"latest_recommendation":"","compare_recommendation":"","candidate_promotable":false,"weak_family_ids":[],"recovered_families":[],"new_weak_families":[],"scorecard_count":0,"compare_count":0,"external_compare_count":0,"external_compare_recommendation":"","candidate_beats_external":false,"external_gap_family_ids":[],"persistent_external_gap_family_ids":[],"external_baseline_name":"","external_adapter_count":0,"external_adapters":[]}}'
     return 0
   fi
   python3 - "$self_improve_last_run_file" <<'PY'
@@ -522,6 +522,8 @@ payload["capability_benchmark"].setdefault("candidate_beats_external", False)
 payload["capability_benchmark"].setdefault("external_gap_family_ids", [])
 payload["capability_benchmark"].setdefault("persistent_external_gap_family_ids", [])
 payload["capability_benchmark"].setdefault("external_baseline_name", "")
+payload["capability_benchmark"].setdefault("external_adapter_count", 0)
+payload["capability_benchmark"].setdefault("external_adapters", [])
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 PY
 }
@@ -775,7 +777,7 @@ self_improve_runtime_signals_json() {
   quality_summary="none"
   proposal_summary="none"
   controller_json="{}"
-  capability_benchmark_json='{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[],"persistent_external_gaps":[]}'
+  capability_benchmark_json='{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[],"persistent_external_gaps":[],"external_registry_path":"","external_adapter_count":0,"external_adapters":[]}'
 
   if [ "$mode_runtime_lib_loaded" = "1" ]; then
     ensure_mode_runtime_bootstrap
@@ -878,14 +880,17 @@ PY
 }
 
 self_improve_capability_benchmark_summary_json() {
-  manifest_path="$ARTIFICER_SCRIPT_DIR/../../tests/fixtures/artificer-capability-benchmark-manifest-v1.tsv"
-  python3 - "$ARTIFICER_ASSAY_REPORTS_DIR" "$manifest_path" <<'PY'
+  manifest_path="$ARTIFICER_SCRIPT_DIR/../tests/fixtures/artificer-capability-benchmark-manifest-v1.tsv"
+  external_registry_path="$ARTIFICER_SCRIPT_DIR/../tests/fixtures/artificer-capability-external-adapters-v1.tsv"
+  python3 - "$ARTIFICER_ASSAY_REPORTS_DIR" "$manifest_path" "$external_registry_path" <<'PY'
+import csv
 import json
 import pathlib
 import sys
 
 reports_dir = pathlib.Path(sys.argv[1]).expanduser()
 manifest_path = pathlib.Path(sys.argv[2]).expanduser()
+external_registry_path = pathlib.Path(sys.argv[3]).expanduser()
 
 
 def parse_json(path):
@@ -901,6 +906,30 @@ def latest(paths):
     if not paths:
         return None
     return max(paths, key=lambda item: (item.stat().st_mtime, item.name))
+
+
+def load_external_adapters(path):
+    adapters = []
+    if not path.is_file():
+        return adapters
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        for row in reader:
+            if not row:
+                continue
+            adapter_id = str(row.get("adapter_id", "")).strip()
+            if not adapter_id or adapter_id.startswith("#"):
+                continue
+            adapters.append(
+                {
+                    "adapter_id": adapter_id,
+                    "name": " ".join(str(row.get("name", adapter_id)).split()).strip() or adapter_id,
+                    "kind": " ".join(str(row.get("kind", "")).split()).strip(),
+                    "model": " ".join(str(row.get("model", "")).split()).strip(),
+                    "notes": " ".join(str(row.get("notes", "")).split()).strip(),
+                }
+            )
+    return adapters
 
 
 scorecard_paths = []
@@ -1028,7 +1057,10 @@ payload = {
     "high_leverage_gaps": high_leverage_gaps,
     "external_gap_families": external_gap_families,
     "persistent_external_gaps": persistent_external_gaps,
+    "external_registry_path": str(external_registry_path) if external_registry_path.is_file() else "",
+    "external_adapters": load_external_adapters(external_registry_path)[:8],
 }
+payload["external_adapter_count"] = len(payload["external_adapters"])
 print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 PY
 }
@@ -1236,7 +1268,7 @@ PY
 
   papers_json='{"papers":[]}'
   web_json='{"web_signals":[]}'
-  runtime_json='{"failure_summary":"none","quality_summary":"none","proposal_summary":"none","controller_variants":{},"capability_benchmark":{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[],"persistent_external_gaps":[]},"counts":{"failure_events":0,"quality_entries":0,"proposal_items":0,"capability_benchmark_scorecards":0,"capability_benchmark_compares":0,"capability_benchmark_external_compares":0}}'
+  runtime_json='{"failure_summary":"none","quality_summary":"none","proposal_summary":"none","controller_variants":{},"capability_benchmark":{"manifest_path":"","family_count":0,"scorecard_count":0,"compare_count":0,"external_compare_count":0,"latest_scorecard":{},"latest_compare":{},"latest_external_compare":{},"high_leverage_gaps":[],"external_gap_families":[],"persistent_external_gaps":[],"external_registry_path":"","external_adapter_count":0,"external_adapters":[]},"counts":{"failure_events":0,"quality_entries":0,"proposal_items":0,"capability_benchmark_scorecards":0,"capability_benchmark_compares":0,"capability_benchmark_external_compares":0}}'
   repo_json='{"repo_root":"","worktree":{"tracked_changes":0,"untracked_changes":0},"top_extensions":[],"todo_hotspots":[],"workflows":[],"release_scripts":[]}'
   platform_json='{"os":"","arch":"","commands":{},"scheduler_support":{"launchd":false,"systemd_user":false,"cron":false}}'
 
@@ -1354,6 +1386,7 @@ Rules:
 - If runtime_signals.capability_benchmark is present, prioritize weak critical families and propose changes that can be measured against those benchmark families.
 - If runtime_signals.capability_benchmark.external_gap_families is present, also prioritize families where an external baseline still outperforms Artificer.
 - If runtime_signals.capability_benchmark.persistent_external_gaps is present, treat those recurring external deficits as especially high-leverage targets.
+- If runtime_signals.capability_benchmark.external_adapters is present, prefer improvements that can be checked directly against those named external adapters.
 - Return strict JSON only.
 
 JSON schema:

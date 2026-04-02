@@ -9,6 +9,7 @@ PROJECT_ROOT=$(CDPATH= cd -- "$SITE_ROOT/.." && pwd)
 artificer_ensure_local_dirs
 
 DEFAULT_MANIFEST="$SITE_ROOT/tests/fixtures/artificer-capability-benchmark-manifest-v1.tsv"
+DEFAULT_EXTERNAL_REGISTRY="$SITE_ROOT/tests/fixtures/artificer-capability-external-adapters-v1.tsv"
 
 usage() {
   cat <<'EOF_USAGE'
@@ -17,6 +18,9 @@ Usage:
   capability-benchmark-cycle.sh plan [--label LABEL] [--reports-dir DIR] [--manifest FILE]
   capability-benchmark-cycle.sh score [--label LABEL] [--reports-dir DIR] [--manifest FILE] [--out-json FILE] [--out-md FILE]
   capability-benchmark-cycle.sh compare --baseline FILE --candidate FILE [--label LABEL] [--reports-dir DIR] [--out-json FILE] [--out-md FILE]
+  capability-benchmark-cycle.sh external-adapters [--registry FILE]
+  capability-benchmark-cycle.sh external-plan --adapter ID [--label LABEL] [--reports-dir DIR] [--manifest FILE] [--registry FILE] [--out-json FILE] [--out-md FILE]
+  capability-benchmark-cycle.sh external-run --adapter ID [--label LABEL] [--reports-dir DIR] [--manifest FILE] [--registry FILE] [--out-json FILE] [--out-md FILE]
   capability-benchmark-cycle.sh external-compare --external-baseline FILE --candidate FILE --external-name NAME [--external-kind KIND] [--external-model MODEL] [--external-notes TEXT] [--label LABEL] [--reports-dir DIR] [--out-json FILE] [--out-md FILE]
 EOF_USAGE
 }
@@ -30,10 +34,11 @@ shift
 
 REPORTS_DIR_DEFAULT=$ARTIFICER_ASSAY_REPORTS_DIR
 MANIFEST_DEFAULT=$DEFAULT_MANIFEST
+EXTERNAL_REGISTRY_DEFAULT=$DEFAULT_EXTERNAL_REGISTRY
 SITE_ROOT_ENV=$SITE_ROOT
 PROJECT_ROOT_ENV=$PROJECT_ROOT
 
-MANIFEST_DEFAULT=$MANIFEST_DEFAULT REPORTS_DIR_DEFAULT=$REPORTS_DIR_DEFAULT SITE_ROOT_ENV=$SITE_ROOT_ENV PROJECT_ROOT_ENV=$PROJECT_ROOT_ENV \
+MANIFEST_DEFAULT=$MANIFEST_DEFAULT EXTERNAL_REGISTRY_DEFAULT=$EXTERNAL_REGISTRY_DEFAULT REPORTS_DIR_DEFAULT=$REPORTS_DIR_DEFAULT SITE_ROOT_ENV=$SITE_ROOT_ENV PROJECT_ROOT_ENV=$PROJECT_ROOT_ENV \
 python3 - "$command_name" "$@" <<'PY'
 import argparse
 import csv
@@ -43,6 +48,7 @@ import math
 import os
 import pathlib
 import shlex
+import subprocess
 import sys
 
 
@@ -125,6 +131,42 @@ def load_manifest(path, project_root, site_root):
     return manifest_path, families
 
 
+def load_external_registry(path):
+    registry_path = pathlib.Path(path).expanduser()
+    if not registry_path.is_file():
+        fail(f"External registry not found: {registry_path}")
+    adapters = []
+    with registry_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        for row in reader:
+            if not row:
+                continue
+            adapter_id = str(row.get("adapter_id", "")).strip()
+            if not adapter_id or adapter_id.startswith("#"):
+                continue
+            command_template = " ".join(str(row.get("command_template", "")).split()).strip()
+            if not command_template:
+                fail(f"External adapter missing command_template: {adapter_id}")
+            adapters.append(
+                {
+                    "adapter_id": adapter_id,
+                    "name": " ".join(str(row.get("name", adapter_id)).split()).strip() or adapter_id,
+                    "kind": " ".join(str(row.get("kind", "")).split()).strip(),
+                    "model": " ".join(str(row.get("model", "")).split()).strip(),
+                    "notes": " ".join(str(row.get("notes", "")).split()).strip(),
+                    "command_template": command_template,
+                }
+            )
+    return registry_path, adapters
+
+
+def find_external_adapter(adapters, adapter_id):
+    for adapter in adapters:
+        if adapter.get("adapter_id") == adapter_id:
+            return adapter
+    fail(f"Unknown external adapter: {adapter_id}")
+
+
 def family_artifacts(reports_dir, label, family):
     family_id = family["family_id"]
     prefix = f"{label}-{family_id}"
@@ -133,6 +175,15 @@ def family_artifacts(reports_dir, label, family):
         "holdout_summary": str(pathlib.Path(reports_dir) / f"{prefix}-holdout-summary.json"),
         "transfer_json": str(pathlib.Path(reports_dir) / f"{prefix}-transfer.json"),
     }
+
+
+def external_adapter_artifacts(reports_dir, label, adapter_id, out_json="", out_md=""):
+    prefix = f"{label}-{adapter_id}"
+    artifacts = {
+        "out_json": out_json or str(pathlib.Path(reports_dir) / f"{prefix}-capability-benchmark-external-scorecard.json"),
+        "out_md": out_md or str(pathlib.Path(reports_dir) / f"{prefix}-capability-benchmark-external-scorecard.md"),
+    }
+    return artifacts
 
 
 def plan_commands(reports_dir, label, family):
@@ -166,6 +217,33 @@ def plan_commands(reports_dir, label, family):
             f"{reports_env} sh {shlex.quote(cycle)} transfer --regressions-report {shlex.quote(artifacts['regressions_summary'])} --holdout-report {shlex.quote(artifacts['holdout_summary'])} --label {shlex.quote(label + '-' + family_id)}"
         )
     return commands, artifacts
+
+
+def external_adapter_command(adapter, reports_dir, label, manifest_path, out_json="", out_md="", site_root="", project_root=""):
+    artifacts = external_adapter_artifacts(reports_dir, label, adapter["adapter_id"], out_json=out_json, out_md=out_md)
+    variables = {
+        "adapter_id": adapter["adapter_id"],
+        "reports_dir": str(pathlib.Path(reports_dir)),
+        "label": label,
+        "manifest": str(pathlib.Path(manifest_path)),
+        "out_json": artifacts["out_json"],
+        "out_md": artifacts["out_md"],
+        "site_root": str(pathlib.Path(site_root)),
+        "project_root": str(pathlib.Path(project_root)),
+    }
+    try:
+        template_tokens = shlex.split(adapter["command_template"])
+    except Exception as exc:
+        fail(f"Invalid external adapter command template for {adapter['adapter_id']}: {exc}")
+    command = []
+    for token in template_tokens:
+        try:
+            command.append(token.format_map(variables))
+        except KeyError as exc:
+            fail(f"Unknown placeholder in external adapter template {adapter['adapter_id']}: {exc}")
+    if not command:
+        fail(f"External adapter command resolved empty: {adapter['adapter_id']}")
+    return command, artifacts
 
 
 def weak_reason(present, gate_pass, risk, score):
@@ -559,6 +637,7 @@ parser.add_argument("rest", nargs=argparse.REMAINDER)
 ns = parser.parse_args(sys.argv[1:2] + sys.argv[2:])
 
 default_manifest = os.environ.get("MANIFEST_DEFAULT", "")
+default_external_registry = os.environ.get("EXTERNAL_REGISTRY_DEFAULT", "")
 default_reports_dir = os.environ.get("REPORTS_DIR_DEFAULT", "")
 site_root = os.environ.get("SITE_ROOT_ENV", "")
 project_root = os.environ.get("PROJECT_ROOT_ENV", "")
@@ -638,6 +717,103 @@ elif command == "compare":
     out_md.write_text(render_compare_markdown(payload), encoding="utf-8")
     print(str(out_json))
     print(str(out_md))
+elif command == "external-adapters":
+    ap = argparse.ArgumentParser(prog="capability-benchmark-cycle.sh external-adapters")
+    ap.add_argument("--registry", default=default_external_registry)
+    args = ap.parse_args(argv)
+    registry_path, adapters = load_external_registry(args.registry)
+    payload = {
+        "registry_path": str(registry_path),
+        "adapter_count": len(adapters),
+        "adapters": [
+            {
+                "adapter_id": adapter["adapter_id"],
+                "name": adapter["name"],
+                "kind": adapter["kind"],
+                "model": adapter["model"],
+                "notes": adapter["notes"],
+            }
+            for adapter in adapters
+        ],
+    }
+    print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+elif command == "external-plan":
+    ap = argparse.ArgumentParser(prog="capability-benchmark-cycle.sh external-plan")
+    ap.add_argument("--adapter", required=True)
+    ap.add_argument("--label", default="external-benchmark")
+    ap.add_argument("--reports-dir", default=default_reports_dir)
+    ap.add_argument("--manifest", default=default_manifest)
+    ap.add_argument("--registry", default=default_external_registry)
+    ap.add_argument("--out-json", default="")
+    ap.add_argument("--out-md", default="")
+    args = ap.parse_args(argv)
+    manifest_path, _ = load_manifest(args.manifest, project_root, site_root)
+    registry_path, adapters = load_external_registry(args.registry)
+    adapter = find_external_adapter(adapters, args.adapter)
+    command_tokens, artifacts = external_adapter_command(
+        adapter,
+        args.reports_dir,
+        args.label,
+        manifest_path,
+        out_json=args.out_json,
+        out_md=args.out_md,
+        site_root=site_root,
+        project_root=project_root,
+    )
+    payload = {
+        "registry_path": str(registry_path),
+        "adapter": {
+            "adapter_id": adapter["adapter_id"],
+            "name": adapter["name"],
+            "kind": adapter["kind"],
+            "model": adapter["model"],
+            "notes": adapter["notes"],
+        },
+        "label": args.label,
+        "reports_dir": args.reports_dir,
+        "manifest_path": str(manifest_path),
+        "command": command_tokens,
+        "command_display": " ".join(shlex.quote(token) for token in command_tokens),
+        "artifacts": artifacts,
+    }
+    print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+elif command == "external-run":
+    ap = argparse.ArgumentParser(prog="capability-benchmark-cycle.sh external-run")
+    ap.add_argument("--adapter", required=True)
+    ap.add_argument("--label", default="external-benchmark")
+    ap.add_argument("--reports-dir", default=default_reports_dir)
+    ap.add_argument("--manifest", default=default_manifest)
+    ap.add_argument("--registry", default=default_external_registry)
+    ap.add_argument("--out-json", default="")
+    ap.add_argument("--out-md", default="")
+    args = ap.parse_args(argv)
+    pathlib.Path(args.reports_dir).mkdir(parents=True, exist_ok=True)
+    manifest_path, _ = load_manifest(args.manifest, project_root, site_root)
+    registry_path, adapters = load_external_registry(args.registry)
+    adapter = find_external_adapter(adapters, args.adapter)
+    command_tokens, artifacts = external_adapter_command(
+        adapter,
+        args.reports_dir,
+        args.label,
+        manifest_path,
+        out_json=args.out_json,
+        out_md=args.out_md,
+        site_root=site_root,
+        project_root=project_root,
+    )
+    env = dict(os.environ)
+    env["ARTIFICER_ASSAY_REPORTS_DIR"] = args.reports_dir
+    proc = subprocess.run(command_tokens, check=False, capture_output=True, text=True, env=env)
+    if proc.returncode != 0:
+        fail(
+            "External adapter failed for "
+            + adapter["adapter_id"]
+            + ": "
+            + " ".join(str(proc.stderr or proc.stdout or "").split())
+        )
+    load_scorecard(artifacts["out_json"])
+    print(str(pathlib.Path(artifacts["out_json"])))
+    print(str(pathlib.Path(artifacts["out_md"])))
 elif command == "external-compare":
     ap = argparse.ArgumentParser(prog="capability-benchmark-cycle.sh external-compare")
     ap.add_argument("--external-baseline", required=True)

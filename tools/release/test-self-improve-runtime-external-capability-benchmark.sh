@@ -77,11 +77,14 @@ runtime_json=$(self_improve_runtime_signals_json)
 [ "$(json_query "$runtime_json" 'data["capability_benchmark"]["external_gap_families"][0].get("id")')" = "teaching_reassessment" ] || fail "runtime signals should expose external gap families"
 [ "$(json_query "$runtime_json" 'data["capability_benchmark"]["persistent_external_gaps"][0].get("id")')" = "teaching_reassessment" ] || fail "runtime signals should expose persistent external gaps"
 [ "$(json_query "$runtime_json" 'data["capability_benchmark"]["persistent_external_gaps"][0].get("occurrence_count")')" = "2" ] || fail "persistent external gaps should aggregate repeated family misses"
+[ "$(json_query "$runtime_json" 'data["capability_benchmark"].get("external_adapter_count") >= 1')" = "true" ] || fail "runtime signals should expose available external adapters"
+[ "$(json_query "$runtime_json" 'data["capability_benchmark"]["external_adapters"][0].get("adapter_id")')" = "mock-frontier" ] || fail "runtime signals should expose adapter ids from the registry"
 [ "$(json_query "$runtime_json" 'data["counts"].get("capability_benchmark_external_compares")')" = "2" ] || fail "runtime counts should include external benchmark comparisons"
 
 evidence_json=$(self_improve_build_evidence_bundle_json '{"objective":"Improve measured capability against an external reference","sources":{"runtime":true,"papers":false,"web":false,"repo":false,"platform":false}}')
 [ "$(json_query "$evidence_json" 'data["runtime_signals"]["capability_benchmark"]["latest_external_compare"].get("external_baseline", {}).get("model")')" = "gpt-5.4" ] || fail "evidence bundle should carry external baseline metadata"
 [ "$(json_query "$evidence_json" 'data["runtime_signals"]["capability_benchmark"]["persistent_external_gaps"][1].get("id")')" = "research_integration" ] || fail "evidence bundle should carry persistent external gap ranking"
+[ "$(json_query "$evidence_json" 'data["runtime_signals"]["capability_benchmark"]["external_adapters"][0].get("name")')" = "Mock Frontier Reference" ] || fail "evidence bundle should carry external adapter metadata"
 [ "$(json_query "$evidence_json" 'data["counts"].get("capability_benchmark_external_compares")')" = "2" ] || fail "evidence bundle counts should include external benchmark comparisons"
 
 printf '%s\n' "ok self-improve runtime external capability benchmark: runtime signals and evidence bundle expose external baseline compares and gap families"
