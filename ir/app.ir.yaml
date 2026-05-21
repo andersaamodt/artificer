@@ -31,6 +31,10 @@
         "label": "Dictate"
       },
       {
+        "id": "toggle_codex_work_checks",
+        "label": "Codex Work Checks"
+      },
+      {
         "id": "run_next",
         "label": "Run Next"
       },

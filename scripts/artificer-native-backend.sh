@@ -26,6 +26,8 @@ Actions:
   dictation-start [LANGUAGE]
   dictation-levels [SESSION_ID]
   dictation-stop SESSION_ID
+  self-improve-settings
+  self-improve-codex-work-check-set ENABLED
   automations
   automation-run AUTOMATION_ID
   automation-toggle AUTOMATION_ID ENABLED
@@ -491,6 +493,17 @@ case "$action" in
   dictation-stop)
     session_id=${1-}
     api_post dictate_stop session_id "$session_id"
+    ;;
+  self-improve-settings)
+    api_get self_improve_settings_get
+    ;;
+  self-improve-codex-work-check-set)
+    enabled_value=${1:-0}
+    case "$enabled_value" in
+      1|true|yes|on|enabled) enabled_value=1 ;;
+      *) enabled_value=0 ;;
+    esac
+    api_post self_improve_run_options_set codex_work_check_enabled "$enabled_value"
     ;;
   automations)
     runtime_client automation list

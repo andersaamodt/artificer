@@ -40,6 +40,8 @@ Implemented natively:
   including image/document metadata and queued-run attachment IDs
 - dictation controls backed by Artificer's local dictation backend, with native
   install/check/cancel controls and live waveform telemetry while recording
+- Codex Desktop work-check setting for Artificer self-improvement runs, backed
+  by the same `codex_work_check_enabled` option as hosted Artificer
 - run policy controls for mode, compute budget, command execution, permission,
   programmer review, reflexive knowledge, and self-actuation
 - automation list plus enable, pause, resume, disable, and tick controls for the

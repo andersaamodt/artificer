@@ -596,6 +596,19 @@ private struct SettingsView: View {
         }
       }
 
+      Section("Work Checks") {
+        Toggle("Codex Desktop work checks", isOn: $model.codexWorkCheckEnabled)
+          .onChange(of: model.codexWorkCheckEnabled) { nextValue in
+            Task { await model.setCodexWorkCheckEnabled(nextValue) }
+          }
+        Text(model.codexWorkCheckEnabled ? "Self-improvement runs can ask Codex Desktop to check failed or low-quality work." : "Codex Desktop work checks are off.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        Button("Refresh") {
+          Task { await model.loadSelfImproveSettings() }
+        }
+      }
+
       Section("Dictation") {
         if let status = model.dictationStatus {
           LabeledContent("Backend", value: status.installed ? status.backendLabel : "Not installed")
@@ -648,6 +661,7 @@ private final class ArtificerModel: ObservableObject {
   @Published var dictationInstallJobID = ""
   @Published var dictationInstallMessage = ""
   @Published var isDictationInstalling = false
+  @Published var codexWorkCheckEnabled = false
 
   @Published var runMode = "auto"
   @Published var computeBudget = "auto"
@@ -687,6 +701,7 @@ private final class ArtificerModel: ObservableObject {
     await loadDaemonStatus()
     await loadAutomations()
     await loadDictationStatus()
+    await loadSelfImproveSettings()
   }
 
   func refreshDoctor() async {
@@ -843,6 +858,19 @@ private final class ArtificerModel: ObservableObject {
         dictationInstallMessage = "Install a local dictation backend before recording."
       }
     }
+  }
+
+  func loadSelfImproveSettings() async {
+    let result = await runBackend("self-improve-settings", trackBusy: false)
+    guard let response = decode(SelfImproveSettingsResponse.self, from: result) else { return }
+    codexWorkCheckEnabled = response.runOptions.codexWorkCheckEnabled
+  }
+
+  func setCodexWorkCheckEnabled(_ enabled: Bool) async {
+    let result = await runBackend("self-improve-codex-work-check-set", enabled ? "1" : "0")
+    guard let response = decode(SelfImproveRunOptionsResponse.self, from: result) else { return }
+    codexWorkCheckEnabled = response.runOptions.codexWorkCheckEnabled
+    statusMessage = codexWorkCheckEnabled ? "Codex work checks enabled." : "Codex work checks disabled."
   }
 
   func installDictation() async {
@@ -1465,6 +1493,39 @@ private struct DictationStatus: Decodable {
 private struct DictationInstallStartResponse: Decodable {
   let success: Bool
   let job: DictationInstallJob
+}
+
+private struct SelfImproveSettingsResponse: Decodable {
+  let success: Bool
+  let runOptions: SelfImproveRunOptions
+
+  enum CodingKeys: String, CodingKey {
+    case success
+    case runOptions = "run_options"
+  }
+}
+
+private struct SelfImproveRunOptionsResponse: Decodable {
+  let success: Bool
+  let runOptions: SelfImproveRunOptions
+
+  enum CodingKeys: String, CodingKey {
+    case success
+    case runOptions = "run_options"
+  }
+}
+
+private struct SelfImproveRunOptions: Decodable {
+  let codexWorkCheckEnabled: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case codexWorkCheckEnabled = "codex_work_check_enabled"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    codexWorkCheckEnabled = container.decodeFlexibleBool(forKey: .codexWorkCheckEnabled)
+  }
 }
 
 private struct DictationInstallJob: Decodable {
