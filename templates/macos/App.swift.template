@@ -83,10 +83,7 @@ private struct RootView: View {
   var body: some View {
     NavigationSplitView {
       WorkspaceSidebar(model: model)
-        .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 400)
-    } content: {
-      SessionListView(model: model)
-        .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 460)
+        .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 460)
     } detail: {
       SessionDetailView(model: model)
     }
@@ -126,34 +123,56 @@ private struct WorkspaceSidebar: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      List(selection: $model.selectedProjectID) {
-        Section("Workspaces") {
-          ForEach(model.projects) { project in
-            WorkspaceRow(project: project)
-              .tag(Optional(project.id))
-          }
+      HStack {
+        Text("Threads")
+          .font(.headline)
+          .lineLimit(1)
+        Spacer()
+        Button {
+          model.chooseWorkspaceFolder()
+        } label: {
+          Image(systemName: "folder.badge.plus")
         }
+        .help("New project")
+        .disabled(model.isBusy)
+        Button {
+          Task { await model.refreshAll() }
+        } label: {
+          Image(systemName: "line.3.horizontal.decrease")
+        }
+        .help("Refresh")
+        .disabled(model.isBusy)
       }
-      .onChange(of: model.selectedProjectID) { _ in
-        Task { await model.loadSessionsForSelection() }
-      }
+      .buttonStyle(.borderless)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 10)
 
       Divider()
-      VStack(alignment: .leading, spacing: 10) {
-        HStack {
-          Button {
-            model.chooseWorkspaceFolder()
-          } label: {
-            Label("Add", systemImage: "folder.badge.plus")
-          }
-          Button {
-            Task { await model.loadProjects() }
-          } label: {
-            Label("Reload", systemImage: "arrow.clockwise")
+
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 4) {
+          if model.projects.isEmpty {
+            EmptySidebarState(model: model)
+          } else {
+            ForEach(model.projects) { project in
+              WorkspaceTreeGroup(model: model, project: project)
+            }
           }
         }
-        .buttonStyle(.bordered)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
+      Divider()
+      HStack(alignment: .center, spacing: 8) {
+        Button {
+          NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        } label: {
+          Image(systemName: "gearshape")
+        }
+        .help("Settings")
+        .buttonStyle(.borderless)
         RuntimeHealthView(model: model)
       }
       .padding(12)
@@ -162,33 +181,141 @@ private struct WorkspaceSidebar: View {
   }
 }
 
-private struct WorkspaceRow: View {
+private struct WorkspaceTreeGroup: View {
+  @ObservedObject var model: ArtificerModel
   let project: Project
 
   var body: some View {
-    Label {
-      VStack(alignment: .leading, spacing: 4) {
-        Text(project.name)
-          .font(.headline)
-          .lineLimit(1)
-        Text(URL(fileURLWithPath: project.path).lastPathComponent.isEmpty ? project.path : URL(fileURLWithPath: project.path).lastPathComponent)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-          .truncationMode(.middle)
-        HStack(spacing: 8) {
-          Label("\(project.sessionCount)", systemImage: "message")
-          Text(project.pathExists ? "available" : "missing")
+    DisclosureGroup(isExpanded: model.expansionBinding(for: project.id)) {
+      let sessions = model.sessionsByProject[project.id] ?? []
+      VStack(alignment: .leading, spacing: 2) {
+        if sessions.isEmpty {
+          Text("No threads")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.leading, 31)
+            .padding(.vertical, 5)
+        } else {
+          ForEach(sessions) { session in
+            SessionTreeRow(model: model, project: project, session: session)
+          }
         }
-        .font(.caption2)
-        .foregroundColor(project.pathExists ? .secondary : .red)
       }
-    } icon: {
-      Image(systemName: project.pathExists ? "folder" : "folder.badge.questionmark")
-        .foregroundColor(project.pathExists ? .secondary : .orange)
+      .padding(.top, 2)
+    } label: {
+      HStack(spacing: 7) {
+        Image(systemName: model.isProjectExpanded(project.id) ? "folder.fill" : "folder")
+          .foregroundColor(project.pathExists ? .secondary : .orange)
+          .frame(width: 17)
+        Text(project.name)
+          .font(.subheadline.weight(project.id == model.selectedProjectID ? .semibold : .regular))
+          .lineLimit(1)
+        Spacer(minLength: 6)
+        Text("\(model.sessionsByProject[project.id]?.count ?? project.sessionCount)")
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+        Button {
+          Task { await model.createSession(in: project.id) }
+        } label: {
+          Image(systemName: "square.and.pencil")
+        }
+        .help("New thread")
+        .buttonStyle(.borderless)
+        .disabled(model.isBusy)
+      }
+      .contentShape(Rectangle())
+      .onTapGesture {
+        Task { await model.selectProject(project.id) }
+      }
     }
-    .labelStyle(.titleAndIcon)
     .padding(.vertical, 4)
+    .padding(.horizontal, 6)
+    .background(project.id == model.selectedProjectID && model.selectedSessionID == nil ? Color.accentColor.opacity(0.13) : Color.clear)
+    .clipShape(RoundedRectangle(cornerRadius: 7))
+  }
+}
+
+private struct SessionTreeRow: View {
+  @ObservedObject var model: ArtificerModel
+  let project: Project
+  let session: SessionSummary
+  @State private var isHovering = false
+
+  var body: some View {
+    HStack(spacing: 7) {
+      Circle()
+        .fill(indicatorColor)
+        .frame(width: 7, height: 7)
+      Text(session.title.isEmpty ? session.id : session.title)
+        .font(.caption)
+        .lineLimit(1)
+      if session.queue.pending > 0 {
+        Text("\(session.queue.pending)")
+          .font(.caption2)
+          .padding(.horizontal, 5)
+          .padding(.vertical, 1)
+          .background(Color.accentColor.opacity(0.16))
+          .clipShape(Capsule())
+      }
+      Spacer(minLength: 6)
+      if isHovering || model.pendingArchiveSessionKey == model.archiveKey(projectID: project.id, sessionID: session.id) {
+        Button {
+          Task { await model.requestOrConfirmArchive(projectID: project.id, sessionID: session.id) }
+        } label: {
+          Image(systemName: model.pendingArchiveSessionKey == model.archiveKey(projectID: project.id, sessionID: session.id) ? "checkmark" : "archivebox")
+            .frame(width: 16, height: 16)
+        }
+        .help(model.pendingArchiveSessionKey == model.archiveKey(projectID: project.id, sessionID: session.id) ? "Confirm archive" : "Archive thread")
+        .buttonStyle(.borderless)
+        .foregroundColor(model.pendingArchiveSessionKey == model.archiveKey(projectID: project.id, sessionID: session.id) ? .red : .secondary)
+      } else {
+        Text(relativeUpdated)
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+      }
+    }
+    .padding(.leading, 25)
+    .padding(.trailing, 6)
+    .padding(.vertical, 5)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .contentShape(Rectangle())
+    .background(session.id == model.selectedSessionID && project.id == model.selectedProjectID ? Color.accentColor.opacity(0.13) : Color.clear)
+    .clipShape(RoundedRectangle(cornerRadius: 7))
+    .onTapGesture {
+      Task { await model.selectSession(projectID: project.id, sessionID: session.id) }
+    }
+    .onHover { isHovering = $0 }
+  }
+
+  private var indicatorColor: Color {
+    if session.queue.running > 0 { return .green }
+    if session.queue.pending > 0 { return .orange }
+    if session.queue.done > 0 { return .blue.opacity(0.75) }
+    return .secondary.opacity(0.55)
+  }
+
+  private var relativeUpdated: String {
+    guard session.updated > 0 else { return "" }
+    let date = Date(timeIntervalSince1970: TimeInterval(session.updated))
+    return RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
+  }
+}
+
+private struct EmptySidebarState: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("No projects")
+        .font(.subheadline)
+      Button {
+        model.chooseWorkspaceFolder()
+      } label: {
+        Label("Add project", systemImage: "folder.badge.plus")
+      }
+      .buttonStyle(.bordered)
+    }
+    .padding(8)
   }
 }
 
@@ -208,64 +335,6 @@ private struct RuntimeHealthView: View {
       }
     }
     .font(.caption)
-  }
-}
-
-private struct SessionListView: View {
-  @ObservedObject var model: ArtificerModel
-
-  var body: some View {
-    VStack(spacing: 0) {
-      HStack {
-        Text(model.selectedProject?.name ?? "Sessions")
-          .font(.headline)
-          .lineLimit(1)
-        Spacer()
-        Button {
-          Task { await model.createSession() }
-        } label: {
-          Label("New", systemImage: "plus")
-        }
-        .disabled(model.selectedProjectID == nil)
-      }
-      .padding(12)
-
-      Divider()
-
-      List(selection: $model.selectedSessionID) {
-        ForEach(model.sessions) { session in
-          SessionRow(session: session)
-            .tag(Optional(session.id))
-        }
-      }
-      .onChange(of: model.selectedSessionID) { _ in
-        Task { await model.loadSelectedSession() }
-      }
-    }
-  }
-}
-
-private struct SessionRow: View {
-  let session: SessionSummary
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 5) {
-      Text(session.title.isEmpty ? session.id : session.title)
-        .font(.headline)
-        .lineLimit(2)
-      HStack(spacing: 8) {
-        if session.queue.running > 0 {
-          Label("running", systemImage: "play.circle")
-        }
-        if session.queue.pending > 0 {
-          Label("\(session.queue.pending) queued", systemImage: "clock")
-        }
-        Text(session.model)
-      }
-      .font(.caption)
-      .foregroundStyle(.secondary)
-    }
-    .padding(.vertical, 5)
   }
 }
 
@@ -753,6 +822,9 @@ private final class ArtificerModel: ObservableObject {
   @Published var health: RuntimeHealth?
   @Published var selectedProjectID: String?
   @Published var selectedSessionID: String?
+  @Published var sessionsByProject: [String: [SessionSummary]] = [:]
+  @Published var expandedProjectIDs: Set<String> = []
+  @Published var pendingArchiveSessionKey = ""
   @Published var prompt = ""
   @Published var statusMessage = "Ready"
   @Published var lastError = ""
@@ -786,6 +858,27 @@ private final class ArtificerModel: ObservableObject {
 
   var selectedProject: Project? {
     projects.first { $0.id == selectedProjectID }
+  }
+
+  func isProjectExpanded(_ projectID: String) -> Bool {
+    expandedProjectIDs.contains(projectID)
+  }
+
+  func expansionBinding(for projectID: String) -> Binding<Bool> {
+    Binding(
+      get: { self.expandedProjectIDs.contains(projectID) },
+      set: { expanded in
+        if expanded {
+          self.expandedProjectIDs.insert(projectID)
+        } else {
+          self.expandedProjectIDs.remove(projectID)
+        }
+      }
+    )
+  }
+
+  func archiveKey(projectID: String, sessionID: String) -> String {
+    "\(projectID):\(sessionID)"
   }
 
   var canSendPrompt: Bool {
@@ -843,7 +936,36 @@ private final class ArtificerModel: ObservableObject {
     } else {
       selectedProjectID = projects.first?.id
     }
-    await loadSessionsForSelection()
+    if let selectedProjectID {
+      expandedProjectIDs.insert(selectedProjectID)
+    }
+    await loadAllSessions(status: "Threads loaded.")
+  }
+
+  func loadAllSessions(status nextStatus: String? = "Session loaded.") async {
+    let projectOrder = projects.sorted { left, right in
+      if left.id == selectedProjectID { return true }
+      if right.id == selectedProjectID { return false }
+      if left.sessionCount != right.sessionCount { return left.sessionCount < right.sessionCount }
+      return left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
+    }
+    var nextSessionsByProject = sessionsByProject.filter { key, _ in
+      projects.contains { $0.id == key }
+    }
+    sessionsByProject = nextSessionsByProject
+    for project in projectOrder {
+      let result = await runBackend("sessions", [project.id], trackBusy: false)
+      guard let response = decode(SessionsResponse.self, from: result) else { continue }
+      let sortedSessions = response.sessions.sorted { left, right in
+        left.updated > right.updated
+      }
+      nextSessionsByProject[project.id] = sortedSessions
+      sessionsByProject = nextSessionsByProject
+      if project.id == selectedProjectID {
+        sessions = sortedSessions
+      }
+    }
+    await loadSessionsForSelection(status: nextStatus)
   }
 
   func loadSessionsForSelection(status nextStatus: String? = "Session loaded.") async {
@@ -853,10 +975,14 @@ private final class ArtificerModel: ObservableObject {
       selectedSession = nil
       return
     }
-    let result = await runBackend("sessions", projectID)
-    guard let response = decode(SessionsResponse.self, from: result) else { return }
-    sessions = response.sessions.sorted { left, right in
-      left.updated > right.updated
+    sessions = sessionsByProject[projectID] ?? []
+    if sessionsByProject[projectID] == nil {
+      let result = await runBackend("sessions", projectID)
+      guard let response = decode(SessionsResponse.self, from: result) else { return }
+      sessions = response.sessions.sorted { left, right in
+        left.updated > right.updated
+      }
+      sessionsByProject[projectID] = sessions
     }
     if let selectedSessionID, sessions.contains(where: { $0.id == selectedSessionID }) {
       await loadSelectedSession(status: nextStatus)
@@ -880,13 +1006,53 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func createSession() async {
-    guard let projectID = selectedProjectID else { return }
+    await createSession(in: selectedProjectID)
+  }
+
+  func createSession(in projectID: String?) async {
+    guard let projectID else { return }
+    selectedProjectID = projectID
+    expandedProjectIDs.insert(projectID)
     let title = "Native session \(DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .short))"
     let result = await runBackend("session-create", projectID, title, health?.defaultModel ?? "")
     guard let response = decode(SessionResponse.self, from: result) else { return }
     selectedSessionID = response.session.id
-    await loadSessionsForSelection(status: nil)
+    await loadAllSessions(status: nil)
     statusMessage = "Session created."
+  }
+
+  func selectProject(_ projectID: String) async {
+    selectedProjectID = projectID
+    selectedSessionID = nil
+    selectedSession = nil
+    sessions = sessionsByProject[projectID] ?? []
+    pendingArchiveSessionKey = ""
+  }
+
+  func selectSession(projectID: String, sessionID: String) async {
+    selectedProjectID = projectID
+    selectedSessionID = sessionID
+    pendingArchiveSessionKey = ""
+    await loadSessionsForSelection(status: nil)
+  }
+
+  func requestOrConfirmArchive(projectID: String, sessionID: String) async {
+    let key = archiveKey(projectID: projectID, sessionID: sessionID)
+    if pendingArchiveSessionKey != key {
+      pendingArchiveSessionKey = key
+      statusMessage = "Archive armed. Click checkmark to confirm."
+      return
+    }
+    let result = await runBackend("session-archive", projectID, sessionID)
+    if decode(GenericSuccessResponse.self, from: result) != nil {
+      pendingArchiveSessionKey = ""
+      if selectedProjectID == projectID && selectedSessionID == sessionID {
+        selectedSessionID = nil
+        selectedSession = nil
+      }
+      await loadAllSessions(status: nil)
+      statusMessage = "Thread archived."
+    }
   }
 
   func sendPrompt(runAfterQueue: Bool) async {
@@ -918,7 +1084,7 @@ private final class ArtificerModel: ObservableObject {
     if runAfterQueue {
       await runNext(statusWhileRunning: "Prompt queued; running next item.", statusWhenDone: "Prompt queued; run-next completed.")
     } else {
-      await loadSessionsForSelection(status: nil)
+      await loadAllSessions(status: nil)
       statusMessage = "Prompt queued."
     }
   }
@@ -928,7 +1094,7 @@ private final class ArtificerModel: ObservableObject {
     statusMessage = statusWhileRunning
     let result = await runBackend("session-run-next", projectID, sessionID)
     if decode(SessionResponse.self, from: result) != nil {
-      await loadSessionsForSelection(status: nil)
+      await loadAllSessions(status: nil)
       statusMessage = statusWhenDone
     }
   }
@@ -1342,6 +1508,10 @@ private struct ProjectsResponse: Decodable {
 }
 
 private struct ProjectMutationResponse: Decodable {
+  let success: Bool
+}
+
+private struct GenericSuccessResponse: Decodable {
   let success: Bool
 }
 

@@ -15,6 +15,7 @@ Actions:
   sessions WORKSPACE_ID
   session WORKSPACE_ID CONVERSATION_ID
   session-create WORKSPACE_ID TITLE [MODEL]
+  session-archive WORKSPACE_ID CONVERSATION_ID
   session-message WORKSPACE_ID CONVERSATION_ID PROMPT RUN_MODE COMPUTE_BUDGET COMMAND_EXEC_MODE PERMISSION_MODE PROGRAMMER_REVIEW PROGRAMMER_REVIEW_ROUNDS REFLEXIVE_KNOWLEDGE SELF_ACTUATION [ATTACHMENT_IDS]
   attachment-upload WORKSPACE_ID CONVERSATION_ID FILE_PATH [MIME]
   session-run-next WORKSPACE_ID CONVERSATION_ID
@@ -420,6 +421,11 @@ case "$action" in
     model=${3-}
     reject_line_breaks "$title" "session title"
     runtime_client session create --workspace-id "$workspace_id" --title "$title" --model "$model"
+    ;;
+  session-archive)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    runtime_client session archive --workspace-id "$workspace_id" --conversation-id "$conversation_id"
     ;;
   session-message)
     workspace_id=${1-}
