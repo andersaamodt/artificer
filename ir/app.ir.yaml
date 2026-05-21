@@ -1,0 +1,154 @@
+{
+  "version": "native-desktop-ir/v1",
+  "format": "yaml-1.2-json-compatible",
+  "app": {
+    "id": "artificer-native",
+    "name": "Artificer (native)",
+    "targets": ["macos", "linux"],
+    "window": {
+      "id": "window.main",
+      "name": "mainWindow",
+      "type": "Window",
+      "title": "Artificer (native)",
+      "width": 112,
+      "minWidth": 96,
+      "height": 72,
+      "minHeight": 56,
+      "menuBar": {
+        "id": "menubar.main",
+        "type": "MenuBar",
+        "children": [
+          {
+            "id": "menu.app",
+            "type": "Menu",
+            "title": "Artificer (native)",
+            "children": [
+              {
+                "id": "menuitem.openSettings",
+                "type": "MenuItem",
+                "title": "Settings",
+                "action": "open_settings"
+              },
+              {
+                "id": "menuitem.quit",
+                "type": "MenuItem",
+                "title": "Quit",
+                "action": "quit_app"
+              }
+            ]
+          },
+          {
+            "id": "menu.file",
+            "type": "Menu",
+            "title": "File",
+            "children": [
+              {
+                "id": "menuitem.save",
+                "type": "MenuItem",
+                "title": "Save",
+                "action": "save_document",
+                "shortcut": "cmd+s"
+              }
+            ]
+          }
+        ]
+      },
+      "toolbar": {
+        "id": "toolbar.main",
+        "type": "Toolbar",
+        "children": [
+          {
+            "id": "toolbar.button.save",
+            "type": "Button",
+            "title": "Save",
+            "action": "save_document"
+          },
+          {
+            "id": "toolbar.spacer.1",
+            "type": "Spacer"
+          },
+          {
+            "id": "toolbar.button.settings",
+            "type": "Button",
+            "title": "Settings",
+            "action": "open_settings"
+          }
+        ]
+      },
+      "content": {
+        "id": "content.main",
+        "type": "Content",
+        "child": {
+          "id": "stack.root",
+          "type": "Stack",
+          "axis": "vertical",
+          "spacing": 16,
+          "children": [
+            {
+              "id": "section.hero",
+              "type": "Section",
+              "title": "Overview",
+              "child": {
+                "id": "stack.hero",
+                "type": "Stack",
+                "axis": "vertical",
+                "spacing": 12,
+                "children": [
+                  {
+                    "id": "text.headline",
+                    "type": "Text",
+                    "style": "title",
+                    "value": "Artificer (native)"
+                  },
+                  {
+                    "id": "text.summary",
+                    "type": "Text",
+                    "style": "body",
+                    "value": "Native desktop app scaffolded by App Forge."
+                  },
+                  {
+                    "id": "group.form",
+                    "type": "Group",
+                    "title": "Quick action",
+                    "child": {
+                      "id": "form.settings",
+                      "type": "Form",
+                      "children": [
+                        {
+                          "id": "input.projectName",
+                          "type": "Input",
+                          "label": "Project name",
+                          "stateKey": "project_name",
+                          "placeholder": "Artificer (native)"
+                        },
+                        {
+                          "id": "button.primary",
+                          "type": "Button",
+                          "title": "Save draft",
+                          "action": "save_document"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "statusBar": {
+        "id": "statusbar.main",
+        "type": "StatusBar",
+        "children": [
+          {
+            "id": "statusbar.text",
+            "type": "Text",
+            "style": "caption",
+            "value": "Ready"
+          }
+        ]
+      }
+    }
+  },
+  "extensions": []
+}
