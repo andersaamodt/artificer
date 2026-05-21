@@ -36,6 +36,10 @@ Implemented natively:
 - runtime health and model status
 - workspace list and add-workspace via native open panel
 - session list, transcript view, new session, queued message, and run-next
+- native attachment upload through the existing Artificer attachment pipeline,
+  including image/document metadata and queued-run attachment IDs
+- dictation controls backed by Artificer's local dictation backend, with native
+  install/check/cancel controls and live waveform telemetry while recording
 - run policy controls for mode, compute budget, command execution, permission,
   programmer review, reflexive knowledge, and self-actuation
 - automation list plus enable, pause, resume, disable, and tick controls for the
@@ -46,10 +50,8 @@ Implemented natively:
 
 Deferred on purpose:
 
-- dictation and waveform controls remain in hosted Artificer for now because
-  they depend on browser media permissions and install flows.
-- attachment upload/download previews remain in hosted Artificer until the
-  native file-transfer contract is specified.
+- rich attachment previews and download/open affordances remain hosted for now;
+  native upload and queued-run attachment handling are implemented.
 - the detailed self-improvement/assay dashboards stay in hosted Artificer; the
   native app exposes the underlying run/session controls without cloning every
   diagnostic visualization.

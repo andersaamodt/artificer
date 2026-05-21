@@ -28,12 +28,20 @@ struct ArtificerNativeApp: App {
           model.chooseWorkspaceFolder()
         }
         .keyboardShortcut("o")
+        Button("Attach File...") {
+          model.chooseAttachments()
+        }
+        .keyboardShortcut("u", modifiers: [.command])
       }
       CommandGroup(after: .saveItem) {
         Button("Run Next Queue Item") {
           Task { await model.runNext() }
         }
         .keyboardShortcut(.return, modifiers: [.command])
+        Button("Dictate") {
+          Task { await model.toggleDictation() }
+        }
+        .keyboardShortcut("d", modifiers: [.command, .shift])
         Button("Open Hosted Artificer") {
           Task { await model.openHostedArtificer() }
         }
@@ -97,6 +105,12 @@ private struct RootView: View {
         } label: {
           Label("New Session", systemImage: "plus.message")
         }
+        Button {
+          Task { await model.toggleDictation() }
+        } label: {
+          Label(model.isDictating ? "Stop Dictation" : "Dictate", systemImage: model.isDictating ? "stop.fill" : "mic.fill")
+        }
+        .disabled(model.selectedSessionID == nil || (model.isBusy && !model.isDictating))
         Button {
           Task { await model.openHostedArtificer() }
         } label: {
@@ -371,6 +385,22 @@ private struct ComposerView: View {
             .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
         }
 
+      if !model.pendingAttachments.isEmpty {
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 8) {
+            ForEach(model.pendingAttachments) { attachment in
+              AttachmentChip(attachment: attachment) {
+                model.removeAttachment(attachment)
+              }
+            }
+          }
+        }
+      }
+
+      if model.isDictating {
+        DictationWaveView(levels: model.dictationLevels, elapsed: model.dictationElapsedText)
+      }
+
       HStack(alignment: .center, spacing: 10) {
         Picker("Mode", selection: $model.runMode) {
           ForEach(model.runModes, id: \.self) { Text($0).tag($0) }
@@ -399,11 +429,25 @@ private struct ComposerView: View {
         Spacer()
 
         Button {
+          model.chooseAttachments()
+        } label: {
+          Label("Attach", systemImage: "paperclip")
+        }
+        .disabled(model.selectedSessionID == nil || model.isBusy || model.isDictating)
+
+        Button {
+          Task { await model.toggleDictation() }
+        } label: {
+          Label(model.isDictating ? "Stop" : "Dictate", systemImage: model.isDictating ? "stop.fill" : "mic.fill")
+        }
+        .disabled(model.selectedSessionID == nil || (model.isBusy && !model.isDictating))
+
+        Button {
           Task { await model.sendPrompt(runAfterQueue: false) }
         } label: {
           Label("Queue", systemImage: "tray.and.arrow.down")
         }
-        .disabled(model.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.selectedSessionID == nil || model.isBusy)
+        .disabled(!model.canSendPrompt)
 
         Button {
           Task { await model.sendPrompt(runAfterQueue: true) }
@@ -411,11 +455,76 @@ private struct ComposerView: View {
           Label("Send", systemImage: "paperplane.fill")
         }
         .keyboardShortcut(.return, modifiers: [.command])
-        .disabled(model.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.selectedSessionID == nil || model.isBusy)
+        .disabled(!model.canSendPrompt)
       }
       .controlSize(.small)
     }
     .padding(12)
+  }
+}
+
+private struct AttachmentChip: View {
+  let attachment: PendingAttachment
+  let remove: () -> Void
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Image(systemName: attachment.kind == "image" ? "photo" : "doc")
+      Text(attachment.name)
+        .lineLimit(1)
+      Text(attachment.sizeLabel)
+        .foregroundStyle(.secondary)
+      Button {
+        remove()
+      } label: {
+        Image(systemName: "xmark.circle.fill")
+      }
+      .buttonStyle(.plain)
+      .help("Remove attachment")
+    }
+    .font(.caption)
+    .padding(.horizontal, 8)
+    .padding(.vertical, 5)
+    .background(Color(nsColor: .controlBackgroundColor))
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+}
+
+private struct DictationWaveView: View {
+  let levels: [Double]
+  let elapsed: String
+
+  private var bars: [Double] {
+    let usable = levels.suffix(24)
+    if usable.isEmpty {
+      return Array(repeating: 0.08, count: 24)
+    }
+    let prefix = Array(repeating: 0.08, count: max(0, 24 - usable.count))
+    return prefix + usable
+  }
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Label("Recording", systemImage: "mic.fill")
+        .foregroundColor(.red)
+      HStack(alignment: .center, spacing: 3) {
+        ForEach(Array(bars.enumerated()), id: \.offset) { _, level in
+          RoundedRectangle(cornerRadius: 2)
+            .fill(Color.accentColor)
+            .frame(width: 4, height: max(4, 34 * CGFloat(level)))
+            .animation(.easeOut(duration: 0.14), value: level)
+        }
+      }
+      .frame(height: 38)
+      Text(elapsed)
+        .font(.system(.caption, design: .monospaced))
+        .foregroundStyle(.secondary)
+    }
+    .font(.caption)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background(Color.red.opacity(0.08))
+    .clipShape(RoundedRectangle(cornerRadius: 8))
   }
 }
 
@@ -486,6 +595,29 @@ private struct SettingsView: View {
           Button("Disable") { Task { await model.daemon("automation-daemon-disable") } }
         }
       }
+
+      Section("Dictation") {
+        if let status = model.dictationStatus {
+          LabeledContent("Backend", value: status.installed ? status.backendLabel : "Not installed")
+          LabeledContent("Language", value: status.language)
+        }
+        if !model.dictationInstallMessage.isEmpty {
+          Text(model.dictationInstallMessage)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        HStack {
+          Button("Check") { Task { await model.loadDictationStatus() } }
+          Button(model.isDictationInstalling ? "Installing..." : "Install") {
+            Task { await model.installDictation() }
+          }
+          .disabled(model.isDictationInstalling)
+          Button("Cancel") {
+            Task { await model.cancelDictationInstall() }
+          }
+          .disabled(model.dictationInstallJobID.isEmpty)
+        }
+      }
     }
   }
 }
@@ -507,6 +639,15 @@ private final class ArtificerModel: ObservableObject {
   @Published var coreRootDraft = ""
   @Published var resolvedCoreRoot = ""
   @Published var coreReady = false
+  @Published var pendingAttachments: [PendingAttachment] = []
+  @Published var dictationStatus: DictationStatus?
+  @Published var isDictating = false
+  @Published var dictationSessionID = ""
+  @Published var dictationLevels: [Double] = []
+  @Published var dictationStartedAt: Date?
+  @Published var dictationInstallJobID = ""
+  @Published var dictationInstallMessage = ""
+  @Published var isDictationInstalling = false
 
   @Published var runMode = "auto"
   @Published var computeBudget = "auto"
@@ -525,6 +666,16 @@ private final class ArtificerModel: ObservableObject {
     projects.first { $0.id == selectedProjectID }
   }
 
+  var canSendPrompt: Bool {
+    selectedSessionID != nil && !isBusy && !isDictating && (!prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingAttachments.isEmpty)
+  }
+
+  var dictationElapsedText: String {
+    guard let dictationStartedAt else { return "0:00" }
+    let seconds = max(0, Int(Date().timeIntervalSince(dictationStartedAt)))
+    return "\(seconds / 60):" + String(format: "%02d", seconds % 60)
+  }
+
   func bootstrap() async {
     await refreshDoctor()
     await refreshAll()
@@ -535,6 +686,7 @@ private final class ArtificerModel: ObservableObject {
     await loadProjects()
     await loadDaemonStatus()
     await loadAutomations()
+    await loadDictationStatus()
   }
 
   func refreshDoctor() async {
@@ -612,8 +764,12 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func sendPrompt(runAfterQueue: Bool) async {
-    let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let projectID = selectedProjectID, let sessionID = selectedSessionID, !text.isEmpty else { return }
+    var text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let projectID = selectedProjectID, let sessionID = selectedSessionID, !text.isEmpty || !pendingAttachments.isEmpty else { return }
+    if text.isEmpty {
+      text = "Please review the attached file(s)."
+    }
+    let attachmentIDs = pendingAttachments.map(\.id).joined(separator: ",")
     let result = await runBackend(
       "session-message",
       projectID,
@@ -626,10 +782,12 @@ private final class ArtificerModel: ObservableObject {
       programmerReview ? "1" : "0",
       "2",
       reflexiveKnowledge ? "1" : "0",
-      selfActuation ? "1" : "0"
+      selfActuation ? "1" : "0",
+      attachmentIDs
     )
     guard decode(SessionResponse.self, from: result) != nil else { return }
     prompt = ""
+    pendingAttachments.removeAll()
     statusMessage = runAfterQueue ? "Prompt queued; running next item." : "Prompt queued."
     if runAfterQueue {
       await runNext()
@@ -673,6 +831,150 @@ private final class ArtificerModel: ObservableObject {
     if let response = decode(OpenWebResponse.self, from: result) {
       statusMessage = "Opened \(response.url)"
     }
+  }
+
+  func loadDictationStatus() async {
+    let result = await runBackend("dictation-status", trackBusy: false)
+    if let response = decode(DictationStatus.self, from: result) {
+      dictationStatus = response
+      if response.installed {
+        dictationInstallMessage = "Dictation ready: \(response.backendLabel)."
+      } else if dictationInstallMessage.isEmpty {
+        dictationInstallMessage = "Install a local dictation backend before recording."
+      }
+    }
+  }
+
+  func installDictation() async {
+    let result = await runBackend("dictation-install-start")
+    guard let response = decode(DictationInstallStartResponse.self, from: result) else { return }
+    dictationInstallJobID = response.job.id
+    isDictationInstalling = response.job.status == "running"
+    dictationInstallMessage = "Installing dictation: \(response.job.phase)."
+    Task { await pollDictationInstall(jobID: response.job.id) }
+  }
+
+  func cancelDictationInstall() async {
+    let jobID = dictationInstallJobID
+    guard !jobID.isEmpty else { return }
+    _ = await runBackend("dictation-install-cancel", jobID)
+    dictationInstallJobID = ""
+    isDictationInstalling = false
+    dictationInstallMessage = "Dictation install cancelled."
+    await loadDictationStatus()
+  }
+
+  private func pollDictationInstall(jobID: String) async {
+    while dictationInstallJobID == jobID {
+      let result = await runBackend("dictation-install-status", [jobID], trackBusy: false)
+      guard let response = decode(DictationInstallStatusResponse.self, from: result) else { return }
+      let progress = response.job.progressPct.isEmpty ? "" : " \(response.job.progressPct)%"
+      dictationInstallMessage = "Installing dictation: \(response.job.phase)\(progress)."
+      isDictationInstalling = response.job.status == "running"
+      if response.job.status != "running" {
+        dictationInstallJobID = ""
+        if response.job.status == "done" {
+          dictationInstallMessage = "Dictation installed."
+          await loadDictationStatus()
+        } else {
+          dictationInstallMessage = "Dictation install \(response.job.status)."
+        }
+        return
+      }
+      try? await Task.sleep(nanoseconds: 1_000_000_000)
+    }
+  }
+
+  func toggleDictation() async {
+    if isDictating {
+      await stopDictation()
+    } else {
+      await startDictation()
+    }
+  }
+
+  func startDictation() async {
+    await loadDictationStatus()
+    if let dictationStatus, !dictationStatus.installed {
+      lastError = "Dictation backend is not installed in Artificer."
+      statusMessage = "Dictation unavailable."
+      return
+    }
+    let result = await runBackend("dictation-start", dictationStatus?.language ?? "auto")
+    guard let response = decode(DictationStartResponse.self, from: result) else { return }
+    isDictating = true
+    dictationSessionID = response.session.id
+    dictationStartedAt = Date()
+    dictationLevels = []
+    statusMessage = "Dictation recording."
+    Task { await pollDictationLevels(sessionID: response.session.id) }
+  }
+
+  func stopDictation() async {
+    let sessionID = dictationSessionID
+    guard !sessionID.isEmpty else {
+      isDictating = false
+      return
+    }
+    let result = await runBackend("dictation-stop", sessionID)
+    isDictating = false
+    dictationSessionID = ""
+    dictationStartedAt = nil
+    dictationLevels = []
+    if let response = decode(DictationStopResponse.self, from: result) {
+      let dictated = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !dictated.isEmpty {
+        if prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          prompt = dictated
+        } else {
+          prompt += "\n" + dictated
+        }
+      }
+      statusMessage = "Dictation captured."
+    }
+  }
+
+  private func pollDictationLevels(sessionID: String) async {
+    while isDictating && dictationSessionID == sessionID {
+      let result = await runBackend("dictation-levels", [sessionID], trackBusy: false)
+      if let response = decode(DictationLevelsResponse.self, from: result), response.sessionID == sessionID || response.sessionID.isEmpty {
+        if response.levels.isEmpty {
+          dictationLevels = Array((dictationLevels + [response.level]).suffix(24))
+        } else {
+          dictationLevels = Array(response.levels.suffix(24))
+        }
+      }
+      try? await Task.sleep(nanoseconds: 180_000_000)
+    }
+  }
+
+  func chooseAttachments() {
+    guard selectedSessionID != nil else { return }
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = true
+    panel.canChooseDirectories = false
+    panel.allowsMultipleSelection = true
+    panel.prompt = "Attach"
+    if panel.runModal() == .OK {
+      let urls = panel.urls
+      Task {
+        for url in urls {
+          await uploadAttachment(url)
+        }
+      }
+    }
+  }
+
+  func uploadAttachment(_ url: URL) async {
+    guard let projectID = selectedProjectID, let sessionID = selectedSessionID else { return }
+    let result = await runBackend("attachment-upload", projectID, sessionID, url.path)
+    guard let response = decode(AttachmentUploadResponse.self, from: result) else { return }
+    pendingAttachments.append(response.attachment)
+    statusMessage = "Attached \(response.attachment.name)."
+  }
+
+  func removeAttachment(_ attachment: PendingAttachment) {
+    pendingAttachments.removeAll { $0.id == attachment.id }
   }
 
   func saveCoreRoot() async {
@@ -724,9 +1026,23 @@ private final class ArtificerModel: ObservableObject {
   }
 
   private func runBackend(_ action: String, _ args: [String]) async -> CommandResult {
-    isBusy = true
-    lastError = ""
-    defer { isBusy = false }
+    await runBackend(action, args, trackBusy: true)
+  }
+
+  private func runBackend(_ action: String, _ args: String..., trackBusy: Bool) async -> CommandResult {
+    await runBackend(action, args, trackBusy: trackBusy)
+  }
+
+  private func runBackend(_ action: String, _ args: [String] = [], trackBusy: Bool) async -> CommandResult {
+    if trackBusy {
+      isBusy = true
+      lastError = ""
+    }
+    defer {
+      if trackBusy {
+        isBusy = false
+      }
+    }
     let result = await Backend.run(action: action, arguments: args)
     if result.exitCode != 0 {
       lastError = result.summary
@@ -743,6 +1059,11 @@ private final class ArtificerModel: ObservableObject {
     do {
       return try JSONDecoder().decode(type, from: data)
     } catch {
+      if let apiError = try? JSONDecoder().decode(APIErrorResponse.self, from: data), !apiError.success {
+        lastError = apiError.error.isEmpty ? "Backend request failed." : apiError.error
+        statusMessage = lastError
+        return nil
+      }
       lastError = "Could not parse backend response: \(error.localizedDescription)"
       return nil
     }
@@ -1068,11 +1389,185 @@ private struct OpenWebResponse: Decodable {
   let url: String
 }
 
+private struct APIErrorResponse: Decodable {
+  let success: Bool
+  let error: String
+
+  enum CodingKeys: String, CodingKey {
+    case success, error
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    error = (try? container.decode(String.self, forKey: .error)) ?? ""
+  }
+}
+
+private struct AttachmentUploadResponse: Decodable {
+  let success: Bool
+  let attachment: PendingAttachment
+}
+
+private struct PendingAttachment: Identifiable, Decodable, Hashable {
+  let id: String
+  let name: String
+  let mime: String
+  let kind: String
+  let size: Int
+
+  var sizeLabel: String {
+    if size >= 1_048_576 {
+      return String(format: "%.1f MB", Double(size) / 1_048_576.0)
+    }
+    if size >= 1024 {
+      return String(format: "%.0f KB", Double(size) / 1024.0)
+    }
+    return "\(size) B"
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, mime, kind, size
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    name = (try? container.decode(String.self, forKey: .name)) ?? id
+    mime = (try? container.decode(String.self, forKey: .mime)) ?? ""
+    kind = (try? container.decode(String.self, forKey: .kind)) ?? "document"
+    size = container.decodeFlexibleInt(forKey: .size)
+  }
+}
+
+private struct DictationStatus: Decodable {
+  let success: Bool
+  let installed: Bool
+  let backend: String
+  let backendLabel: String
+  let language: String
+
+  enum CodingKeys: String, CodingKey {
+    case success, installed, backend, language
+    case backendLabel = "backend_label"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    installed = container.decodeFlexibleBool(forKey: .installed)
+    backend = (try? container.decode(String.self, forKey: .backend)) ?? ""
+    backendLabel = (try? container.decode(String.self, forKey: .backendLabel)) ?? backend
+    language = (try? container.decode(String.self, forKey: .language)) ?? "auto"
+  }
+}
+
+private struct DictationInstallStartResponse: Decodable {
+  let success: Bool
+  let job: DictationInstallJob
+}
+
+private struct DictationInstallJob: Decodable {
+  let id: String
+  let status: String
+  let phase: String
+
+  enum CodingKeys: String, CodingKey {
+    case id, status, phase
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? ""
+    status = (try? container.decode(String.self, forKey: .status)) ?? ""
+    phase = (try? container.decode(String.self, forKey: .phase)) ?? ""
+  }
+}
+
+private struct DictationInstallStatusResponse: Decodable {
+  let success: Bool
+  let job: DictationInstallStatusJob
+}
+
+private struct DictationInstallStatusJob: Decodable {
+  let status: String
+  let phase: String
+  let progressPct: String
+
+  enum CodingKeys: String, CodingKey {
+    case status, phase
+    case progressPct = "progress_pct"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    status = (try? container.decode(String.self, forKey: .status)) ?? "unknown"
+    phase = (try? container.decode(String.self, forKey: .phase)) ?? status
+    if let value = try? container.decode(String.self, forKey: .progressPct) {
+      progressPct = value
+    } else if let value = try? container.decode(Int.self, forKey: .progressPct) {
+      progressPct = String(value)
+    } else {
+      progressPct = ""
+    }
+  }
+}
+
+private struct DictationStartResponse: Decodable {
+  let success: Bool
+  let session: DictationSession
+}
+
+private struct DictationSession: Decodable {
+  let id: String
+  let status: String
+  let backend: String
+}
+
+private struct DictationStopResponse: Decodable {
+  let success: Bool
+  let sessionID: String
+  let text: String
+  let backend: String
+
+  enum CodingKeys: String, CodingKey {
+    case success, text, backend
+    case sessionID = "session_id"
+  }
+}
+
+private struct DictationLevelsResponse: Decodable {
+  let success: Bool
+  let level: Double
+  let levels: [Double]
+  let sessionID: String
+
+  enum CodingKeys: String, CodingKey {
+    case success, level, levels
+    case sessionID = "session_id"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    level = container.decodeFlexibleDouble(forKey: .level)
+    levels = (try? container.decode([Double].self, forKey: .levels)) ?? []
+    sessionID = (try? container.decode(String.self, forKey: .sessionID)) ?? ""
+  }
+}
+
 private extension KeyedDecodingContainer {
   func decodeFlexibleInt(forKey key: Key) -> Int {
     if let value = try? decode(Int.self, forKey: key) { return value }
     if let value = try? decode(String.self, forKey: key), let intValue = Int(value) { return intValue }
     if let value = try? decode(Bool.self, forKey: key) { return value ? 1 : 0 }
+    return 0
+  }
+
+  func decodeFlexibleDouble(forKey key: Key) -> Double {
+    if let value = try? decode(Double.self, forKey: key) { return value }
+    if let value = try? decode(Int.self, forKey: key) { return Double(value) }
+    if let value = try? decode(String.self, forKey: key), let doubleValue = Double(value) { return doubleValue }
     return 0
   }
 

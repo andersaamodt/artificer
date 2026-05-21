@@ -23,6 +23,14 @@
         "label": "Queue Prompt"
       },
       {
+        "id": "attach_file",
+        "label": "Attach File"
+      },
+      {
+        "id": "toggle_dictation",
+        "label": "Dictate"
+      },
+      {
         "id": "run_next",
         "label": "Run Next"
       },
@@ -115,6 +123,12 @@
                 "shortcut": "cmd+return"
               },
               {
+                "id": "menuitem.attachFile",
+                "type": "MenuItem",
+                "title": "Attach File",
+                "action": "attach_file"
+              },
+              {
                 "id": "menuitem.openHosted",
                 "type": "MenuItem",
                 "title": "Open Hosted Artificer",
@@ -176,6 +190,12 @@
             "type": "Button",
             "title": "New Session",
             "action": "new_session"
+          },
+          {
+            "id": "toolbar.button.dictate",
+            "type": "Button",
+            "title": "Dictate",
+            "action": "toggle_dictation"
           },
           {
             "id": "toolbar.spacer.1",

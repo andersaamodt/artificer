@@ -15,9 +15,17 @@ Actions:
   sessions WORKSPACE_ID
   session WORKSPACE_ID CONVERSATION_ID
   session-create WORKSPACE_ID TITLE [MODEL]
-  session-message WORKSPACE_ID CONVERSATION_ID PROMPT RUN_MODE COMPUTE_BUDGET COMMAND_EXEC_MODE PERMISSION_MODE PROGRAMMER_REVIEW PROGRAMMER_REVIEW_ROUNDS REFLEXIVE_KNOWLEDGE SELF_ACTUATION
+  session-message WORKSPACE_ID CONVERSATION_ID PROMPT RUN_MODE COMPUTE_BUDGET COMMAND_EXEC_MODE PERMISSION_MODE PROGRAMMER_REVIEW PROGRAMMER_REVIEW_ROUNDS REFLEXIVE_KNOWLEDGE SELF_ACTUATION [ATTACHMENT_IDS]
+  attachment-upload WORKSPACE_ID CONVERSATION_ID FILE_PATH [MIME]
   session-run-next WORKSPACE_ID CONVERSATION_ID
   session-events WORKSPACE_ID CONVERSATION_ID [STREAM_SESSION] [OFFSET]
+  dictation-status
+  dictation-install-start
+  dictation-install-status JOB_ID
+  dictation-install-cancel JOB_ID
+  dictation-start [LANGUAGE]
+  dictation-levels [SESSION_ID]
+  dictation-stop SESSION_ID
   automations
   automation-run AUTOMATION_ID
   automation-toggle AUTOMATION_ID ENABLED
@@ -147,6 +155,126 @@ runtime_client() {
 automations_script() {
   require_core_root
   sh "$core_root/scripts/artificer-automations.sh" "$@"
+}
+
+api_script() {
+  require_core_root
+  printf '%s\n' "$core_root/hosted-web/cgi/artificer-api"
+}
+
+url_encode_arg() {
+  python3 - "$1" <<'PY'
+import sys
+import urllib.parse
+print(urllib.parse.quote(sys.argv[1] if len(sys.argv) > 1 else "", safe=""))
+PY
+}
+
+strip_cgi_headers() {
+  awk '
+    BEGIN { body = 0 }
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (body == 1) {
+        print line
+        next
+      }
+      if (line == "") {
+        body = 1
+      }
+    }
+  '
+}
+
+api_get() {
+  action_name=$1
+  shift
+  query="action=$(url_encode_arg "$action_name")"
+  while [ "$#" -gt 0 ]; do
+    key=$1
+    value=$2
+    shift 2
+    query="${query}&$(url_encode_arg "$key")=$(url_encode_arg "$value")"
+  done
+  REQUEST_METHOD=GET QUERY_STRING="$query" "$(api_script)" 2>&1 | strip_cgi_headers
+}
+
+api_post() {
+  action_name=$1
+  shift
+  body="action=$(url_encode_arg "$action_name")"
+  while [ "$#" -gt 0 ]; do
+    key=$1
+    value=$2
+    shift 2
+    body="${body}&$(url_encode_arg "$key")=$(url_encode_arg "$value")"
+  done
+  content_length=$(printf '%s' "$body" | wc -c | tr -d ' ')
+  printf '%s' "$body" | REQUEST_METHOD=POST CONTENT_TYPE='application/x-www-form-urlencoded' CONTENT_LENGTH="$content_length" "$(api_script)" 2>&1 | strip_cgi_headers
+}
+
+upload_attachment_file() {
+  workspace_id=$1
+  conversation_id=$2
+  file_path=$3
+  mime_value=${4-}
+  reject_line_breaks "$workspace_id" "workspace id"
+  reject_line_breaks "$conversation_id" "conversation id"
+  reject_line_breaks "$file_path" "attachment path"
+  reject_line_breaks "$mime_value" "attachment MIME type"
+  [ -f "$file_path" ] || {
+    json_error "Attachment file not found."
+    exit 1
+  }
+  if [ -z "$mime_value" ]; then
+    mime_value=$(file -b --mime-type "$file_path" 2>/dev/null || printf 'application/octet-stream')
+  fi
+  python3 - "$(api_script)" "$workspace_id" "$conversation_id" "$file_path" "$mime_value" <<'PY'
+import base64
+import json
+import mimetypes
+import os
+import subprocess
+import sys
+import urllib.parse
+
+api_script, workspace_id, conversation_id, file_path, mime_value = sys.argv[1:6]
+try:
+    size = os.path.getsize(file_path)
+except OSError as exc:
+    print(json.dumps({"success": False, "error": str(exc)}))
+    raise SystemExit(1)
+if size > 15 * 1024 * 1024:
+    print(json.dumps({"success": False, "error": "attachment exceeds 15 MB limit"}))
+    raise SystemExit(0)
+name = os.path.basename(file_path)
+if not mime_value or mime_value == "application/octet-stream":
+    guessed, _ = mimetypes.guess_type(file_path)
+    if guessed:
+        mime_value = guessed
+with open(file_path, "rb") as handle:
+    encoded = base64.b64encode(handle.read()).decode("ascii")
+body = urllib.parse.urlencode({
+    "action": "upload_attachment",
+    "workspace_id": workspace_id,
+    "conversation_id": conversation_id,
+    "name": name,
+    "mime": mime_value,
+    "data": encoded,
+})
+env = os.environ.copy()
+env.update({
+    "REQUEST_METHOD": "POST",
+    "CONTENT_TYPE": "application/x-www-form-urlencoded",
+    "CONTENT_LENGTH": str(len(body.encode("utf-8"))),
+})
+proc = subprocess.run([api_script], input=body, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, check=False)
+payload = proc.stdout.replace("\r\n", "\n")
+if "\n\n" in payload:
+    payload = payload.split("\n\n", 1)[1]
+print(payload.strip())
+PY
 }
 
 daemon_fast_status_json() {
@@ -303,10 +431,12 @@ case "$action" in
     programmer_review_rounds=${9:-2}
     reflexive_knowledge=${10:-0}
     self_actuation=${11:-0}
+    attachments=${12:-}
     runtime_client session message \
       --workspace-id "$workspace_id" \
       --conversation-id "$conversation_id" \
       --prompt "$prompt" \
+      --attachments "$attachments" \
       --run-mode "$run_mode" \
       --compute-budget "$compute_budget" \
       --command-exec-mode "$command_exec_mode" \
@@ -315,6 +445,13 @@ case "$action" in
       --programmer-review-rounds "$programmer_review_rounds" \
       --reflexive-knowledge "$reflexive_knowledge" \
       --self-actuation "$self_actuation"
+    ;;
+  attachment-upload)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    file_path=${3-}
+    mime_value=${4-}
+    upload_attachment_file "$workspace_id" "$conversation_id" "$file_path" "$mime_value"
     ;;
   session-run-next)
     workspace_id=${1-}
@@ -327,6 +464,33 @@ case "$action" in
     stream_session=${3-}
     offset=${4:-0}
     runtime_client session events --workspace-id "$workspace_id" --conversation-id "$conversation_id" --stream-session "$stream_session" --offset "$offset"
+    ;;
+  dictation-status)
+    api_get dictation_status
+    ;;
+  dictation-install-start)
+    api_post dictation_install_start
+    ;;
+  dictation-install-status)
+    job_id=${1-}
+    api_get dictation_install_status job_id "$job_id"
+    ;;
+  dictation-install-cancel)
+    job_id=${1-}
+    api_post dictation_install_cancel job_id "$job_id"
+    ;;
+  dictation-start)
+    language=${1:-auto}
+    now_ms=$(perl -MTime::HiRes=time -e 'printf "%.0f\n", time()*1000' 2>/dev/null || date +%s000)
+    api_post dictate_start language "$language" requested_started_ms "$now_ms"
+    ;;
+  dictation-levels)
+    session_id=${1-}
+    api_get dictate_levels session_id "$session_id"
+    ;;
+  dictation-stop)
+    session_id=${1-}
+    api_post dictate_stop session_id "$session_id"
     ;;
   automations)
     runtime_client automation list
