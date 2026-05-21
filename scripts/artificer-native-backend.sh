@@ -149,6 +149,64 @@ automations_script() {
   sh "$core_root/scripts/artificer-automations.sh" "$@"
 }
 
+daemon_fast_status_json() {
+  require_core_root
+  state_root=${ARTIFICER_STATE_ROOT:-${XDG_STATE_HOME:-$home/.local/state}/artificer}
+  label="com.artificer.automations"
+  method="none"
+  enabled=false
+  active=false
+  paused=false
+  detail=""
+  os=$(uname -s 2>/dev/null || printf unknown)
+  case "$os" in
+    Darwin)
+      method="launchd"
+      detail="$home/Library/LaunchAgents/$label.plist"
+      [ -f "$detail" ] && enabled=true
+      if launchctl list 2>/dev/null | grep -F "$label" >/dev/null 2>&1; then
+        active=true
+      fi
+      ;;
+    Linux)
+      if command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files >/dev/null 2>&1; then
+        method="systemd"
+        detail="artificer-automations.timer"
+        if systemctl --user is-enabled artificer-automations.timer >/dev/null 2>&1; then
+          enabled=true
+        fi
+        if systemctl --user is-active artificer-automations.timer >/dev/null 2>&1; then
+          active=true
+        fi
+      elif command -v crontab >/dev/null 2>&1; then
+        method="cron"
+        detail="crontab"
+        if crontab -l 2>/dev/null | grep -F "ARTIFICER_AUTOMATIONS" >/dev/null 2>&1; then
+          enabled=true
+          active=true
+        fi
+      fi
+      ;;
+  esac
+  [ -f "$state_root/automation-daemon.paused" ] && paused=true
+  status="disabled"
+  if [ "$enabled" = true ]; then
+    status="idle"
+    [ "$paused" = true ] && status="paused"
+  fi
+  printf '{"success":true,"supported":%s,"enabled":%s,"active":%s,"paused":%s,"method":%s,"status":%s,"label":%s,"detail":%s,"log_path":%s,"state_root":%s,"worker_busy":false,"worker_pid":"","worker_stale_lock":false,"last_tick_at":"0","last_tick_message":"","last_error":"","checked":"0","triggered":"0","errors":"0","attempted":"0","processed":"0","failures":"0","task_pending":"0","task_running":"0","task_total":"0","recent_tasks":[]}\n' \
+    "$([ "$method" = none ] && printf false || printf true)" \
+    "$enabled" \
+    "$active" \
+    "$paused" \
+    "$(json_escape "$method")" \
+    "$(json_escape "$status")" \
+    "$(json_escape "$label")" \
+    "$(json_escape "$detail")" \
+    "$(json_escape "$state_root/automation-daemon.log")" \
+    "$(json_escape "$state_root")"
+}
+
 open_url() {
   url=$1
   if command -v open >/dev/null 2>&1; then
@@ -283,27 +341,27 @@ case "$action" in
     runtime_client automation toggle --automation-id "$automation_id" --enabled "$enabled"
     ;;
   automation-daemon-status)
-    automations_script status-json
+    daemon_fast_status_json
     ;;
   automation-daemon-enable)
     automations_script enable >/dev/null
-    automations_script status-json
+    daemon_fast_status_json
     ;;
   automation-daemon-pause)
     automations_script pause >/dev/null
-    automations_script status-json
+    daemon_fast_status_json
     ;;
   automation-daemon-resume)
     automations_script resume >/dev/null
-    automations_script status-json
+    daemon_fast_status_json
     ;;
   automation-daemon-disable)
     automations_script disable >/dev/null
-    automations_script status-json
+    daemon_fast_status_json
     ;;
   automation-daemon-tick)
     automations_script tick >/dev/null
-    automations_script status-json
+    daemon_fast_status_json
     ;;
   open-web)
     require_core_root

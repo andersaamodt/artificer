@@ -5,6 +5,56 @@
     "id": "artificer-native",
     "name": "Artificer (native)",
     "targets": ["macos", "linux"],
+    "actions": [
+      {
+        "id": "refresh_runtime",
+        "label": "Refresh"
+      },
+      {
+        "id": "add_workspace",
+        "label": "Add Workspace"
+      },
+      {
+        "id": "new_session",
+        "label": "New Session"
+      },
+      {
+        "id": "queue_prompt",
+        "label": "Queue Prompt"
+      },
+      {
+        "id": "run_next",
+        "label": "Run Next"
+      },
+      {
+        "id": "open_hosted_artificer",
+        "label": "Open Hosted Artificer"
+      },
+      {
+        "id": "automation_daemon_enable",
+        "label": "Enable Daemon"
+      },
+      {
+        "id": "automation_daemon_pause",
+        "label": "Pause Daemon"
+      },
+      {
+        "id": "automation_daemon_resume",
+        "label": "Resume Daemon"
+      },
+      {
+        "id": "automation_daemon_tick",
+        "label": "Run Daemon Tick"
+      },
+      {
+        "id": "automation_daemon_disable",
+        "label": "Disable Daemon"
+      },
+      {
+        "id": "open_settings",
+        "label": "Settings"
+      }
+    ],
     "window": {
       "id": "window.main",
       "name": "mainWindow",
@@ -27,7 +77,8 @@
                 "id": "menuitem.openSettings",
                 "type": "MenuItem",
                 "title": "Settings",
-                "action": "open_settings"
+                "action": "open_settings",
+                "shortcut": "cmd+,"
               },
               {
                 "id": "menuitem.quit",
@@ -43,11 +94,68 @@
             "title": "File",
             "children": [
               {
-                "id": "menuitem.save",
+                "id": "menuitem.newSession",
                 "type": "MenuItem",
-                "title": "Save",
-                "action": "save_document",
-                "shortcut": "cmd+s"
+                "title": "New Session",
+                "action": "new_session",
+                "shortcut": "cmd+n"
+              },
+              {
+                "id": "menuitem.addWorkspace",
+                "type": "MenuItem",
+                "title": "Add Workspace",
+                "action": "add_workspace",
+                "shortcut": "cmd+o"
+              },
+              {
+                "id": "menuitem.runNext",
+                "type": "MenuItem",
+                "title": "Run Next Queue Item",
+                "action": "run_next",
+                "shortcut": "cmd+return"
+              },
+              {
+                "id": "menuitem.openHosted",
+                "type": "MenuItem",
+                "title": "Open Hosted Artificer",
+                "action": "open_hosted_artificer"
+              }
+            ]
+          },
+          {
+            "id": "menu.automation",
+            "type": "Menu",
+            "title": "Automation",
+            "children": [
+              {
+                "id": "menuitem.daemonEnable",
+                "type": "MenuItem",
+                "title": "Enable Daemon",
+                "action": "automation_daemon_enable"
+              },
+              {
+                "id": "menuitem.daemonPause",
+                "type": "MenuItem",
+                "title": "Pause Daemon",
+                "action": "automation_daemon_pause"
+              },
+              {
+                "id": "menuitem.daemonResume",
+                "type": "MenuItem",
+                "title": "Resume Daemon",
+                "action": "automation_daemon_resume"
+              },
+              {
+                "id": "menuitem.daemonTick",
+                "type": "MenuItem",
+                "title": "Run Tick Now",
+                "action": "automation_daemon_tick"
+              },
+              {
+                "id": "menuitem.daemonDisable",
+                "type": "MenuItem",
+                "title": "Disable Daemon",
+                "action": "automation_daemon_disable"
               }
             ]
           }
@@ -58,10 +166,16 @@
         "type": "Toolbar",
         "children": [
           {
-            "id": "toolbar.button.save",
+            "id": "toolbar.button.refresh",
             "type": "Button",
-            "title": "Save",
-            "action": "save_document"
+            "title": "Refresh",
+            "action": "refresh_runtime"
+          },
+          {
+            "id": "toolbar.button.newSession",
+            "type": "Button",
+            "title": "New Session",
+            "action": "new_session"
           },
           {
             "id": "toolbar.spacer.1",
@@ -104,31 +218,7 @@
                     "id": "text.summary",
                     "type": "Text",
                     "style": "body",
-                    "value": "Native desktop app scaffolded by App Forge."
-                  },
-                  {
-                    "id": "group.form",
-                    "type": "Group",
-                    "title": "Quick action",
-                    "child": {
-                      "id": "form.settings",
-                      "type": "Form",
-                      "children": [
-                        {
-                          "id": "input.projectName",
-                          "type": "Input",
-                          "label": "Project name",
-                          "stateKey": "project_name",
-                          "placeholder": "Artificer (native)"
-                        },
-                        {
-                          "id": "button.primary",
-                          "type": "Button",
-                          "title": "Save draft",
-                          "action": "save_document"
-                        }
-                      ]
-                    }
+                    "value": "Platform-native Artificer console backed by the existing local runtime."
                   }
                 ]
               }
