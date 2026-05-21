@@ -2,7 +2,7 @@
 
 set -eu
 
-ir_path=${1:-ir/app.ir.yaml}
+ir_path=${1:-app-blueprint/app.ir.yaml}
 schema_path=${2:-schemas/native-desktop-ir-v1.json}
 
 has_line_break() {
@@ -41,7 +41,7 @@ fi
 
 if ! jq -e . "$ir_path" >/dev/null 2>&1; then
   printf '%s\n' "native-desktop-ir: canonical IR must stay valid YAML 1.2 JSON-compatible syntax." >&2
-  printf '%s\n' "repair: rewrite ir/app.ir.yaml as normalized JSON-compatible YAML with double-quoted keys and values." >&2
+  printf '%s\n' "repair: rewrite app-blueprint/app.ir.yaml as normalized JSON-compatible YAML with double-quoted keys and values." >&2
   exit 1
 fi
 

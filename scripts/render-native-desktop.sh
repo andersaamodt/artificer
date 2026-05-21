@@ -4,7 +4,7 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
 project_dir=$(CDPATH= cd -- "$script_dir/.." && pwd -P)
-ir_path="$project_dir/ir/app.ir.yaml"
+ir_path="$project_dir/app-blueprint/app.ir.yaml"
 schema_path="$project_dir/schemas/native-desktop-ir-v1.json"
 generated_root="$project_dir/generated"
 macos_dir="$generated_root/macos"
@@ -41,7 +41,7 @@ render_template() {
 mkdir -p "$macos_dir/Sources/App" "$linux_dir/src"
 
 cat > "$macos_dir/Package.swift" <<EOF
-// Generated from ir/app.ir.yaml. Regenerate with scripts/render-native-desktop.sh.
+// Generated from app-blueprint/app.ir.yaml. Regenerate with scripts/render-native-desktop.sh.
 // swift-tools-version: 6.0
 import PackageDescription
 

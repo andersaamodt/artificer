@@ -1,4 +1,4 @@
-// Generated from ir/app.ir.yaml. Regenerate with scripts/render-native-desktop.sh.
+// Generated from app-blueprint/app.ir.yaml. Regenerate with scripts/render-native-desktop.sh.
 // swift-tools-version: 6.0
 import PackageDescription
 
