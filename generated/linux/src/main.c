@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const char *fallback_project_dir = "/Users/andersaamodt/git/artificer-native";
+static const char *fallback_project_dir = "/Users/andersaamodt/git/artificer";
 
 typedef struct {
   GtkWidget *window;
@@ -90,7 +90,7 @@ static void activate(GtkApplication *app, gpointer user_data) {
   state->output = output;
   state->status = status;
 
-  gtk_window_set_title(GTK_WINDOW(window), "Artificer (native)");
+  gtk_window_set_title(GTK_WINDOW(window), "Artificer");
   gtk_window_set_default_size(GTK_WINDOW(window), 1120, 720);
   gtk_window_set_child(GTK_WINDOW(window), main);
 

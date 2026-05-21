@@ -3,15 +3,15 @@ import AppKit
 import Foundation
 import SwiftUI
 
-private let fallbackProjectDir = "/Users/andersaamodt/git/artificer-native"
-private let appDisplayName = "Artificer (native)"
+private let fallbackProjectDir = "/Users/andersaamodt/git/artificer"
+private let appDisplayName = "Artificer"
 
 @main
 struct ArtificerNativeApp: App {
   @StateObject private var model = ArtificerModel()
 
   var body: some Scene {
-    WindowGroup("Artificer (native)") {
+    WindowGroup("Artificer") {
       RootView(model: model)
         .frame(minWidth: 1120, minHeight: 720)
         .task {

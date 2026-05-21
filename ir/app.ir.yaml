@@ -3,7 +3,7 @@
   "format": "yaml-1.2-json-compatible",
   "app": {
     "id": "artificer-native",
-    "name": "Artificer (native)",
+    "name": "Artificer",
     "targets": ["macos", "linux"],
     "actions": [
       {
@@ -71,7 +71,7 @@
       "id": "window.main",
       "name": "mainWindow",
       "type": "Window",
-      "title": "Artificer (native)",
+      "title": "Artificer",
       "width": 112,
       "minWidth": 96,
       "height": 72,
@@ -83,7 +83,7 @@
           {
             "id": "menu.app",
             "type": "Menu",
-            "title": "Artificer (native)",
+            "title": "Artificer",
             "children": [
               {
                 "id": "menuitem.openSettings",
@@ -236,7 +236,7 @@
                     "id": "text.headline",
                     "type": "Text",
                     "style": "title",
-                    "value": "Artificer (native)"
+                    "value": "Artificer"
                   },
                   {
                     "id": "text.summary",

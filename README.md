@@ -1,13 +1,14 @@
-# Artificer (native)
+# Artificer
 
-Artificer (native) is a platform-native desktop front end for the existing
-Artificer runtime. It is built with the Forge native desktop pipeline and keeps
-the existing Artificer core as the source of truth for workspaces, sessions,
+Artificer is a platform-native desktop front end for the existing Artificer
+runtime. It is built with the Forge native desktop pipeline and keeps the
+existing Artificer core as the source of truth for workspaces, sessions,
 automations, model routing, and queue execution.
 
 ## Run
 
-From Forge, select `Artificer (native)` and run the native desktop target.
+From the Forge app list, select `Artificer (native)` and run the native desktop
+target.
 
 From this checkout:
 
