@@ -34,6 +34,10 @@ struct ArtificerNativeApp: App {
         .keyboardShortcut("u", modifiers: [.command])
       }
       CommandGroup(after: .saveItem) {
+        Button("Refresh") {
+          Task { await model.refreshAll() }
+        }
+        .keyboardShortcut("r")
         Button("Run Next Queue Item") {
           Task { await model.runNext() }
         }
@@ -64,18 +68,11 @@ struct ArtificerNativeApp: App {
           Task { await model.daemon("automation-daemon-disable") }
         }
       }
-      CommandMenu("View") {
-        Button("Refresh") {
-          Task { await model.refreshAll() }
-        }
-        .keyboardShortcut("r")
-      }
     }
 
     Settings {
       SettingsView(model: model)
-        .padding(20)
-        .frame(width: 620)
+        .frame(width: 720, height: 520)
     }
   }
 }
@@ -86,10 +83,10 @@ private struct RootView: View {
   var body: some View {
     NavigationSplitView {
       WorkspaceSidebar(model: model)
-        .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 420)
+        .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 400)
     } content: {
       SessionListView(model: model)
-        .navigationSplitViewColumnWidth(min: 280, ideal: 360, max: 500)
+        .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 460)
     } detail: {
       SessionDetailView(model: model)
     }
@@ -160,6 +157,7 @@ private struct WorkspaceSidebar: View {
         RuntimeHealthView(model: model)
       }
       .padding(12)
+      .padding(.bottom, 28)
     }
   }
 }
@@ -168,21 +166,28 @@ private struct WorkspaceRow: View {
   let project: Project
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(project.name)
-        .font(.headline)
-        .lineLimit(1)
-      Text(project.path)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-      HStack(spacing: 8) {
-        Label("\(project.sessionCount)", systemImage: "message")
-        Text(project.pathExists ? "available" : "missing")
+    Label {
+      VStack(alignment: .leading, spacing: 4) {
+        Text(project.name)
+          .font(.headline)
+          .lineLimit(1)
+        Text(URL(fileURLWithPath: project.path).lastPathComponent.isEmpty ? project.path : URL(fileURLWithPath: project.path).lastPathComponent)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+        HStack(spacing: 8) {
+          Label("\(project.sessionCount)", systemImage: "message")
+          Text(project.pathExists ? "available" : "missing")
+        }
+        .font(.caption2)
+        .foregroundColor(project.pathExists ? .secondary : .red)
       }
-      .font(.caption2)
-      .foregroundColor(project.pathExists ? .secondary : .red)
+    } icon: {
+      Image(systemName: project.pathExists ? "folder" : "folder.badge.questionmark")
+        .foregroundColor(project.pathExists ? .secondary : .orange)
     }
+    .labelStyle(.titleAndIcon)
     .padding(.vertical, 4)
   }
 }
@@ -319,7 +324,7 @@ private struct DetailHeader: View {
       Button {
         Task { await model.runNext() }
       } label: {
-        Label("Run Next", systemImage: "play.fill")
+        Label("Run", systemImage: "play.fill")
       }
       .disabled(model.selectedSessionID == nil || model.isBusy)
       Button {
@@ -374,16 +379,33 @@ private struct EmptyStateView: View {
 
 private struct ComposerView: View {
   @ObservedObject var model: ArtificerModel
+  @State private var runOptionsExpanded = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
-      TextEditor(text: $model.prompt)
-        .font(.body)
-        .frame(minHeight: 86, maxHeight: 150)
-        .overlay {
-          RoundedRectangle(cornerRadius: 6)
-            .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+      ZStack(alignment: .topLeading) {
+        TextEditor(text: $model.prompt)
+          .font(.body)
+          .frame(
+            minHeight: runOptionsExpanded ? CGFloat(52) : CGFloat(76),
+            idealHeight: runOptionsExpanded ? CGFloat(64) : CGFloat(96),
+            maxHeight: runOptionsExpanded ? CGFloat(76) : CGFloat(112)
+          )
+          .scrollContentBackground(.hidden)
+          .padding(4)
+
+        if model.prompt.isEmpty {
+          Text("Ask Artificer, attach files, or queue work for the selected session.")
+            .foregroundStyle(.tertiary)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 12)
+            .allowsHitTesting(false)
         }
+      }
+      .overlay {
+        RoundedRectangle(cornerRadius: 8)
+          .stroke(Color.secondary.opacity(0.24), lineWidth: 1)
+      }
 
       if !model.pendingAttachments.isEmpty {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -401,33 +423,7 @@ private struct ComposerView: View {
         DictationWaveView(levels: model.dictationLevels, elapsed: model.dictationElapsedText)
       }
 
-      HStack(alignment: .center, spacing: 10) {
-        Picker("Mode", selection: $model.runMode) {
-          ForEach(model.runModes, id: \.self) { Text($0).tag($0) }
-        }
-        .frame(width: 150)
-
-        Picker("Budget", selection: $model.computeBudget) {
-          ForEach(model.computeBudgets, id: \.self) { Text($0).tag($0) }
-        }
-        .frame(width: 120)
-
-        Picker("Commands", selection: $model.commandExecMode) {
-          ForEach(model.commandExecModes, id: \.self) { Text($0).tag($0) }
-        }
-        .frame(width: 150)
-
-        Picker("Permission", selection: $model.permissionMode) {
-          ForEach(model.permissionModes, id: \.self) { Text($0).tag($0) }
-        }
-        .frame(width: 130)
-
-        Toggle("Review", isOn: $model.programmerReview)
-        Toggle("Self", isOn: $model.selfActuation)
-        Toggle("Reflexive", isOn: $model.reflexiveKnowledge)
-
-        Spacer()
-
+      HStack(spacing: 10) {
         Button {
           model.chooseAttachments()
         } label: {
@@ -441,6 +437,8 @@ private struct ComposerView: View {
           Label(model.isDictating ? "Stop" : "Dictate", systemImage: model.isDictating ? "stop.fill" : "mic.fill")
         }
         .disabled(model.selectedSessionID == nil || (model.isBusy && !model.isDictating))
+
+        Spacer()
 
         Button {
           Task { await model.sendPrompt(runAfterQueue: false) }
@@ -457,9 +455,53 @@ private struct ComposerView: View {
         .keyboardShortcut(.return, modifiers: [.command])
         .disabled(!model.canSendPrompt)
       }
+      .buttonStyle(.bordered)
       .controlSize(.small)
+
+      DisclosureGroup("Run options", isExpanded: $runOptionsExpanded) {
+        VStack(alignment: .leading, spacing: 8) {
+          LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 12, alignment: .leading)], alignment: .leading, spacing: 8) {
+            RunOptionPicker(title: "Mode", selection: $model.runMode, values: model.runModes)
+            RunOptionPicker(title: "Budget", selection: $model.computeBudget, values: model.computeBudgets)
+            RunOptionPicker(title: "Commands", selection: $model.commandExecMode, values: model.commandExecModes)
+            RunOptionPicker(title: "Permission", selection: $model.permissionMode, values: model.permissionModes)
+          }
+
+          HStack(spacing: 16) {
+            Toggle("Review", isOn: $model.programmerReview)
+            Toggle("Self", isOn: $model.selfActuation)
+            Toggle("Reflexive", isOn: $model.reflexiveKnowledge)
+            Spacer()
+          }
+          .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 6)
+      }
+      .font(.caption)
     }
     .padding(12)
+    .padding(.bottom, 28)
+  }
+}
+
+private struct RunOptionPicker: View {
+  let title: String
+  @Binding var selection: String
+  let values: [String]
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 3) {
+      Text(title)
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+      Picker(title, selection: $selection) {
+        ForEach(values, id: \.self) { Text($0).tag($0) }
+      }
+      .labelsHidden()
+      .frame(width: 96)
+    }
+    .fixedSize(horizontal: true, vertical: true)
   }
 }
 
@@ -561,77 +603,143 @@ private struct SettingsView: View {
   @ObservedObject var model: ArtificerModel
 
   var body: some View {
-    Form {
-      Section("Runtime") {
-        TextField("Artificer core root", text: $model.coreRootDraft)
-        HStack {
-          Button("Choose...") {
-            model.chooseCoreRoot()
+    ScrollView {
+      VStack(alignment: .leading, spacing: 18) {
+        SettingsPanel("Runtime") {
+          VStack(alignment: .leading, spacing: 5) {
+            Text("Artificer core root")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+            TextField("Artificer core root", text: $model.coreRootDraft)
+              .textFieldStyle(.roundedBorder)
           }
-          Button("Save") {
-            Task { await model.saveCoreRoot() }
+          HStack {
+            Button("Choose...") {
+              model.chooseCoreRoot()
+            }
+            Button("Save") {
+              Task { await model.saveCoreRoot() }
+            }
+            Button("Probe") {
+              Task { await model.refreshDoctor() }
+            }
           }
-          Button("Probe") {
-            Task { await model.refreshDoctor() }
-          }
-        }
-        Text(model.resolvedCoreRoot.isEmpty ? "No core root resolved." : "Resolved: \(model.resolvedCoreRoot)")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-
-      Section("Automation Daemon") {
-        if let daemon = model.daemonStatus {
-          LabeledContent("Status", value: daemon.status)
-          LabeledContent("Method", value: daemon.method)
-          LabeledContent("State root", value: daemon.stateRoot)
-          LabeledContent("Log", value: daemon.logPath)
-        }
-        HStack {
-          Button("Enable") { Task { await model.daemon("automation-daemon-enable") } }
-          Button("Pause") { Task { await model.daemon("automation-daemon-pause") } }
-          Button("Resume") { Task { await model.daemon("automation-daemon-resume") } }
-          Button("Tick") { Task { await model.daemon("automation-daemon-tick") } }
-          Button("Disable") { Task { await model.daemon("automation-daemon-disable") } }
-        }
-      }
-
-      Section("Work Checks") {
-        Toggle("Codex Desktop work checks", isOn: $model.codexWorkCheckEnabled)
-          .onChange(of: model.codexWorkCheckEnabled) { nextValue in
-            Task { await model.setCodexWorkCheckEnabled(nextValue) }
-          }
-        Text(model.codexWorkCheckEnabled ? "Self-improvement runs can ask Codex Desktop to check failed or low-quality work." : "Codex Desktop work checks are off.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-        Button("Refresh") {
-          Task { await model.loadSelfImproveSettings() }
-        }
-      }
-
-      Section("Dictation") {
-        if let status = model.dictationStatus {
-          LabeledContent("Backend", value: status.installed ? status.backendLabel : "Not installed")
-          LabeledContent("Language", value: status.language)
-        }
-        if !model.dictationInstallMessage.isEmpty {
-          Text(model.dictationInstallMessage)
+          .buttonStyle(.bordered)
+          Text(model.resolvedCoreRoot.isEmpty ? "No core root resolved." : "Resolved: \(model.resolvedCoreRoot)")
             .font(.caption)
             .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
         }
-        HStack {
-          Button("Check") { Task { await model.loadDictationStatus() } }
-          Button(model.isDictationInstalling ? "Installing..." : "Install") {
-            Task { await model.installDictation() }
+
+        Divider()
+
+        SettingsPanel("Automation Daemon") {
+          if let daemon = model.daemonStatus {
+            SettingsInfoRow(title: "Status", value: daemon.status)
+            SettingsInfoRow(title: "Method", value: daemon.method)
+            SettingsInfoRow(title: "State root", value: daemon.stateRoot)
+            SettingsInfoRow(title: "Log", value: daemon.logPath)
+          } else {
+            Text("Daemon status has not loaded yet.")
+              .font(.caption)
+              .foregroundStyle(.secondary)
           }
-          .disabled(model.isDictationInstalling)
-          Button("Cancel") {
-            Task { await model.cancelDictationInstall() }
+          HStack {
+            Button("Enable") { Task { await model.daemon("automation-daemon-enable") } }
+            Button("Pause") { Task { await model.daemon("automation-daemon-pause") } }
+            Button("Resume") { Task { await model.daemon("automation-daemon-resume") } }
+            Button("Tick") { Task { await model.daemon("automation-daemon-tick") } }
+            Button("Disable") { Task { await model.daemon("automation-daemon-disable") } }
           }
-          .disabled(model.dictationInstallJobID.isEmpty)
+          .buttonStyle(.bordered)
+        }
+
+        Divider()
+
+        SettingsPanel("Work Checks") {
+          Toggle("Codex Desktop work checks", isOn: $model.codexWorkCheckEnabled)
+            .onChange(of: model.codexWorkCheckEnabled) { nextValue in
+              Task { await model.setCodexWorkCheckEnabled(nextValue) }
+            }
+          Text(model.codexWorkCheckEnabled ? "Self-improvement runs can ask Codex Desktop to check failed or low-quality work." : "Codex Desktop work checks are off.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+          Button("Refresh") {
+            Task { await model.loadSelfImproveSettings() }
+          }
+          .buttonStyle(.bordered)
+        }
+
+        Divider()
+
+        SettingsPanel("Dictation") {
+          if let status = model.dictationStatus {
+            SettingsInfoRow(title: "Backend", value: status.installed ? status.backendLabel : "Not installed")
+            SettingsInfoRow(title: "Language", value: status.language)
+          }
+          if !model.dictationInstallMessage.isEmpty {
+            Text(model.dictationInstallMessage)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          HStack {
+            Button("Check") { Task { await model.loadDictationStatus() } }
+            Button(model.isDictationInstalling ? "Installing..." : "Install") {
+              Task { await model.installDictation() }
+            }
+            .disabled(model.isDictationInstalling)
+            Button("Cancel") {
+              Task { await model.cancelDictationInstall() }
+            }
+            .disabled(model.dictationInstallJobID.isEmpty)
+          }
+          .buttonStyle(.bordered)
         }
       }
+      .padding(24)
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
+  }
+}
+
+private struct SettingsPanel<Content: View>: View {
+  let title: String
+  let content: Content
+
+  init(_ title: String, @ViewBuilder content: () -> Content) {
+    self.title = title
+    self.content = content()
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text(title)
+        .font(.headline)
+      content
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+private struct SettingsInfoRow: View {
+  let title: String
+  let value: String
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 12) {
+      Text(title)
+        .foregroundStyle(.secondary)
+        .frame(width: 76, alignment: .leading)
+      Text(value)
+        .lineLimit(1)
+        .truncationMode(.middle)
+        .textSelection(.enabled)
+    }
+    .font(.caption)
   }
 }
 
@@ -738,7 +846,7 @@ private final class ArtificerModel: ObservableObject {
     await loadSessionsForSelection()
   }
 
-  func loadSessionsForSelection() async {
+  func loadSessionsForSelection(status nextStatus: String? = "Session loaded.") async {
     guard let projectID = selectedProjectID else {
       sessions = []
       selectedSessionID = nil
@@ -751,14 +859,14 @@ private final class ArtificerModel: ObservableObject {
       left.updated > right.updated
     }
     if let selectedSessionID, sessions.contains(where: { $0.id == selectedSessionID }) {
-      await loadSelectedSession()
+      await loadSelectedSession(status: nextStatus)
     } else {
       selectedSessionID = sessions.first?.id
-      await loadSelectedSession()
+      await loadSelectedSession(status: nextStatus)
     }
   }
 
-  func loadSelectedSession() async {
+  func loadSelectedSession(status nextStatus: String? = "Session loaded.") async {
     guard let projectID = selectedProjectID, let sessionID = selectedSessionID else {
       selectedSession = nil
       return
@@ -766,7 +874,9 @@ private final class ArtificerModel: ObservableObject {
     let result = await runBackend("session", projectID, sessionID)
     guard let response = decode(SessionResponse.self, from: result) else { return }
     selectedSession = response.session
-    statusMessage = "Session loaded."
+    if let nextStatus {
+      statusMessage = nextStatus
+    }
   }
 
   func createSession() async {
@@ -775,7 +885,8 @@ private final class ArtificerModel: ObservableObject {
     let result = await runBackend("session-create", projectID, title, health?.defaultModel ?? "")
     guard let response = decode(SessionResponse.self, from: result) else { return }
     selectedSessionID = response.session.id
-    await loadSessionsForSelection()
+    await loadSessionsForSelection(status: nil)
+    statusMessage = "Session created."
   }
 
   func sendPrompt(runAfterQueue: Bool) async {
@@ -805,18 +916,20 @@ private final class ArtificerModel: ObservableObject {
     pendingAttachments.removeAll()
     statusMessage = runAfterQueue ? "Prompt queued; running next item." : "Prompt queued."
     if runAfterQueue {
-      await runNext()
+      await runNext(statusWhileRunning: "Prompt queued; running next item.", statusWhenDone: "Prompt queued; run-next completed.")
     } else {
-      await loadSessionsForSelection()
+      await loadSessionsForSelection(status: nil)
+      statusMessage = "Prompt queued."
     }
   }
 
-  func runNext() async {
+  func runNext(statusWhileRunning: String = "Running next item...", statusWhenDone: String = "Run-next completed.") async {
     guard let projectID = selectedProjectID, let sessionID = selectedSessionID else { return }
+    statusMessage = statusWhileRunning
     let result = await runBackend("session-run-next", projectID, sessionID)
     if decode(SessionResponse.self, from: result) != nil {
-      statusMessage = "Run-next completed."
-      await loadSessionsForSelection()
+      await loadSessionsForSelection(status: nil)
+      statusMessage = statusWhenDone
     }
   }
 
