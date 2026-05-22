@@ -14,6 +14,7 @@ struct ArtificerNativeApp: App {
     WindowGroup("Artificer") {
       RootView(model: model)
         .frame(minWidth: 1120, minHeight: 720)
+        .font(.system(size: 14))
         .task {
           await model.bootstrap()
         }
@@ -196,14 +197,21 @@ private struct WorkspaceTreeGroup: View {
           .foregroundColor(project.pathExists ? .secondary : .orange)
           .frame(width: 16)
         Text(project.name)
-          .font(.system(size: 12, weight: project.id == model.selectedProjectID ? .semibold : .regular))
+          .font(.system(size: 13, weight: project.id == model.selectedProjectID ? .semibold : .regular))
           .lineLimit(1)
           .truncationMode(.tail)
         Spacer(minLength: 6)
-        Text("\(model.sessionsByProject[project.id]?.count ?? project.sessionCount)")
-          .font(.caption2)
-          .foregroundStyle(.secondary)
-          .monospacedDigit()
+        ZStack {
+          Text("\(model.sessionsByProject[project.id]?.count ?? project.sessionCount)")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .opacity(model.creatingSessionProjectIDs.contains(project.id) ? 0 : 1)
+          ProgressView()
+            .controlSize(.mini)
+            .opacity(model.creatingSessionProjectIDs.contains(project.id) ? 1 : 0)
+        }
+        .frame(width: 28)
         Button {
           Task { await model.createSession(in: project.id) }
         } label: {
@@ -213,7 +221,7 @@ private struct WorkspaceTreeGroup: View {
         }
         .help("New thread")
         .buttonStyle(.plain)
-        .disabled(model.isBusy)
+        .disabled(model.isBusy || model.creatingSessionProjectIDs.contains(project.id))
       }
       .frame(height: 28)
       .padding(.horizontal, 6)
@@ -229,7 +237,7 @@ private struct WorkspaceTreeGroup: View {
         let sessions = model.sessionsByProject[project.id] ?? []
         if sessions.isEmpty {
           Text("No threads")
-            .font(.system(size: 11))
+            .font(.system(size: 12))
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .frame(height: 24)
@@ -256,7 +264,7 @@ private struct SessionTreeRow: View {
         .fill(indicatorColor)
         .frame(width: 7, height: 7)
       Text(session.title.isEmpty ? session.id : session.title)
-        .font(.system(size: 11))
+        .font(.system(size: 13))
         .lineLimit(1)
         .truncationMode(.tail)
       if session.queue.pending > 0 {
@@ -268,7 +276,14 @@ private struct SessionTreeRow: View {
           .clipShape(Capsule())
       }
       Spacer(minLength: 6)
-      if isHovering || model.pendingArchiveSessionKey == model.archiveKey(projectID: project.id, sessionID: session.id) {
+      let showingArchive = isHovering || model.pendingArchiveSessionKey == model.archiveKey(projectID: project.id, sessionID: session.id)
+      ZStack(alignment: .trailing) {
+        Text(relativeUpdated)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .opacity(showingArchive ? 0 : 1)
+          .frame(maxWidth: .infinity, alignment: .trailing)
         Button {
           Task { await model.requestOrConfirmArchive(projectID: project.id, sessionID: session.id) }
         } label: {
@@ -278,14 +293,12 @@ private struct SessionTreeRow: View {
         .help(model.pendingArchiveSessionKey == model.archiveKey(projectID: project.id, sessionID: session.id) ? "Confirm archive" : "Archive thread")
         .buttonStyle(.plain)
         .foregroundColor(model.pendingArchiveSessionKey == model.archiveKey(projectID: project.id, sessionID: session.id) ? .red : .secondary)
-      } else {
-        Text(relativeUpdated)
-          .font(.caption2)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
+        .opacity(showingArchive ? 1 : 0)
+        .allowsHitTesting(showingArchive)
       }
+      .frame(width: 78, height: 20, alignment: .trailing)
     }
-    .frame(height: 26)
+    .frame(height: 28)
     .padding(.leading, 34)
     .padding(.trailing, 6)
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -345,7 +358,7 @@ private struct RuntimeHealthView: View {
           .lineLimit(2)
       }
     }
-    .font(.caption)
+    .font(.footnote)
   }
 }
 
@@ -385,9 +398,15 @@ private struct DetailHeader: View {
   var body: some View {
     HStack(spacing: 12) {
       VStack(alignment: .leading, spacing: 4) {
-        Text(model.selectedSession?.title ?? "Artificer")
-          .font(.title3)
-          .lineLimit(1)
+        HStack(spacing: 8) {
+          Text(model.selectedSession?.title ?? "Artificer")
+            .font(.title3)
+            .lineLimit(1)
+          if model.isSelectedSessionLoading {
+            ProgressView()
+              .controlSize(.small)
+          }
+        }
         HStack(spacing: 10) {
           if let session = model.selectedSession {
             Text(session.model)
@@ -397,7 +416,7 @@ private struct DetailHeader: View {
             Text("Native runtime console")
           }
         }
-        .font(.caption)
+        .font(.footnote)
         .foregroundStyle(.secondary)
       }
       Spacer()
@@ -424,7 +443,7 @@ private struct MessageView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       Text(message.role.capitalized)
-        .font(.caption)
+        .font(.footnote)
         .foregroundStyle(.secondary)
       Text(message.content)
         .textSelection(.enabled)
@@ -557,7 +576,7 @@ private struct ComposerView: View {
         }
         .padding(.top, 6)
       }
-      .font(.caption)
+      .font(.footnote)
     }
     .padding(12)
     .padding(.bottom, 28)
@@ -572,7 +591,7 @@ private struct RunOptionPicker: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 3) {
       Text(title)
-        .font(.caption2)
+        .font(.footnote)
         .foregroundStyle(.secondary)
         .lineLimit(1)
       Picker(title, selection: $selection) {
@@ -604,7 +623,7 @@ private struct AttachmentChip: View {
       .buttonStyle(.plain)
       .help("Remove attachment")
     }
-    .font(.caption)
+    .font(.footnote)
     .padding(.horizontal, 8)
     .padding(.vertical, 5)
     .background(Color(nsColor: .controlBackgroundColor))
@@ -639,10 +658,10 @@ private struct DictationWaveView: View {
       }
       .frame(height: 38)
       Text(elapsed)
-        .font(.system(.caption, design: .monospaced))
+        .font(.system(.footnote, design: .monospaced))
         .foregroundStyle(.secondary)
     }
-    .font(.caption)
+    .font(.footnote)
     .padding(.horizontal, 10)
     .padding(.vertical, 6)
     .background(Color.red.opacity(0.08))
@@ -672,7 +691,7 @@ private struct StatusBar: View {
           .lineLimit(1)
       }
     }
-    .font(.caption)
+    .font(.footnote)
     .padding(.horizontal, 12)
     .padding(.vertical, 7)
     .background(.bar)
@@ -688,7 +707,7 @@ private struct SettingsView: View {
         SettingsPanel("Runtime") {
           VStack(alignment: .leading, spacing: 5) {
             Text("Artificer core root")
-              .font(.caption)
+              .font(.footnote)
               .foregroundStyle(.secondary)
             TextField("Artificer core root", text: $model.coreRootDraft)
               .textFieldStyle(.roundedBorder)
@@ -706,7 +725,7 @@ private struct SettingsView: View {
           }
           .buttonStyle(.bordered)
           Text(model.resolvedCoreRoot.isEmpty ? "No core root resolved." : "Resolved: \(model.resolvedCoreRoot)")
-            .font(.caption)
+            .font(.footnote)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .truncationMode(.middle)
@@ -723,7 +742,7 @@ private struct SettingsView: View {
             SettingsInfoRow(title: "Log", value: daemon.logPath)
           } else {
             Text("Daemon status has not loaded yet.")
-              .font(.caption)
+              .font(.footnote)
               .foregroundStyle(.secondary)
           }
           HStack {
@@ -744,7 +763,7 @@ private struct SettingsView: View {
               Task { await model.setCodexWorkCheckEnabled(nextValue) }
             }
           Text(model.codexWorkCheckEnabled ? "Self-improvement runs can ask Codex Desktop to check failed or low-quality work." : "Codex Desktop work checks are off.")
-            .font(.caption)
+            .font(.footnote)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
           Button("Refresh") {
@@ -762,7 +781,7 @@ private struct SettingsView: View {
           }
           if !model.dictationInstallMessage.isEmpty {
             Text(model.dictationInstallMessage)
-              .font(.caption)
+              .font(.footnote)
               .foregroundStyle(.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
@@ -819,7 +838,7 @@ private struct SettingsInfoRow: View {
         .truncationMode(.middle)
         .textSelection(.enabled)
     }
-    .font(.caption)
+    .font(.footnote)
   }
 }
 
@@ -836,6 +855,8 @@ private final class ArtificerModel: ObservableObject {
   @Published var sessionsByProject: [String: [SessionSummary]] = [:]
   @Published var expandedProjectIDs: Set<String> = []
   @Published var pendingArchiveSessionKey = ""
+  @Published var creatingSessionProjectIDs: Set<String> = []
+  @Published var loadingSessionKey = ""
   @Published var prompt = ""
   @Published var statusMessage = "Ready"
   @Published var lastError = ""
@@ -869,6 +890,11 @@ private final class ArtificerModel: ObservableObject {
 
   var selectedProject: Project? {
     projects.first { $0.id == selectedProjectID }
+  }
+
+  var isSelectedSessionLoading: Bool {
+    guard let selectedProjectID, let selectedSessionID else { return false }
+    return loadingSessionKey == archiveKey(projectID: selectedProjectID, sessionID: selectedSessionID)
   }
 
   func isProjectExpanded(_ projectID: String) -> Bool {
@@ -915,7 +941,7 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func loadHealth() async {
-    let result = await runBackend("health")
+    let result = await runBackend("health", trackBusy: false)
     if let response = decode(HealthResponse.self, from: result) {
       health = response.runtime
       statusMessage = "Runtime health loaded."
@@ -924,7 +950,7 @@ private final class ArtificerModel: ObservableObject {
 
   func loadProjects() async {
     let prior = selectedProjectID
-    let result = await runBackend("projects")
+    let result = await runBackend("projects", trackBusy: false)
     guard let response = decode(ProjectsResponse.self, from: result) else { return }
     projects = response.projects.filter { $0.pathExists }.sorted { left, right in
       left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
@@ -999,13 +1025,19 @@ private final class ArtificerModel: ObservableObject {
     }
   }
 
-  func loadSelectedSession(status nextStatus: String? = "Session loaded.") async {
+  func loadSelectedSession(status nextStatus: String? = "Session loaded.", trackBusy: Bool = true) async {
     guard let projectID = selectedProjectID, let sessionID = selectedSessionID else {
       selectedSession = nil
       return
     }
-    let result = await runBackend("session", projectID, sessionID)
+    let key = archiveKey(projectID: projectID, sessionID: sessionID)
+    loadingSessionKey = key
+    let result = await runBackend("session", [projectID, sessionID], trackBusy: trackBusy)
+    if loadingSessionKey == key {
+      loadingSessionKey = ""
+    }
     guard let response = decode(SessionResponse.self, from: result) else { return }
+    guard selectedProjectID == projectID, selectedSessionID == sessionID else { return }
     selectedSession = response.session
     if let nextStatus {
       statusMessage = nextStatus
@@ -1018,14 +1050,64 @@ private final class ArtificerModel: ObservableObject {
 
   func createSession(in projectID: String?) async {
     guard let projectID else { return }
+    guard !creatingSessionProjectIDs.contains(projectID) else { return }
     selectedProjectID = projectID
     expandedProjectIDs.insert(projectID)
     let title = "Native session \(DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .short))"
-    let result = await runBackend("session-create", projectID, title, health?.defaultModel ?? "")
-    guard let response = decode(SessionResponse.self, from: result) else { return }
+    let modelName = health?.defaultModel ?? ""
+    let temporarySession = SessionSummary(
+      id: "creating-\(UUID().uuidString)",
+      workspaceID: projectID,
+      title: title,
+      model: modelName,
+      updated: Int(Date().timeIntervalSince1970),
+      queue: QueueState()
+    )
+    creatingSessionProjectIDs.insert(projectID)
+    upsertSession(temporarySession, in: projectID, replacing: nil)
+    sessions = sessionsByProject[projectID] ?? []
+    selectedSessionID = temporarySession.id
+    selectedSession = SessionDetail(summary: temporarySession)
+    statusMessage = "Creating thread..."
+
+    let result = await runBackend("session-create", [projectID, title, modelName], trackBusy: false)
+    creatingSessionProjectIDs.remove(projectID)
+    guard let response = decode(SessionResponse.self, from: result) else {
+      removeSession(temporarySession.id, from: projectID)
+      if selectedSessionID == temporarySession.id {
+        selectedSessionID = nil
+        selectedSession = nil
+      }
+      statusMessage = "Thread creation failed."
+      return
+    }
+    let createdSummary = response.session.summary
+    upsertSession(createdSummary, in: projectID, replacing: temporarySession.id)
+    sessions = sessionsByProject[projectID] ?? []
     selectedSessionID = response.session.id
-    await loadAllSessions(status: nil)
+    selectedSession = response.session
     statusMessage = "Session created."
+  }
+
+  private func upsertSession(_ session: SessionSummary, in projectID: String, replacing oldSessionID: String?) {
+    var list = sessionsByProject[projectID] ?? []
+    if let oldSessionID {
+      list.removeAll { $0.id == oldSessionID }
+    }
+    list.removeAll { $0.id == session.id }
+    list.insert(session, at: 0)
+    sessionsByProject[projectID] = list.sorted { left, right in
+      left.updated > right.updated
+    }
+  }
+
+  private func removeSession(_ sessionID: String, from projectID: String) {
+    var list = sessionsByProject[projectID] ?? []
+    list.removeAll { $0.id == sessionID }
+    sessionsByProject[projectID] = list
+    if selectedProjectID == projectID {
+      sessions = list
+    }
   }
 
   func selectProject(_ projectID: String) async {
@@ -1033,7 +1115,7 @@ private final class ArtificerModel: ObservableObject {
     selectedSessionID = nil
     selectedSession = nil
     pendingArchiveSessionKey = ""
-    if let loadedSessions = await loadProjectSessions(projectID) {
+    if let loadedSessions = await loadProjectSessions(projectID, trackBusy: false) {
       sessions = loadedSessions
       sessionsByProject[projectID] = loadedSessions
     } else {
@@ -1043,8 +1125,6 @@ private final class ArtificerModel: ObservableObject {
 
   func toggleProject(_ projectID: String) async {
     selectedProjectID = projectID
-    selectedSessionID = nil
-    selectedSession = nil
     pendingArchiveSessionKey = ""
     if expandedProjectIDs.contains(projectID) {
       expandedProjectIDs.remove(projectID)
@@ -1052,9 +1132,13 @@ private final class ArtificerModel: ObservableObject {
       return
     }
     expandedProjectIDs.insert(projectID)
-    if let loadedSessions = await loadProjectSessions(projectID) {
+    if sessionsByProject[projectID] == nil {
+      statusMessage = "Loading threads..."
+    }
+    if let loadedSessions = await loadProjectSessions(projectID, trackBusy: false) {
       sessions = loadedSessions
       sessionsByProject[projectID] = loadedSessions
+      statusMessage = "Threads loaded."
     } else {
       sessions = sessionsByProject[projectID] ?? []
     }
@@ -1064,7 +1148,11 @@ private final class ArtificerModel: ObservableObject {
     selectedProjectID = projectID
     selectedSessionID = sessionID
     pendingArchiveSessionKey = ""
-    await loadSessionsForSelection(status: nil)
+    if let summary = (sessionsByProject[projectID] ?? []).first(where: { $0.id == sessionID }) {
+      selectedSession = SessionDetail(summary: summary)
+    }
+    statusMessage = "Opening thread..."
+    await loadSelectedSession(status: "Thread opened.", trackBusy: false)
   }
 
   func requestOrConfirmArchive(projectID: String, sessionID: String) async {
@@ -1592,6 +1680,15 @@ private struct SessionSummary: Identifiable, Decodable, Hashable {
     case workspaceID = "workspace_id"
   }
 
+  init(id: String, workspaceID: String, title: String, model: String, updated: Int, queue: QueueState) {
+    self.id = id
+    self.workspaceID = workspaceID
+    self.title = title
+    self.model = model
+    self.updated = updated
+    self.queue = queue
+  }
+
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     id = try container.decode(String.self, forKey: .id)
@@ -1615,6 +1712,32 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
   enum CodingKeys: String, CodingKey {
     case id, title, model, updated, queue, messages
     case workspaceID = "workspace_id"
+  }
+
+  init(id: String, workspaceID: String, title: String, model: String, updated: Int, queue: QueueState, messages: [Message]) {
+    self.id = id
+    self.workspaceID = workspaceID
+    self.title = title
+    self.model = model
+    self.updated = updated
+    self.queue = queue
+    self.messages = messages
+  }
+
+  init(summary: SessionSummary, messages: [Message] = []) {
+    self.init(
+      id: summary.id,
+      workspaceID: summary.workspaceID,
+      title: summary.title,
+      model: summary.model,
+      updated: summary.updated,
+      queue: summary.queue,
+      messages: messages
+    )
+  }
+
+  var summary: SessionSummary {
+    SessionSummary(id: id, workspaceID: workspaceID, title: title, model: model, updated: updated, queue: queue)
   }
 
   init(from decoder: Decoder) throws {
