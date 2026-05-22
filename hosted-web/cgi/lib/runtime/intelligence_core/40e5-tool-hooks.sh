@@ -21,14 +21,23 @@ artificer_tool_hook_context_json() {
     relative_path=$(trim "$relative_path")
     [ -n "$relative_path" ] || continue
     probe_json=$(artificer_lsp_probe_json_for_file "$workspace_path" "$relative_path")
-    case "$(printf '%s' "$probe_json" | sed -n 's/.*"success":\([^,}]*\).*/\1/p' | sed -n '1p')" in
-      true)
-        if [ -n "$contexts_json" ]; then
-          contexts_json="${contexts_json},"
-        fi
-        contexts_json="${contexts_json}${probe_json}"
-        ;;
-    esac
+    if JSON_PAYLOAD=$probe_json python3 - <<'PY'
+import json
+import os
+import sys
+
+try:
+    payload = json.loads(os.environ.get("JSON_PAYLOAD", ""))
+except Exception:
+    sys.exit(1)
+sys.exit(0 if payload.get("success") is True else 1)
+PY
+    then
+      if [ -n "$contexts_json" ]; then
+        contexts_json="${contexts_json},"
+      fi
+      contexts_json="${contexts_json}${probe_json}"
+    fi
   done <<EOF
 $candidate_paths
 EOF
