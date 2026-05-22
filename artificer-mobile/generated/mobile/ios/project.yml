@@ -10,6 +10,7 @@ targets:
       - Host
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: app.wizardry.artificer.mobile
+      GENERATE_INFOPLIST_FILE: YES
       INFOPLIST_KEY_CFBundleDisplayName: "Artificer Mobile"
       CURRENT_PROJECT_VERSION: "104521296"
       MARKETING_VERSION: "0.1.0"

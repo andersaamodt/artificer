@@ -644,6 +644,7 @@ targets:
       - Host
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: $ios_bundle
+      GENERATE_INFOPLIST_FILE: YES
       INFOPLIST_KEY_CFBundleDisplayName: "$app_name"
       CURRENT_PROJECT_VERSION: "$version_code"
       MARKETING_VERSION: "$app_version"
