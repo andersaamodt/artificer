@@ -207,7 +207,13 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/health":
                 self.write_json(200, self.backend_json(["health"]))
             elif parsed.path == "/projects":
-                self.write_json(200, self.backend_json(["projects"]))
+                payload = self.backend_json(["projects"])
+                projects = payload.get("projects", [])
+                payload["projects"] = [
+                    project for project in projects
+                    if str(project.get("path_exists", "1")).lower() not in ("0", "false", "no")
+                ]
+                self.write_json(200, payload)
             elif parsed.path == "/sessions":
                 workspace_id = params.get("workspace_id", [""])[0]
                 self.write_json(200, self.backend_json(["sessions", workspace_id]))

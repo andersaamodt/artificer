@@ -34,6 +34,11 @@ grep -q 'allow_execute' "$bridge" || {
   exit 1
 }
 
+grep -q 'path_exists' "$bridge" || {
+  printf '%s\n' "mobile bridge should filter stale workspaces before mobile list rendering" >&2
+  exit 1
+}
+
 grep -q 'artificer/artificer-mobile/generated/mobile/android' "$root/.github/workflows/build-artifacts.yml" || {
   printf '%s\n' "GitHub Actions should build the Artificer Mobile Android artifact" >&2
   exit 1
