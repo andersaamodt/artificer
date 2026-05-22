@@ -106,6 +106,22 @@ reject_line_breaks() {
   esac
 }
 
+voice_recognition_root_dir() {
+  if [ -n "${VOICE_RECOGNITION_ROOT_DIR-}" ]; then
+    reject_line_breaks "$VOICE_RECOGNITION_ROOT_DIR" "voice recognition root"
+    printf '%s\n' "$VOICE_RECOGNITION_ROOT_DIR"
+    return 0
+  fi
+  if [ -n "${WIZARDRY_VOICE_RECOGNITION_DIR-}" ]; then
+    reject_line_breaks "$WIZARDRY_VOICE_RECOGNITION_DIR" "voice recognition root"
+    printf '%s\n' "$WIZARDRY_VOICE_RECOGNITION_DIR"
+    return 0
+  fi
+  root="${XDG_STATE_HOME:-"$home/.local/state"}/wizardry/voice-recognition"
+  reject_line_breaks "$root" "voice recognition root"
+  printf '%s\n' "$root"
+}
+
 json_escape() {
   python3 - "$1" <<'PY'
 import json
@@ -348,7 +364,8 @@ api_get() {
     shift 2
     query="${query}&$(url_encode_arg "$key")=$(url_encode_arg "$value")"
   done
-  REQUEST_METHOD=GET QUERY_STRING="$query" "$(api_script)" 2>&1 | strip_cgi_headers
+  voice_root=$(voice_recognition_root_dir)
+  VOICE_RECOGNITION_ROOT_DIR="$voice_root" WIZARDRY_VOICE_RECOGNITION_DIR="$voice_root" REQUEST_METHOD=GET QUERY_STRING="$query" "$(api_script)" 2>&1 | strip_cgi_headers
 }
 
 api_post() {
@@ -362,7 +379,8 @@ api_post() {
     body="${body}&$(url_encode_arg "$key")=$(url_encode_arg "$value")"
   done
   content_length=$(printf '%s' "$body" | wc -c | tr -d ' ')
-  printf '%s' "$body" | REQUEST_METHOD=POST CONTENT_TYPE='application/x-www-form-urlencoded' CONTENT_LENGTH="$content_length" "$(api_script)" 2>&1 | strip_cgi_headers
+  voice_root=$(voice_recognition_root_dir)
+  printf '%s' "$body" | VOICE_RECOGNITION_ROOT_DIR="$voice_root" WIZARDRY_VOICE_RECOGNITION_DIR="$voice_root" REQUEST_METHOD=POST CONTENT_TYPE='application/x-www-form-urlencoded' CONTENT_LENGTH="$content_length" "$(api_script)" 2>&1 | strip_cgi_headers
 }
 
 upload_attachment_file() {

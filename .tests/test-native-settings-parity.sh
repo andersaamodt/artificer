@@ -49,6 +49,16 @@ do
   }
 done
 
+grep -q 'XDG_STATE_HOME:-"$home/.local/state"}/wizardry/voice-recognition' "$backend" || {
+  printf '%s\n' "Native backend should reuse the Wizardry voice-recognition install root" >&2
+  exit 1
+}
+
+grep -q 'VOICE_RECOGNITION_ROOT_DIR="$voice_root"' "$backend" || {
+  printf '%s\n' "Native backend should pass the voice-recognition root into Artificer CGI actions" >&2
+  exit 1
+}
+
 if "$backend" desktop-prefs-set 'bad
 key' 1 >/tmp/artificer-native-settings-parity.out 2>/tmp/artificer-native-settings-parity.err; then
   printf '%s\n' "desktop preference keys with line breaks must be rejected" >&2
