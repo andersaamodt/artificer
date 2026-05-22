@@ -801,7 +801,8 @@ private struct VoiceCommandsOverviewPane: View {
       Text("Local phrases can trigger allowlisted actions even when push-to-talk is not active.")
         .font(.caption)
         .foregroundStyle(.secondary)
-      VoicePhraseSummary(title: "Main screen", phrases: model.mainScreenVoicePhrases)
+      VoicePhraseSummary(title: "Main screen on", phrases: model.mainScreenVoicePhrases)
+      VoicePhraseSummary(title: "Main screen off", phrases: model.mainScreenOffVoicePhrases)
       if model.voiceLlmPromptsEnabled {
         VoicePhraseSummary(title: "Ask Artificer", phrases: "artificer summarize this thread, ask artificer check the build")
       }
@@ -1530,19 +1531,26 @@ private struct AutomationsPreferencesTab: View {
           Text("Separate phrases with commas. Matching ignores case and punctuation.")
             .font(.caption)
             .foregroundStyle(.secondary)
-          HStack(spacing: 8) {
-            TextField("main screen turn on, main screen on", text: $model.mainScreenVoicePhrases)
-              .textFieldStyle(.roundedBorder)
-              .frame(maxWidth: 460)
-              .onSubmit {
-                Task { await model.saveVoiceCommandPhrases() }
-              }
-            Button("Save Phrases") {
-              Task { await model.saveVoiceCommandPhrases() }
-            }
-            .disabled(model.mainScreenVoicePhrases.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          VoiceCommandPhraseEditor(
+            title: "Main screen on",
+            placeholder: "main screen turn on, main screen on",
+            phrases: $model.mainScreenVoicePhrases
+          ) {
+            Task { await model.saveVoiceCommandPhrases() }
           }
-          VoiceCommandExampleRow(title: "Main screen action", example: model.mainScreenVoicePhrases)
+          VoiceCommandPhraseEditor(
+            title: "Main screen off",
+            placeholder: "main screen turn off, main screen off",
+            phrases: $model.mainScreenOffVoicePhrases
+          ) {
+            Task { await model.saveVoiceCommandPhrases() }
+          }
+          Button("Save Phrases") {
+            Task { await model.saveVoiceCommandPhrases() }
+          }
+          .disabled(!model.canSaveVoiceCommandPhrases)
+          VoiceCommandExampleRow(title: "Main screen on", example: model.mainScreenVoicePhrases)
+          VoiceCommandExampleRow(title: "Main screen off", example: model.mainScreenOffVoicePhrases)
           VoiceCommandExampleRow(title: "Ask Artificer", example: "artificer summarize this thread, ask artificer check the build")
           VoiceCommandExampleRow(title: "Action prompt", example: "hey artificer turn this into a pull request")
         }
@@ -1739,6 +1747,26 @@ private struct RuntimePreferencesTab: View {
           SettingsInfoRow(title: "Log", value: daemon.logPath)
         }
       }
+    }
+  }
+}
+
+private struct VoiceCommandPhraseEditor: View {
+  let title: String
+  let placeholder: String
+  @Binding var phrases: String
+  let save: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Text(title)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .frame(width: 112, alignment: .leading)
+      TextField(placeholder, text: $phrases)
+        .textFieldStyle(.roundedBorder)
+        .frame(maxWidth: 460)
+        .onSubmit(save)
     }
   }
 }
@@ -1971,6 +1999,7 @@ private final class ArtificerModel: ObservableObject {
   @Published var voiceLlmPromptsEnabled = false
   @Published var voiceLlmActionsEnabled = false
   @Published var mainScreenVoicePhrases = "main screen turn on, main screen on, turn on main screen, turn main screen on"
+  @Published var mainScreenOffVoicePhrases = "main screen turn off, main screen off, turn off main screen, turn main screen off"
   @Published var voiceAutomationStatus: VoiceAutomationStatus?
   @Published var mobileBridgeEnabled = false
   @Published var mobileTorEnabled = false
@@ -2048,6 +2077,11 @@ private final class ArtificerModel: ObservableObject {
       && !automationDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       && !automationDraftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       && !automationDraftScheduleValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  var canSaveVoiceCommandPhrases: Bool {
+    !mainScreenVoicePhrases.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+      !mainScreenOffVoicePhrases.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
   var isSelectedSessionLoading: Bool {
@@ -2627,6 +2661,7 @@ private final class ArtificerModel: ObservableObject {
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
       mainScreenVoicePhrases = prefs.mainScreenVoicePhrases
+      mainScreenOffVoicePhrases = prefs.mainScreenOffVoicePhrases
       mobileBridgeEnabled = prefs.mobileBridge
       mobileTorEnabled = prefs.mobileTor
       mobileLanEnabled = prefs.mobileLan
@@ -2666,6 +2701,9 @@ private final class ArtificerModel: ObservableObject {
     if let value = prefs["voice_main_screen_phrases"], !value.isEmpty {
       mainScreenVoicePhrases = value
     }
+    if let value = prefs["voice_main_screen_off_phrases"], !value.isEmpty {
+      mainScreenOffVoicePhrases = value
+    }
     if let value = prefs["mobile_bridge"] {
       mobileBridgeEnabled = desktopLaunchBool(value)
     }
@@ -2691,6 +2729,7 @@ private final class ArtificerModel: ObservableObject {
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
       mainScreenVoicePhrases = prefs.mainScreenVoicePhrases
+      mainScreenOffVoicePhrases = prefs.mainScreenOffVoicePhrases
       mobileBridgeEnabled = prefs.mobileBridge
       mobileTorEnabled = prefs.mobileTor
       mobileLanEnabled = prefs.mobileLan
@@ -2712,6 +2751,7 @@ private final class ArtificerModel: ObservableObject {
     let result = await runBackend("desktop-value-set", key, value)
     if let prefs = decode(DesktopPrefsResponse.self, from: result) {
       mainScreenVoicePhrases = prefs.mainScreenVoicePhrases
+      mainScreenOffVoicePhrases = prefs.mainScreenOffVoicePhrases
       statusMessage = "Voice commands saved."
       await loadVoiceAutomationStatus()
     }
@@ -2719,11 +2759,13 @@ private final class ArtificerModel: ObservableObject {
 
   func saveVoiceCommandPhrases() async {
     let trimmed = mainScreenVoicePhrases.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else {
-      statusMessage = "Add at least one voice phrase."
+    let offTrimmed = mainScreenOffVoicePhrases.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, !offTrimmed.isEmpty else {
+      statusMessage = "Add at least one on phrase and one off phrase."
       return
     }
     await setDesktopValue("voice_main_screen_phrases", value: trimmed)
+    await setDesktopValue("voice_main_screen_off_phrases", value: offTrimmed)
   }
 
   func loadMobileStatus() async {
@@ -3721,6 +3763,7 @@ private struct DesktopPrefsResponse: Decodable {
   let voiceLlmPrompts: Bool
   let voiceLlmActions: Bool
   let mainScreenVoicePhrases: String
+  let mainScreenOffVoicePhrases: String
   let mobileBridge: Bool
   let mobileTor: Bool
   let mobileLan: Bool
@@ -3735,6 +3778,7 @@ private struct DesktopPrefsResponse: Decodable {
     case voiceLlmPrompts = "voice_automation_llm_prompts"
     case voiceLlmActions = "voice_automation_llm_actions"
     case mainScreenVoicePhrases = "voice_main_screen_phrases"
+    case mainScreenOffVoicePhrases = "voice_main_screen_off_phrases"
     case mobileBridge = "mobile_bridge"
     case mobileTor = "mobile_tor"
     case mobileLan = "mobile_lan"
@@ -3751,6 +3795,7 @@ private struct DesktopPrefsResponse: Decodable {
     voiceLlmPrompts = container.decodeFlexibleBool(forKey: .voiceLlmPrompts)
     voiceLlmActions = container.decodeFlexibleBool(forKey: .voiceLlmActions)
     mainScreenVoicePhrases = (try? container.decode(String.self, forKey: .mainScreenVoicePhrases)) ?? "main screen turn on, main screen on, turn on main screen, turn main screen on"
+    mainScreenOffVoicePhrases = (try? container.decode(String.self, forKey: .mainScreenOffVoicePhrases)) ?? "main screen turn off, main screen off, turn off main screen, turn main screen off"
     mobileBridge = container.decodeFlexibleBool(forKey: .mobileBridge)
     mobileTor = container.decodeFlexibleBool(forKey: .mobileTor)
     mobileLan = container.decodeFlexibleBool(forKey: .mobileLan)

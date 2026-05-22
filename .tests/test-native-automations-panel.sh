@@ -44,6 +44,14 @@ for file in "$template" "$generated"; do
     printf '%s\n' "Native UI should load and save main-screen voice phrases: $file" >&2
     exit 1
   }
+  grep -q 'voice_main_screen_off_phrases' "$file" || {
+    printf '%s\n' "Native UI should load and save main-screen-off voice phrases: $file" >&2
+    exit 1
+  }
+  grep -q 'mainScreenOffVoicePhrases' "$file" || {
+    printf '%s\n' "Native UI should expose main-screen-off voice phrases: $file" >&2
+    exit 1
+  }
 done
 
 for file in "$template" "$generated" "$blueprint"; do
@@ -85,6 +93,11 @@ grep -q 'desktop-value-set KEY VALUE' "$backend" || {
 
 grep -q 'voice_main_screen_phrases' "$backend" || {
   printf '%s\n' "Native backend should persist main-screen voice phrases" >&2
+  exit 1
+}
+
+grep -q 'voice_main_screen_off_phrases' "$backend" || {
+  printf '%s\n' "Native backend should persist main-screen-off voice phrases" >&2
   exit 1
 }
 

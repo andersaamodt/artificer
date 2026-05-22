@@ -15,6 +15,7 @@ label="com.artificer.voice-automations"
 plist="$home/Library/LaunchAgents/$label.plist"
 log_file="$daemon_dir/voice-automations.log"
 default_main_screen_phrases='main screen turn on, main screen on, turn on main screen, turn main screen on'
+default_main_screen_off_phrases='main screen turn off, main screen off, turn off main screen, turn main screen off'
 
 usage() {
   cat <<'USAGE'
@@ -219,6 +220,17 @@ run_known_action() {
       return 0
     fi
     write_status error "main-screen-turn-on is not available." "$phrase" "main-screen-turn-on"
+    return 1
+  fi
+  main_screen_off_phrases=$(pref_text voice_main_screen_off_phrases)
+  [ -n "$main_screen_off_phrases" ] || main_screen_off_phrases=$default_main_screen_off_phrases
+  if phrase_in_list "$phrase" "$main_screen_off_phrases"; then
+    if command -v main-screen-turn-off >/dev/null 2>&1; then
+      main-screen-turn-off >/dev/null 2>&1
+      write_status triggered "Turned off the main screen." "$phrase" "main-screen-turn-off"
+      return 0
+    fi
+    write_status error "main-screen-turn-off is not available." "$phrase" "main-screen-turn-off"
     return 1
   fi
   return 2
