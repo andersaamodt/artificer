@@ -1146,6 +1146,7 @@ private struct SettingsView: View {
 
 private struct GeneralPreferencesTab: View {
   @ObservedObject var model: ArtificerModel
+  @State private var pendingUninstallModel = ""
 
   var body: some View {
     PreferencesPane {
@@ -1175,6 +1176,77 @@ private struct GeneralPreferencesTab: View {
             Task { await model.saveLlmRuntimeSettings(smartTitles: nextValue) }
           }
         ))
+        if !model.modelInstallMessage.isEmpty {
+          Text(model.modelInstallMessage)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Installed")
+            .font(.subheadline.weight(.semibold))
+          if model.installedModels.isEmpty {
+            Text("No local models installed.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          } else {
+            ForEach(model.installedModels, id: \.self) { modelName in
+              HStack(alignment: .firstTextBaseline, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(modelName)
+                    .font(.body)
+                    .textSelection(.enabled)
+                  if let entry = model.catalogEntry(named: modelName), !entry.description.isEmpty {
+                    Text(entry.description)
+                      .font(.caption)
+                      .foregroundStyle(.secondary)
+                      .fixedSize(horizontal: false, vertical: true)
+                  }
+                }
+                Spacer(minLength: 12)
+                if modelName == model.selectedDefaultModel || (model.selectedDefaultModel.isEmpty && modelName == model.health?.defaultModel) {
+                  Text("Default")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } else {
+                  Button("Make Default") {
+                    Task { await model.saveLlmRuntimeSettings(defaultModel: modelName) }
+                  }
+                }
+                Button(pendingUninstallModel == modelName ? "Confirm Uninstall" : "Uninstall") {
+                  if pendingUninstallModel == modelName {
+                    pendingUninstallModel = ""
+                    Task { await model.uninstallModel(modelName) }
+                  } else {
+                    pendingUninstallModel = modelName
+                  }
+                }
+              }
+              .buttonStyle(.bordered)
+            }
+          }
+        }
+        VStack(alignment: .leading, spacing: 8) {
+          HStack {
+            Text("Install")
+              .font(.subheadline.weight(.semibold))
+            Button("Refresh") { Task { await model.loadModelData() } }
+              .buttonStyle(.bordered)
+          }
+          let installable = model.installableCatalogEntries
+          if installable.isEmpty {
+            Text("No additional curated models are available right now.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          } else {
+            ForEach(installable) { entry in
+              ModelCatalogRow(model: model, entry: entry)
+            }
+          }
+        }
+        if let job = model.modelInstallJob {
+          ModelInstallStatusView(job: job, log: model.modelInstallLog)
+        }
       }
       PreferencesSection("Dictation") {
         if let status = model.dictationStatus {
@@ -1245,6 +1317,68 @@ private struct GeneralPreferencesTab: View {
         .buttonStyle(.bordered)
       }
     }
+  }
+}
+
+private struct ModelCatalogRow: View {
+  @ObservedObject var model: ArtificerModel
+  let entry: ModelCatalogEntry
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 10) {
+      VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 6) {
+          Text(entry.name)
+            .font(.body)
+            .textSelection(.enabled)
+          if !entry.sizeLabel.isEmpty {
+            Text(entry.sizeLabel)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
+        if !entry.description.isEmpty {
+          Text(entry.description)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      Spacer(minLength: 12)
+      Button(model.installLabel(for: entry.name)) {
+        Task { await model.installModel(entry.name) }
+      }
+      .buttonStyle(.borderedProminent)
+      .disabled(model.isInstallingModel(entry.name))
+    }
+  }
+}
+
+private struct ModelInstallStatusView: View {
+  let job: ModelInstallJob
+  let log: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 8) {
+        Text("\(job.model) \(job.statusLabel)")
+          .font(.subheadline.weight(.semibold))
+        if let progress = job.progressFraction {
+          ProgressView(value: progress, total: 1)
+            .frame(width: 120)
+        }
+      }
+      if !log.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        ScrollView {
+          Text(log)
+            .font(.system(.caption, design: .monospaced))
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxHeight: 120)
+      }
+    }
+    .padding(.top, 4)
   }
 }
 
@@ -1340,24 +1474,96 @@ private struct SelfImprovePreferencesTab: View {
 
   var body: some View {
     PreferencesPane {
-      PreferencesSection("Self-improvement") {
+      PreferencesSection("Self-improve Match") {
+        Picker("Primary model", selection: $model.selfImproveSelectedModel) {
+          if model.installedModels.isEmpty {
+            Text("No installed models").tag("")
+          } else {
+            ForEach(model.installedModels, id: \.self) { modelName in
+              Text(modelName).tag(modelName)
+            }
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 280, alignment: .leading)
+        Toggle("Run challenger lane", isOn: Binding(
+          get: { model.selfImproveCompetitionEnabled },
+          set: { nextValue in
+            Task { await model.saveSelfImproveOptions(competitionEnabled: nextValue) }
+          }
+        ))
+        Picker("Challenger", selection: Binding(
+          get: { model.selfImproveChallengerModel },
+          set: { nextValue in
+            Task { await model.saveSelfImproveOptions(challengerModel: nextValue) }
+          }
+        )) {
+          Text("Auto challenger").tag("")
+          ForEach(model.installedModels, id: \.self) { modelName in
+            Text(modelName).tag(modelName)
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 280, alignment: .leading)
+        .disabled(!model.selfImproveCompetitionEnabled)
+        TextEditor(text: $model.selfImproveObjective)
+          .font(.body)
+          .frame(minHeight: 72, maxHeight: 110)
+          .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+        HStack {
+          Button("Save Options") { Task { await model.saveSelfImproveOptions() } }
+          Button(model.isSelfImproveRunning ? "Running..." : (model.selfImproveCompetitionEnabled ? "Run Match" : "Run Self-improve")) {
+            Task { await model.runSelfImprove() }
+          }
+          .buttonStyle(.borderedProminent)
+          .disabled(model.isSelfImproveRunning || model.selfImproveSelectedModel.isEmpty)
+          Button("Refresh") { Task { await model.loadSelfImproveSettings() } }
+        }
+        .buttonStyle(.bordered)
+        if !model.selfImproveStatus.isEmpty {
+          Text(model.selfImproveStatus)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        if !model.selfImproveSummary.isEmpty {
+          Text(model.selfImproveSummary)
+            .font(.footnote)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        if model.selfImprovePluginCount > 0 {
+          Text("Active plugins: \(model.selfImprovePluginCount)")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+      }
+      PreferencesSection("Evidence Sources") {
         Toggle("Codex Desktop work checks", isOn: Binding(
           get: { model.codexWorkCheckEnabled },
           set: { nextValue in
-            Task { await model.setCodexWorkCheckEnabled(nextValue) }
+            Task { await model.saveSelfImproveOptions(codexWorkCheckEnabled: nextValue) }
           }
         ))
-        Text(model.codexWorkCheckEnabled ? "Self-improvement runs can ask Codex Desktop to check failed or low-quality work." : "Codex Desktop work checks are off.")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      PreferencesSection("Evidence Sources") {
-        Toggle("Papers", isOn: .constant(true)).disabled(true)
-        Toggle("Web signals", isOn: .constant(true)).disabled(true)
-        Toggle("Runtime telemetry", isOn: .constant(true)).disabled(true)
-        Toggle("Repo signals", isOn: .constant(true)).disabled(true)
-        Toggle("Platform checks", isOn: .constant(true)).disabled(true)
+        Toggle("Papers", isOn: Binding(
+          get: { model.selfImproveSourcePapers },
+          set: { nextValue in Task { await model.saveSelfImproveOptions(sourcePapers: nextValue) } }
+        ))
+        Toggle("Web signals", isOn: Binding(
+          get: { model.selfImproveSourceWeb },
+          set: { nextValue in Task { await model.saveSelfImproveOptions(sourceWeb: nextValue) } }
+        ))
+        Toggle("Runtime telemetry", isOn: Binding(
+          get: { model.selfImproveSourceRuntime },
+          set: { nextValue in Task { await model.saveSelfImproveOptions(sourceRuntime: nextValue) } }
+        ))
+        Toggle("Repo signals", isOn: Binding(
+          get: { model.selfImproveSourceRepo },
+          set: { nextValue in Task { await model.saveSelfImproveOptions(sourceRepo: nextValue) } }
+        ))
+        Toggle("Platform checks", isOn: Binding(
+          get: { model.selfImproveSourcePlatform },
+          set: { nextValue in Task { await model.saveSelfImproveOptions(sourcePlatform: nextValue) } }
+        ))
       }
     }
   }
@@ -1593,6 +1799,19 @@ private final class ArtificerModel: ObservableObject {
   @Published var dictationInstallMessage = ""
   @Published var isDictationInstalling = false
   @Published var codexWorkCheckEnabled = false
+  @Published var selfImproveObjective = ""
+  @Published var selfImproveSelectedModel = ""
+  @Published var selfImproveChallengerModel = ""
+  @Published var selfImproveCompetitionEnabled = true
+  @Published var selfImproveSourcePapers = true
+  @Published var selfImproveSourceWeb = true
+  @Published var selfImproveSourceRuntime = true
+  @Published var selfImproveSourceRepo = true
+  @Published var selfImproveSourcePlatform = true
+  @Published var selfImproveStatus = ""
+  @Published var selfImproveSummary = ""
+  @Published var selfImprovePluginCount = 0
+  @Published var isSelfImproveRunning = false
   @Published var menuBarIconEnabled = false
   @Published var voiceAutomationsEnabled = false
   @Published var voiceLlmPromptsEnabled = false
@@ -1605,6 +1824,10 @@ private final class ArtificerModel: ObservableObject {
   @Published var mobileAllowSelfActuation = false
   @Published var mobileStatus: MobileBridgeStatus?
   @Published var installedModels: [String] = []
+  @Published var modelCatalog: [ModelCatalogEntry] = []
+  @Published var modelInstallJob: ModelInstallJob?
+  @Published var modelInstallLog = ""
+  @Published var modelInstallMessage = ""
   @Published var llmUseGpu = true
   @Published var selectedDefaultModel = ""
   @Published var smartConversationTitles = true
@@ -1646,6 +1869,12 @@ private final class ArtificerModel: ObservableObject {
   let commandExecModes = ["ask-some", "all", "none"]
   let permissionModes = ["default", "ask", "never"]
   let dictationShortcutOptions = ["none", "space", "right-option", "left-option", "right-command", "left-command", "mouse-back", "mouse-forward", "mouse-wheel-click"]
+
+  var installableCatalogEntries: [ModelCatalogEntry] {
+    modelCatalog.filter { entry in
+      !installedModels.contains(entry.name)
+    }
+  }
 
   var selectedProject: Project? {
     projects.first { $0.id == selectedProjectID }
@@ -1710,7 +1939,7 @@ private final class ArtificerModel: ObservableObject {
 
   func refreshAll() async {
     await loadHealth()
-    await loadModels()
+    await loadModelData()
     await loadLlmRuntimeSettings()
     await loadProjects()
     await loadDaemonStatus()
@@ -1726,7 +1955,7 @@ private final class ArtificerModel: ObservableObject {
 
   func loadPreferences() async {
     await loadHealth()
-    await loadModels()
+    await loadModelData()
     await loadLlmRuntimeSettings()
     await loadDaemonStatus()
     await loadDesktopPrefs()
@@ -1761,6 +1990,83 @@ private final class ArtificerModel: ObservableObject {
     let result = await runBackend("models", trackBusy: false)
     if let response = decode(ModelsResponse.self, from: result) {
       installedModels = response.models
+    }
+  }
+
+  func loadModelCatalog() async {
+    let result = await runBackend("model-catalog", trackBusy: false)
+    if let response = decode(ModelCatalogResponse.self, from: result) {
+      modelCatalog = response.available
+      if let running = response.installs.first(where: { $0.status == "running" }) {
+        modelInstallJob = running
+        modelInstallMessage = running.statusLabel
+      }
+    }
+  }
+
+  func loadModelData() async {
+    await loadModels()
+    await loadModelCatalog()
+  }
+
+  func catalogEntry(named modelName: String) -> ModelCatalogEntry? {
+    modelCatalog.first { $0.name == modelName }
+  }
+
+  func isInstallingModel(_ modelName: String) -> Bool {
+    modelInstallJob?.model == modelName && modelInstallJob?.status == "running"
+  }
+
+  func installLabel(for modelName: String) -> String {
+    guard let job = modelInstallJob, job.model == modelName else { return "Install" }
+    return job.status == "running" ? job.statusLabel : "Retry"
+  }
+
+  func installModel(_ modelName: String) async {
+    modelInstallMessage = "Starting install for \(modelName)..."
+    let result = await runBackend("model-install-start", modelName)
+    guard let response = decode(ModelInstallStartResponse.self, from: result), response.success else {
+      modelInstallMessage = "Model install failed to start."
+      return
+    }
+    modelInstallJob = response.job
+    modelInstallLog = ""
+    modelInstallMessage = response.job.statusLabel
+    await pollModelInstall(jobID: response.job.id)
+  }
+
+  func pollModelInstall(jobID: String) async {
+    guard !jobID.isEmpty else { return }
+    for _ in 0..<240 {
+      let result = await runBackend("model-install-status", jobID, trackBusy: false)
+      guard let response = decode(ModelInstallStatusResponse.self, from: result), response.success else {
+        modelInstallMessage = "Model install status is unavailable."
+        return
+      }
+      modelInstallJob = response.job
+      modelInstallLog = response.job.log
+      modelInstallMessage = response.job.statusLabel
+      if response.job.status == "done" || response.job.status == "failed" {
+        await loadModelData()
+        await loadHealth()
+        return
+      }
+      try? await Task.sleep(nanoseconds: 1_200_000_000)
+    }
+  }
+
+  func uninstallModel(_ modelName: String) async {
+    modelInstallMessage = "Uninstalling \(modelName)..."
+    let result = await runBackend("model-uninstall", modelName)
+    if decode(GenericSuccessResponse.self, from: result) != nil {
+      if selectedDefaultModel == modelName {
+        selectedDefaultModel = ""
+      }
+      await loadModelData()
+      await loadHealth()
+      modelInstallMessage = "Uninstalled \(modelName)."
+    } else {
+      modelInstallMessage = "Model uninstall failed."
     }
   }
 
@@ -2366,14 +2672,109 @@ private final class ArtificerModel: ObservableObject {
   func loadSelfImproveSettings() async {
     let result = await runBackend("self-improve-settings", trackBusy: false)
     guard let response = decode(SelfImproveSettingsResponse.self, from: result) else { return }
-    codexWorkCheckEnabled = response.runOptions.codexWorkCheckEnabled
+    applySelfImproveResponse(response)
   }
 
   func setCodexWorkCheckEnabled(_ enabled: Bool) async {
     let result = await runBackend("self-improve-codex-work-check-set", enabled ? "1" : "0")
     guard let response = decode(SelfImproveRunOptionsResponse.self, from: result) else { return }
-    codexWorkCheckEnabled = response.runOptions.codexWorkCheckEnabled
+    applySelfImproveOptions(response.runOptions)
     statusMessage = codexWorkCheckEnabled ? "Codex work checks enabled." : "Codex work checks disabled."
+  }
+
+  func saveSelfImproveOptions(
+    objective: String? = nil,
+    competitionEnabled: Bool? = nil,
+    challengerModel: String? = nil,
+    codexWorkCheckEnabled nextCodexWorkCheckEnabled: Bool? = nil,
+    sourcePapers: Bool? = nil,
+    sourceWeb: Bool? = nil,
+    sourceRuntime: Bool? = nil,
+    sourceRepo: Bool? = nil,
+    sourcePlatform: Bool? = nil
+  ) async {
+    let nextObjective = objective ?? selfImproveObjective
+    let nextCompetition = competitionEnabled ?? selfImproveCompetitionEnabled
+    let nextChallenger = challengerModel ?? selfImproveChallengerModel
+    let nextCodex = nextCodexWorkCheckEnabled ?? codexWorkCheckEnabled
+    let nextPapers = sourcePapers ?? selfImproveSourcePapers
+    let nextWeb = sourceWeb ?? selfImproveSourceWeb
+    let nextRuntime = sourceRuntime ?? selfImproveSourceRuntime
+    let nextRepo = sourceRepo ?? selfImproveSourceRepo
+    let nextPlatform = sourcePlatform ?? selfImproveSourcePlatform
+    let result = await runBackend(
+      "self-improve-run-options-set",
+      nextObjective,
+      nextCompetition ? "1" : "0",
+      nextChallenger,
+      nextCodex ? "1" : "0",
+      nextPapers ? "1" : "0",
+      nextWeb ? "1" : "0",
+      nextRuntime ? "1" : "0",
+      nextRepo ? "1" : "0",
+      nextPlatform ? "1" : "0"
+    )
+    guard let response = decode(SelfImproveRunOptionsResponse.self, from: result) else { return }
+    applySelfImproveOptions(response.runOptions)
+    selfImproveStatus = "Self-improve options saved."
+  }
+
+  func runSelfImprove() async {
+    guard !selfImproveSelectedModel.isEmpty else { return }
+    isSelfImproveRunning = true
+    selfImproveStatus = selfImproveCompetitionEnabled ? "Running self-improve match..." : "Running self-improve..."
+    let result = await runBackend(
+      "self-improve-run",
+      selfImproveSelectedModel,
+      selfImproveObjective,
+      selfImproveCompetitionEnabled ? "1" : "0",
+      selfImproveChallengerModel,
+      codexWorkCheckEnabled ? "1" : "0",
+      selfImproveSourcePapers ? "1" : "0",
+      selfImproveSourceWeb ? "1" : "0",
+      selfImproveSourceRuntime ? "1" : "0",
+      selfImproveSourceRepo ? "1" : "0",
+      selfImproveSourcePlatform ? "1" : "0"
+    )
+    isSelfImproveRunning = false
+    guard let response = decode(SelfImproveRunResponse.self, from: result), response.success else {
+      selfImproveStatus = "Self-improve run failed."
+      return
+    }
+    applySelfImproveResponse(response)
+    selfImproveStatus = "Self-improve run completed."
+  }
+
+  private func applySelfImproveResponse(_ response: SelfImproveSettingsResponse) {
+    selfImproveSelectedModel = response.selectedModel.isEmpty ? (installedModels.first ?? "") : response.selectedModel
+    applySelfImproveOptions(response.runOptions)
+    selfImproveSummary = response.lastRun.summary
+    selfImprovePluginCount = response.pluginInventory.activeCount
+    if !response.lastRun.generatedAt.isEmpty {
+      selfImproveStatus = "Last run: \(response.lastRun.generatedAt)"
+    }
+  }
+
+  private func applySelfImproveResponse(_ response: SelfImproveRunResponse) {
+    selfImproveSelectedModel = response.selectedModel.isEmpty ? selfImproveSelectedModel : response.selectedModel
+    applySelfImproveOptions(response.runOptions)
+    selfImproveSummary = response.lastRun.summary
+    selfImprovePluginCount = response.pluginInventory.activeCount
+    if !response.lastRun.generatedAt.isEmpty {
+      selfImproveStatus = "Last run: \(response.lastRun.generatedAt)"
+    }
+  }
+
+  private func applySelfImproveOptions(_ options: SelfImproveRunOptions) {
+    selfImproveObjective = options.objective
+    selfImproveCompetitionEnabled = options.competitionEnabled
+    selfImproveChallengerModel = options.challengerModel
+    codexWorkCheckEnabled = options.codexWorkCheckEnabled
+    selfImproveSourcePapers = options.sources.papers
+    selfImproveSourceWeb = options.sources.web
+    selfImproveSourceRuntime = options.sources.runtime
+    selfImproveSourceRepo = options.sources.repo
+    selfImproveSourcePlatform = options.sources.platform
   }
 
   func loadGitRuntimeSettings() async {
@@ -2736,6 +3137,89 @@ private struct HealthResponse: Decodable {
 private struct ModelsResponse: Decodable {
   let success: Bool
   let models: [String]
+}
+
+private struct ModelCatalogResponse: Decodable {
+  let success: Bool
+  let available: [ModelCatalogEntry]
+  let installs: [ModelInstallJob]
+}
+
+private struct ModelCatalogEntry: Identifiable, Decodable, Hashable {
+  let id: String
+  let name: String
+  let description: String
+  let sizeGB: String
+  let contextK: String
+
+  enum CodingKeys: String, CodingKey {
+    case name, description
+    case sizeGB = "size_gb"
+    case contextK = "context_k"
+  }
+
+  var sizeLabel: String {
+    guard !sizeGB.isEmpty else { return "" }
+    return "\(sizeGB) GB"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    name = (try? container.decode(String.self, forKey: .name)) ?? ""
+    description = (try? container.decode(String.self, forKey: .description)) ?? ""
+    sizeGB = container.decodeFlexibleString(forKey: .sizeGB)
+    contextK = container.decodeFlexibleString(forKey: .contextK)
+    id = name
+  }
+}
+
+private struct ModelInstallStartResponse: Decodable {
+  let success: Bool
+  let job: ModelInstallJob
+}
+
+private struct ModelInstallStatusResponse: Decodable {
+  let success: Bool
+  let job: ModelInstallJob
+}
+
+private struct ModelInstallJob: Identifiable, Decodable, Hashable {
+  let id: String
+  let model: String
+  let status: String
+  let phase: String
+  let progressPct: String
+  let log: String
+
+  enum CodingKeys: String, CodingKey {
+    case id, model, status, phase, log
+    case progressPct = "progress_pct"
+  }
+
+  var progressFraction: Double? {
+    guard let value = Double(progressPct), value >= 0 else { return nil }
+    return min(value / 100, 1)
+  }
+
+  var statusLabel: String {
+    if status == "done" { return "installed" }
+    if status == "failed" { return "failed" }
+    if phase == "downloading", let progress = progressFraction {
+      return "downloading \(Int(progress * 100))%"
+    }
+    if !phase.isEmpty && phase != "running" { return phase }
+    return "installing"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? ""
+    model = (try? container.decode(String.self, forKey: .model)) ?? ""
+    status = (try? container.decode(String.self, forKey: .status)) ?? ""
+    phase = (try? container.decode(String.self, forKey: .phase)) ?? ""
+    progressPct = container.decodeFlexibleString(forKey: .progressPct)
+    log = (try? container.decode(String.self, forKey: .log)) ?? ""
+  }
 }
 
 private struct LlmRuntimeSettingsResponse: Decodable {
@@ -3351,11 +3835,51 @@ private struct GitRuntimeSettingsResponse: Decodable {
 
 private struct SelfImproveSettingsResponse: Decodable {
   let success: Bool
+  let selectedModel: String
   let runOptions: SelfImproveRunOptions
+  let lastRun: SelfImproveLastRun
+  let pluginInventory: SelfImprovePluginInventory
 
   enum CodingKeys: String, CodingKey {
     case success
+    case selectedModel = "selected_model"
     case runOptions = "run_options"
+    case lastRun = "last_run"
+    case pluginInventory = "plugin_inventory"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    selectedModel = (try? container.decode(String.self, forKey: .selectedModel)) ?? ""
+    runOptions = (try? container.decode(SelfImproveRunOptions.self, forKey: .runOptions)) ?? SelfImproveRunOptions()
+    lastRun = (try? container.decode(SelfImproveLastRun.self, forKey: .lastRun)) ?? SelfImproveLastRun()
+    pluginInventory = (try? container.decode(SelfImprovePluginInventory.self, forKey: .pluginInventory)) ?? SelfImprovePluginInventory()
+  }
+}
+
+private struct SelfImproveRunResponse: Decodable {
+  let success: Bool
+  let selectedModel: String
+  let runOptions: SelfImproveRunOptions
+  let lastRun: SelfImproveLastRun
+  let pluginInventory: SelfImprovePluginInventory
+
+  enum CodingKeys: String, CodingKey {
+    case success
+    case selectedModel = "selected_model"
+    case runOptions = "run_options"
+    case lastRun = "last_run"
+    case pluginInventory = "plugin_inventory"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    selectedModel = (try? container.decode(String.self, forKey: .selectedModel)) ?? ""
+    runOptions = (try? container.decode(SelfImproveRunOptions.self, forKey: .runOptions)) ?? SelfImproveRunOptions()
+    lastRun = (try? container.decode(SelfImproveLastRun.self, forKey: .lastRun)) ?? SelfImproveLastRun()
+    pluginInventory = (try? container.decode(SelfImprovePluginInventory.self, forKey: .pluginInventory)) ?? SelfImprovePluginInventory()
   }
 }
 
@@ -3370,15 +3894,108 @@ private struct SelfImproveRunOptionsResponse: Decodable {
 }
 
 private struct SelfImproveRunOptions: Decodable {
+  let objective: String
+  let competitionEnabled: Bool
+  let challengerModel: String
   let codexWorkCheckEnabled: Bool
+  let sources: SelfImproveSources
 
   enum CodingKeys: String, CodingKey {
+    case objective
+    case competitionEnabled = "competition_enabled"
+    case challengerModel = "challenger_model"
     case codexWorkCheckEnabled = "codex_work_check_enabled"
+    case sources
+  }
+
+  init(
+    objective: String = "",
+    competitionEnabled: Bool = true,
+    challengerModel: String = "",
+    codexWorkCheckEnabled: Bool = false,
+    sources: SelfImproveSources = SelfImproveSources()
+  ) {
+    self.objective = objective
+    self.competitionEnabled = competitionEnabled
+    self.challengerModel = challengerModel
+    self.codexWorkCheckEnabled = codexWorkCheckEnabled
+    self.sources = sources
   }
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
+    objective = (try? container.decode(String.self, forKey: .objective)) ?? ""
+    competitionEnabled = container.decodeFlexibleBool(forKey: .competitionEnabled)
+    challengerModel = (try? container.decode(String.self, forKey: .challengerModel)) ?? ""
     codexWorkCheckEnabled = container.decodeFlexibleBool(forKey: .codexWorkCheckEnabled)
+    sources = (try? container.decode(SelfImproveSources.self, forKey: .sources)) ?? SelfImproveSources()
+  }
+}
+
+private struct SelfImproveSources: Decodable {
+  let papers: Bool
+  let web: Bool
+  let runtime: Bool
+  let repo: Bool
+  let platform: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case papers, web, runtime, repo, platform
+  }
+
+  init(papers: Bool = true, web: Bool = true, runtime: Bool = true, repo: Bool = true, platform: Bool = true) {
+    self.papers = papers
+    self.web = web
+    self.runtime = runtime
+    self.repo = repo
+    self.platform = platform
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    papers = container.decodeFlexibleBool(forKey: .papers)
+    web = container.decodeFlexibleBool(forKey: .web)
+    runtime = container.decodeFlexibleBool(forKey: .runtime)
+    repo = container.decodeFlexibleBool(forKey: .repo)
+    platform = container.decodeFlexibleBool(forKey: .platform)
+  }
+}
+
+private struct SelfImproveLastRun: Decodable {
+  let summary: String
+  let generatedAt: String
+
+  enum CodingKeys: String, CodingKey {
+    case summary
+    case generatedAt = "generated_at"
+  }
+
+  init(summary: String = "", generatedAt: String = "") {
+    self.summary = summary
+    self.generatedAt = generatedAt
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    summary = (try? container.decode(String.self, forKey: .summary)) ?? ""
+    generatedAt = (try? container.decode(String.self, forKey: .generatedAt)) ?? ""
+  }
+}
+
+private struct SelfImprovePluginInventory: Decodable {
+  let activeCount: Int
+
+  enum CodingKeys: String, CodingKey {
+    case activeCount = "active_count"
+  }
+
+  init(activeCount: Int = 0) {
+    self.activeCount = activeCount
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    activeCount = container.decodeFlexibleInt(forKey: .activeCount)
   }
 }
 
@@ -3490,6 +4107,14 @@ private func desktopLaunchBool(_ value: String) -> Bool {
 }
 
 private extension KeyedDecodingContainer {
+  func decodeFlexibleString(forKey key: Key) -> String {
+    if let value = try? decode(String.self, forKey: key) { return value }
+    if let value = try? decode(Int.self, forKey: key) { return String(value) }
+    if let value = try? decode(Double.self, forKey: key) { return String(value) }
+    if let value = try? decode(Bool.self, forKey: key) { return value ? "1" : "0" }
+    return ""
+  }
+
   func decodeFlexibleInt(forKey key: Key) -> Int {
     if let value = try? decode(Int.self, forKey: key) { return value }
     if let value = try? decode(String.self, forKey: key), let intValue = Int(value) { return intValue }

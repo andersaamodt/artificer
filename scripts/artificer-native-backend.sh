@@ -46,11 +46,17 @@ Actions:
   dictation-stop SESSION_ID
   self-improve-settings
   self-improve-codex-work-check-set ENABLED
+  self-improve-run-options-set OBJECTIVE COMPETITION_ENABLED CHALLENGER_MODEL CODEX_WORK_CHECK SOURCE_PAPERS SOURCE_WEB SOURCE_RUNTIME SOURCE_REPO SOURCE_PLATFORM
+  self-improve-run MODEL OBJECTIVE COMPETITION_ENABLED CHALLENGER_MODEL CODEX_WORK_CHECK SOURCE_PAPERS SOURCE_WEB SOURCE_RUNTIME SOURCE_REPO SOURCE_PLATFORM
   automations
   automation-upsert WORKSPACE_ID CONVERSATION_ID NAME PROMPT SCHEDULE_KIND SCHEDULE_VALUE ENABLED ALLOW_SELF_RESCHEDULE RUN_MODE COMPUTE_BUDGET COMMAND_EXEC_MODE PERMISSION_MODE PROGRAMMER_REVIEW PROGRAMMER_REVIEW_ROUNDS NEXT_RUN
   automation-run AUTOMATION_ID
   automation-toggle AUTOMATION_ID ENABLED
   models
+  model-catalog
+  model-install-start MODEL
+  model-install-status JOB_ID
+  model-uninstall MODEL
   llm-runtime-settings-get
   llm-runtime-settings-set USE_GPU DEFAULT_MODEL SMART_TITLES
   git-runtime-settings-get
@@ -789,6 +795,50 @@ case "$action" in
     esac
     api_post self_improve_run_options_set codex_work_check_enabled "$enabled_value"
     ;;
+  self-improve-run-options-set)
+    objective=${1-}
+    competition_enabled=${2:-1}
+    challenger_model=${3-}
+    codex_work_check_enabled=${4:-0}
+    source_papers=${5:-1}
+    source_web=${6:-1}
+    source_runtime=${7:-1}
+    source_repo=${8:-1}
+    source_platform=${9:-1}
+    api_post self_improve_run_options_set \
+      objective "$objective" \
+      competition_enabled "$competition_enabled" \
+      challenger_model "$challenger_model" \
+      codex_work_check_enabled "$codex_work_check_enabled" \
+      source_papers "$source_papers" \
+      source_web "$source_web" \
+      source_runtime "$source_runtime" \
+      source_repo "$source_repo" \
+      source_platform "$source_platform"
+    ;;
+  self-improve-run)
+    model_name=${1-}
+    objective=${2-}
+    competition_enabled=${3:-1}
+    challenger_model=${4-}
+    codex_work_check_enabled=${5:-0}
+    source_papers=${6:-1}
+    source_web=${7:-1}
+    source_runtime=${8:-1}
+    source_repo=${9:-1}
+    source_platform=${10:-1}
+    api_post self_improve_run \
+      model "$model_name" \
+      objective "$objective" \
+      competition_enabled "$competition_enabled" \
+      challenger_model "$challenger_model" \
+      codex_work_check_enabled "$codex_work_check_enabled" \
+      source_papers "$source_papers" \
+      source_web "$source_web" \
+      source_runtime "$source_runtime" \
+      source_repo "$source_repo" \
+      source_platform "$source_platform"
+    ;;
   automations)
     runtime_client automation list
     ;;
@@ -859,6 +909,21 @@ case "$action" in
     ;;
   models)
     api_get models
+    ;;
+  model-catalog)
+    api_get model_catalog
+    ;;
+  model-install-start)
+    model_name=${1-}
+    api_post model_install_start model "$model_name"
+    ;;
+  model-install-status)
+    job_id=${1-}
+    api_get model_install_status job_id "$job_id"
+    ;;
+  model-uninstall)
+    model_name=${1-}
+    api_post model_uninstall model "$model_name"
     ;;
   llm-runtime-settings-get)
     api_get llm_runtime_settings_get
