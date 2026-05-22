@@ -801,8 +801,17 @@ private struct VoiceCommandsOverviewPane: View {
       Text("Local phrases can trigger allowlisted actions even when push-to-talk is not active.")
         .font(.caption)
         .foregroundStyle(.secondary)
-      VoicePhraseSummary(title: "Main screen on", phrases: model.mainScreenVoicePhrases)
-      VoicePhraseSummary(title: "Main screen off", phrases: model.mainScreenOffVoicePhrases)
+      if model.hasVoiceLocalAction1 {
+        VoicePhraseSummary(title: model.voiceLocalAction1Name, phrases: model.voiceLocalAction1Phrases)
+      }
+      if model.hasVoiceLocalAction2 {
+        VoicePhraseSummary(title: model.voiceLocalAction2Name, phrases: model.voiceLocalAction2Phrases)
+      }
+      if !model.hasVoiceLocalAction1 && !model.hasVoiceLocalAction2 {
+        Text("No local voice actions configured.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
       if model.voiceLlmPromptsEnabled {
         VoicePhraseSummary(title: "Ask Artificer", phrases: "artificer summarize this thread, ask artificer check the build")
       }
@@ -1531,26 +1540,23 @@ private struct AutomationsPreferencesTab: View {
           Text("Separate phrases with commas. Matching ignores case and punctuation.")
             .font(.caption)
             .foregroundStyle(.secondary)
-          VoiceCommandPhraseEditor(
-            title: "Main screen on",
-            placeholder: "main screen turn on, main screen on",
-            phrases: $model.mainScreenVoicePhrases
-          ) {
-            Task { await model.saveVoiceCommandPhrases() }
-          }
-          VoiceCommandPhraseEditor(
-            title: "Main screen off",
-            placeholder: "main screen turn off, main screen off",
-            phrases: $model.mainScreenOffVoicePhrases
-          ) {
-            Task { await model.saveVoiceCommandPhrases() }
-          }
-          Button("Save Phrases") {
+          VoiceLocalActionEditor(
+            title: "Local action 1",
+            name: $model.voiceLocalAction1Name,
+            command: $model.voiceLocalAction1Command,
+            phrases: $model.voiceLocalAction1Phrases
+          )
+          VoiceLocalActionEditor(
+            title: "Local action 2",
+            name: $model.voiceLocalAction2Name,
+            command: $model.voiceLocalAction2Command,
+            phrases: $model.voiceLocalAction2Phrases
+          )
+          Button("Save Local Actions") {
             Task { await model.saveVoiceCommandPhrases() }
           }
           .disabled(!model.canSaveVoiceCommandPhrases)
-          VoiceCommandExampleRow(title: "Main screen on", example: model.mainScreenVoicePhrases)
-          VoiceCommandExampleRow(title: "Main screen off", example: model.mainScreenOffVoicePhrases)
+          VoiceCommandExampleRow(title: "Local action", example: "Set a name, shell command, and comma-separated phrases.")
           VoiceCommandExampleRow(title: "Ask Artificer", example: "artificer summarize this thread, ask artificer check the build")
           VoiceCommandExampleRow(title: "Action prompt", example: "hey artificer turn this into a pull request")
         }
@@ -1751,22 +1757,28 @@ private struct RuntimePreferencesTab: View {
   }
 }
 
-private struct VoiceCommandPhraseEditor: View {
+private struct VoiceLocalActionEditor: View {
   let title: String
-  let placeholder: String
+  @Binding var name: String
+  @Binding var command: String
   @Binding var phrases: String
-  let save: () -> Void
 
   var body: some View {
-    HStack(spacing: 8) {
+    VStack(alignment: .leading, spacing: 6) {
       Text(title)
         .font(.caption)
         .foregroundStyle(.secondary)
-        .frame(width: 112, alignment: .leading)
-      TextField(placeholder, text: $phrases)
+      HStack(spacing: 8) {
+        TextField("Name", text: $name)
+          .textFieldStyle(.roundedBorder)
+          .frame(maxWidth: 180)
+        TextField("Command", text: $command)
+          .textFieldStyle(.roundedBorder)
+          .frame(maxWidth: 280)
+      }
+      TextField("Phrases", text: $phrases)
         .textFieldStyle(.roundedBorder)
-        .frame(maxWidth: 460)
-        .onSubmit(save)
+        .frame(maxWidth: 468)
     }
   }
 }
@@ -1998,8 +2010,12 @@ private final class ArtificerModel: ObservableObject {
   @Published var voiceAutomationsEnabled = false
   @Published var voiceLlmPromptsEnabled = false
   @Published var voiceLlmActionsEnabled = false
-  @Published var mainScreenVoicePhrases = "main screen turn on, main screen on, turn on main screen, turn main screen on"
-  @Published var mainScreenOffVoicePhrases = "main screen turn off, main screen off, turn off main screen, turn main screen off"
+  @Published var voiceLocalAction1Name = ""
+  @Published var voiceLocalAction1Command = ""
+  @Published var voiceLocalAction1Phrases = ""
+  @Published var voiceLocalAction2Name = ""
+  @Published var voiceLocalAction2Command = ""
+  @Published var voiceLocalAction2Phrases = ""
   @Published var voiceAutomationStatus: VoiceAutomationStatus?
   @Published var mobileBridgeEnabled = false
   @Published var mobileTorEnabled = false
@@ -2080,8 +2096,31 @@ private final class ArtificerModel: ObservableObject {
   }
 
   var canSaveVoiceCommandPhrases: Bool {
-    !mainScreenVoicePhrases.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-      !mainScreenOffVoicePhrases.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    voiceLocalActionIsComplete(name: voiceLocalAction1Name, command: voiceLocalAction1Command, phrases: voiceLocalAction1Phrases) &&
+      voiceLocalActionIsComplete(name: voiceLocalAction2Name, command: voiceLocalAction2Command, phrases: voiceLocalAction2Phrases)
+  }
+
+  var hasVoiceLocalAction1: Bool {
+    voiceLocalActionIsConfigured(name: voiceLocalAction1Name, command: voiceLocalAction1Command, phrases: voiceLocalAction1Phrases)
+  }
+
+  var hasVoiceLocalAction2: Bool {
+    voiceLocalActionIsConfigured(name: voiceLocalAction2Name, command: voiceLocalAction2Command, phrases: voiceLocalAction2Phrases)
+  }
+
+  private func voiceLocalActionIsConfigured(name: String, command: String, phrases: String) -> Bool {
+    !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+      !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+      !phrases.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  private func voiceLocalActionIsComplete(name: String, command: String, phrases: String) -> Bool {
+    if !voiceLocalActionIsConfigured(name: name, command: command, phrases: phrases) {
+      return true
+    }
+    return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+      !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+      !phrases.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
   var isSelectedSessionLoading: Bool {
@@ -2660,8 +2699,7 @@ private final class ArtificerModel: ObservableObject {
       voiceAutomationsEnabled = prefs.voiceAutomations
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
-      mainScreenVoicePhrases = prefs.mainScreenVoicePhrases
-      mainScreenOffVoicePhrases = prefs.mainScreenOffVoicePhrases
+      loadVoiceLocalActions(from: prefs)
       mobileBridgeEnabled = prefs.mobileBridge
       mobileTorEnabled = prefs.mobileTor
       mobileLanEnabled = prefs.mobileLan
@@ -2698,12 +2736,12 @@ private final class ArtificerModel: ObservableObject {
     if let value = prefs["voice_automation_llm_actions"] {
       voiceLlmActionsEnabled = desktopLaunchBool(value)
     }
-    if let value = prefs["voice_main_screen_phrases"], !value.isEmpty {
-      mainScreenVoicePhrases = value
-    }
-    if let value = prefs["voice_main_screen_off_phrases"], !value.isEmpty {
-      mainScreenOffVoicePhrases = value
-    }
+    voiceLocalAction1Name = prefs["voice_local_action_1_name"] ?? voiceLocalAction1Name
+    voiceLocalAction1Command = prefs["voice_local_action_1_command"] ?? voiceLocalAction1Command
+    voiceLocalAction1Phrases = prefs["voice_local_action_1_phrases"] ?? voiceLocalAction1Phrases
+    voiceLocalAction2Name = prefs["voice_local_action_2_name"] ?? voiceLocalAction2Name
+    voiceLocalAction2Command = prefs["voice_local_action_2_command"] ?? voiceLocalAction2Command
+    voiceLocalAction2Phrases = prefs["voice_local_action_2_phrases"] ?? voiceLocalAction2Phrases
     if let value = prefs["mobile_bridge"] {
       mobileBridgeEnabled = desktopLaunchBool(value)
     }
@@ -2728,8 +2766,7 @@ private final class ArtificerModel: ObservableObject {
       voiceAutomationsEnabled = prefs.voiceAutomations
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
-      mainScreenVoicePhrases = prefs.mainScreenVoicePhrases
-      mainScreenOffVoicePhrases = prefs.mainScreenOffVoicePhrases
+      loadVoiceLocalActions(from: prefs)
       mobileBridgeEnabled = prefs.mobileBridge
       mobileTorEnabled = prefs.mobileTor
       mobileLanEnabled = prefs.mobileLan
@@ -2750,22 +2787,32 @@ private final class ArtificerModel: ObservableObject {
   func setDesktopValue(_ key: String, value: String) async {
     let result = await runBackend("desktop-value-set", key, value)
     if let prefs = decode(DesktopPrefsResponse.self, from: result) {
-      mainScreenVoicePhrases = prefs.mainScreenVoicePhrases
-      mainScreenOffVoicePhrases = prefs.mainScreenOffVoicePhrases
+      loadVoiceLocalActions(from: prefs)
       statusMessage = "Voice commands saved."
       await loadVoiceAutomationStatus()
     }
   }
 
   func saveVoiceCommandPhrases() async {
-    let trimmed = mainScreenVoicePhrases.trimmingCharacters(in: .whitespacesAndNewlines)
-    let offTrimmed = mainScreenOffVoicePhrases.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty, !offTrimmed.isEmpty else {
-      statusMessage = "Add at least one on phrase and one off phrase."
+    guard canSaveVoiceCommandPhrases else {
+      statusMessage = "Each configured local action needs a name, command, and phrases."
       return
     }
-    await setDesktopValue("voice_main_screen_phrases", value: trimmed)
-    await setDesktopValue("voice_main_screen_off_phrases", value: offTrimmed)
+    await setDesktopValue("voice_local_action_1_name", value: voiceLocalAction1Name.trimmingCharacters(in: .whitespacesAndNewlines))
+    await setDesktopValue("voice_local_action_1_command", value: voiceLocalAction1Command.trimmingCharacters(in: .whitespacesAndNewlines))
+    await setDesktopValue("voice_local_action_1_phrases", value: voiceLocalAction1Phrases.trimmingCharacters(in: .whitespacesAndNewlines))
+    await setDesktopValue("voice_local_action_2_name", value: voiceLocalAction2Name.trimmingCharacters(in: .whitespacesAndNewlines))
+    await setDesktopValue("voice_local_action_2_command", value: voiceLocalAction2Command.trimmingCharacters(in: .whitespacesAndNewlines))
+    await setDesktopValue("voice_local_action_2_phrases", value: voiceLocalAction2Phrases.trimmingCharacters(in: .whitespacesAndNewlines))
+  }
+
+  private func loadVoiceLocalActions(from prefs: DesktopPrefsResponse) {
+    voiceLocalAction1Name = prefs.voiceLocalAction1Name
+    voiceLocalAction1Command = prefs.voiceLocalAction1Command
+    voiceLocalAction1Phrases = prefs.voiceLocalAction1Phrases
+    voiceLocalAction2Name = prefs.voiceLocalAction2Name
+    voiceLocalAction2Command = prefs.voiceLocalAction2Command
+    voiceLocalAction2Phrases = prefs.voiceLocalAction2Phrases
   }
 
   func loadMobileStatus() async {
@@ -3762,8 +3809,12 @@ private struct DesktopPrefsResponse: Decodable {
   let voiceAutomations: Bool
   let voiceLlmPrompts: Bool
   let voiceLlmActions: Bool
-  let mainScreenVoicePhrases: String
-  let mainScreenOffVoicePhrases: String
+  let voiceLocalAction1Name: String
+  let voiceLocalAction1Command: String
+  let voiceLocalAction1Phrases: String
+  let voiceLocalAction2Name: String
+  let voiceLocalAction2Command: String
+  let voiceLocalAction2Phrases: String
   let mobileBridge: Bool
   let mobileTor: Bool
   let mobileLan: Bool
@@ -3777,8 +3828,12 @@ private struct DesktopPrefsResponse: Decodable {
     case voiceAutomations = "voice_automations"
     case voiceLlmPrompts = "voice_automation_llm_prompts"
     case voiceLlmActions = "voice_automation_llm_actions"
-    case mainScreenVoicePhrases = "voice_main_screen_phrases"
-    case mainScreenOffVoicePhrases = "voice_main_screen_off_phrases"
+    case voiceLocalAction1Name = "voice_local_action_1_name"
+    case voiceLocalAction1Command = "voice_local_action_1_command"
+    case voiceLocalAction1Phrases = "voice_local_action_1_phrases"
+    case voiceLocalAction2Name = "voice_local_action_2_name"
+    case voiceLocalAction2Command = "voice_local_action_2_command"
+    case voiceLocalAction2Phrases = "voice_local_action_2_phrases"
     case mobileBridge = "mobile_bridge"
     case mobileTor = "mobile_tor"
     case mobileLan = "mobile_lan"
@@ -3794,8 +3849,12 @@ private struct DesktopPrefsResponse: Decodable {
     voiceAutomations = container.decodeFlexibleBool(forKey: .voiceAutomations)
     voiceLlmPrompts = container.decodeFlexibleBool(forKey: .voiceLlmPrompts)
     voiceLlmActions = container.decodeFlexibleBool(forKey: .voiceLlmActions)
-    mainScreenVoicePhrases = (try? container.decode(String.self, forKey: .mainScreenVoicePhrases)) ?? "main screen turn on, main screen on, turn on main screen, turn main screen on"
-    mainScreenOffVoicePhrases = (try? container.decode(String.self, forKey: .mainScreenOffVoicePhrases)) ?? "main screen turn off, main screen off, turn off main screen, turn main screen off"
+    voiceLocalAction1Name = (try? container.decode(String.self, forKey: .voiceLocalAction1Name)) ?? ""
+    voiceLocalAction1Command = (try? container.decode(String.self, forKey: .voiceLocalAction1Command)) ?? ""
+    voiceLocalAction1Phrases = (try? container.decode(String.self, forKey: .voiceLocalAction1Phrases)) ?? ""
+    voiceLocalAction2Name = (try? container.decode(String.self, forKey: .voiceLocalAction2Name)) ?? ""
+    voiceLocalAction2Command = (try? container.decode(String.self, forKey: .voiceLocalAction2Command)) ?? ""
+    voiceLocalAction2Phrases = (try? container.decode(String.self, forKey: .voiceLocalAction2Phrases)) ?? ""
     mobileBridge = container.decodeFlexibleBool(forKey: .mobileBridge)
     mobileTor = container.decodeFlexibleBool(forKey: .mobileTor)
     mobileLan = container.decodeFlexibleBool(forKey: .mobileLan)

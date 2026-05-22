@@ -7,6 +7,8 @@ generated="$root/generated/macos/Sources/App/App.swift"
 backend="$root/scripts/artificer-native-backend.sh"
 blueprint="$root/app-blueprint/app.ir.yaml"
 
+personal_display_pattern='main'' screen\|main-''screen'
+
 for file in "$template" "$generated"; do
   grep -q 'AutomationsDetailView(model: model)' "$file" || {
     printf '%s\n' "Automations should render in the main detail panel: $file" >&2
@@ -36,22 +38,26 @@ for file in "$template" "$generated"; do
     printf '%s\n' "Automations panel should point users to voice command editing: $file" >&2
     exit 1
   }
-  grep -q 'Save Phrases' "$file" || {
-    printf '%s\n' "Preferences should include a clear save control for voice phrases: $file" >&2
+  grep -q 'Save Local Actions' "$file" || {
+    printf '%s\n' "Preferences should include a clear save control for local voice actions: $file" >&2
     exit 1
   }
-  grep -q 'voice_main_screen_phrases' "$file" || {
-    printf '%s\n' "Native UI should load and save main-screen voice phrases: $file" >&2
+  grep -q 'voice_local_action_1_phrases' "$file" || {
+    printf '%s\n' "Native UI should load and save local action voice phrases: $file" >&2
     exit 1
   }
-  grep -q 'voice_main_screen_off_phrases' "$file" || {
-    printf '%s\n' "Native UI should load and save main-screen-off voice phrases: $file" >&2
+  grep -q 'voice_local_action_1_command' "$file" || {
+    printf '%s\n' "Native UI should load and save local action commands: $file" >&2
     exit 1
   }
-  grep -q 'mainScreenOffVoicePhrases' "$file" || {
-    printf '%s\n' "Native UI should expose main-screen-off voice phrases: $file" >&2
+  grep -q 'voiceLocalAction2Phrases' "$file" || {
+    printf '%s\n' "Native UI should expose a second local action slot: $file" >&2
     exit 1
   }
+  if grep -qi "$personal_display_pattern" "$file"; then
+    printf '%s\n' "Native voice automation UI must not hardcode personal display actions: $file" >&2
+    exit 1
+  fi
 done
 
 for file in "$template" "$generated" "$blueprint"; do
@@ -91,14 +97,19 @@ grep -q 'desktop-value-set KEY VALUE' "$backend" || {
   exit 1
 }
 
-grep -q 'voice_main_screen_phrases' "$backend" || {
-  printf '%s\n' "Native backend should persist main-screen voice phrases" >&2
+grep -q 'voice_local_action_1_phrases' "$backend" || {
+  printf '%s\n' "Native backend should persist local action phrases" >&2
   exit 1
 }
 
-grep -q 'voice_main_screen_off_phrases' "$backend" || {
-  printf '%s\n' "Native backend should persist main-screen-off voice phrases" >&2
+grep -q 'voice_local_action_1_command' "$backend" || {
+  printf '%s\n' "Native backend should persist local action commands" >&2
   exit 1
 }
+
+if grep -qi "$personal_display_pattern" "$backend" "$root/scripts/artificer-voice-automations.sh"; then
+  printf '%s\n' "Native backend/listener must not hardcode personal display actions" >&2
+  exit 1
+fi
 
 printf '%s\n' "ok native automations panel contract"

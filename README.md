@@ -129,9 +129,8 @@ Implemented natively:
   for launching, pausing, and checking due automations in the existing Artificer
   background runtime
 - voice automation Preferences and a local launchd-backed listener for
-  allowlisted phrases such as `main screen turn on` and `main screen turn off`,
-  with separate opt-ins for voice-to-Artificer prompts and voice-triggered
-  Artificer actions
+  user-configured local command phrases, with separate opt-ins for
+  voice-to-Artificer prompts and voice-triggered Artificer actions
 - Artificer Mobile as a native Android/iOS thin client, paired to this computer
   through the desktop Mobile bridge over localhost, explicit LAN exposure, or
   an optional Tor hidden service

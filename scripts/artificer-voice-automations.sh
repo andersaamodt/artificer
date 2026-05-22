@@ -14,8 +14,6 @@ lock_dir="$daemon_dir/tick.lock"
 label="com.artificer.voice-automations"
 plist="$home/Library/LaunchAgents/$label.plist"
 log_file="$daemon_dir/voice-automations.log"
-default_main_screen_phrases='main screen turn on, main screen on, turn on main screen, turn main screen on'
-default_main_screen_off_phrases='main screen turn off, main screen off, turn off main screen, turn main screen off'
 
 usage() {
   cat <<'USAGE'
@@ -211,28 +209,22 @@ disable_launchd() {
 
 run_known_action() {
   phrase=$1
-  main_screen_phrases=$(pref_text voice_main_screen_phrases)
-  [ -n "$main_screen_phrases" ] || main_screen_phrases=$default_main_screen_phrases
-  if phrase_in_list "$phrase" "$main_screen_phrases"; then
-    if command -v main-screen-turn-on >/dev/null 2>&1; then
-      main-screen-turn-on >/dev/null 2>&1
-      write_status triggered "Turned on the main screen." "$phrase" "main-screen-turn-on"
-      return 0
+  for slot in 1 2; do
+    name=$(pref_text "voice_local_action_${slot}_name")
+    command_text=$(pref_text "voice_local_action_${slot}_command")
+    phrases=$(pref_text "voice_local_action_${slot}_phrases")
+    [ -n "$command_text" ] || continue
+    [ -n "$phrases" ] || continue
+    [ -n "$name" ] || name="Local action $slot"
+    if phrase_in_list "$phrase" "$phrases"; then
+      if /bin/sh -c "$command_text" >/dev/null 2>&1; then
+        write_status triggered "Ran local action: $name." "$phrase" "$command_text"
+        return 0
+      fi
+      write_status error "Local action failed: $name." "$phrase" "$command_text"
+      return 1
     fi
-    write_status error "main-screen-turn-on is not available." "$phrase" "main-screen-turn-on"
-    return 1
-  fi
-  main_screen_off_phrases=$(pref_text voice_main_screen_off_phrases)
-  [ -n "$main_screen_off_phrases" ] || main_screen_off_phrases=$default_main_screen_off_phrases
-  if phrase_in_list "$phrase" "$main_screen_off_phrases"; then
-    if command -v main-screen-turn-off >/dev/null 2>&1; then
-      main-screen-turn-off >/dev/null 2>&1
-      write_status triggered "Turned off the main screen." "$phrase" "main-screen-turn-off"
-      return 0
-    fi
-    write_status error "main-screen-turn-off is not available." "$phrase" "main-screen-turn-off"
-    return 1
-  fi
+  done
   return 2
 }
 
