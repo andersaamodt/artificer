@@ -14,6 +14,12 @@ Actions:
   desktop-selection-set WORKSPACE_ID CONVERSATION_ID
   voice-automations-status
   voice-automations-tick
+  mobile-status
+  mobile-enable
+  mobile-disable
+  mobile-restart
+  mobile-install-tor
+  mobile-set KEY VALUE
   health
   projects
   project-add PATH NAME [COMMAND_EXEC_MODE]
@@ -26,6 +32,12 @@ Actions:
   session-run-next WORKSPACE_ID CONVERSATION_ID
   session-events WORKSPACE_ID CONVERSATION_ID [STREAM_SESSION] [OFFSET]
   dictation-status
+  dictation-language-get
+  dictation-language-set LANGUAGE
+  dictation-prewarm-get
+  dictation-prewarm-set ENABLED
+  dictation-shortcuts-get
+  dictation-shortcuts-set HOLD TOGGLE
   dictation-install-start
   dictation-install-status JOB_ID
   dictation-install-cancel JOB_ID
@@ -35,8 +47,14 @@ Actions:
   self-improve-settings
   self-improve-codex-work-check-set ENABLED
   automations
+  automation-upsert WORKSPACE_ID CONVERSATION_ID NAME PROMPT SCHEDULE_KIND SCHEDULE_VALUE ENABLED ALLOW_SELF_RESCHEDULE RUN_MODE COMPUTE_BUDGET COMMAND_EXEC_MODE PERMISSION_MODE PROGRAMMER_REVIEW PROGRAMMER_REVIEW_ROUNDS NEXT_RUN
   automation-run AUTOMATION_ID
   automation-toggle AUTOMATION_ID ENABLED
+  models
+  llm-runtime-settings-get
+  llm-runtime-settings-set USE_GPU DEFAULT_MODEL SMART_TITLES
+  git-runtime-settings-get
+  git-runtime-settings-set WORKFLOW_POLICY AMBIGUITY_POLICY
   automation-daemon-status
   automation-daemon-enable
   automation-daemon-pause
@@ -134,7 +152,7 @@ canonical_desktop_pref_key() {
   key=$1
   reject_line_breaks "$key" "desktop preference key"
   case "$key" in
-    background_mode|menu_bar_icon|voice_automations|voice_automation_llm_prompts|voice_automation_llm_actions)
+    background_mode|menu_bar_icon|voice_automations|voice_automation_llm_prompts|voice_automation_llm_actions|mobile_bridge|mobile_tor|mobile_lan|mobile_allow_execute|mobile_allow_self_actuation)
       printf '%s\n' "$key"
       ;;
     *)
@@ -211,17 +229,32 @@ desktop_prefs_json() {
   voice_automations=$(read_desktop_pref voice_automations 2>/dev/null || printf '%s\n' 0)
   voice_automation_llm_prompts=$(read_desktop_pref voice_automation_llm_prompts 2>/dev/null || printf '%s\n' 0)
   voice_automation_llm_actions=$(read_desktop_pref voice_automation_llm_actions 2>/dev/null || printf '%s\n' 0)
+  mobile_bridge=$(read_desktop_pref mobile_bridge 2>/dev/null || printf '%s\n' 0)
+  mobile_tor=$(read_desktop_pref mobile_tor 2>/dev/null || printf '%s\n' 0)
+  mobile_lan=$(read_desktop_pref mobile_lan 2>/dev/null || printf '%s\n' 0)
+  mobile_allow_execute=$(read_desktop_pref mobile_allow_execute 2>/dev/null || printf '%s\n' 0)
+  mobile_allow_self_actuation=$(read_desktop_pref mobile_allow_self_actuation 2>/dev/null || printf '%s\n' 0)
   background_mode=$(bool_pref_value "$background_mode" 2>/dev/null || printf '%s\n' 0)
   menu_bar_icon=$(bool_pref_value "$menu_bar_icon" 2>/dev/null || printf '%s\n' 0)
   voice_automations=$(bool_pref_value "$voice_automations" 2>/dev/null || printf '%s\n' 0)
   voice_automation_llm_prompts=$(bool_pref_value "$voice_automation_llm_prompts" 2>/dev/null || printf '%s\n' 0)
   voice_automation_llm_actions=$(bool_pref_value "$voice_automation_llm_actions" 2>/dev/null || printf '%s\n' 0)
-  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s}\n' \
+  mobile_bridge=$(bool_pref_value "$mobile_bridge" 2>/dev/null || printf '%s\n' 0)
+  mobile_tor=$(bool_pref_value "$mobile_tor" 2>/dev/null || printf '%s\n' 0)
+  mobile_lan=$(bool_pref_value "$mobile_lan" 2>/dev/null || printf '%s\n' 0)
+  mobile_allow_execute=$(bool_pref_value "$mobile_allow_execute" 2>/dev/null || printf '%s\n' 0)
+  mobile_allow_self_actuation=$(bool_pref_value "$mobile_allow_self_actuation" 2>/dev/null || printf '%s\n' 0)
+  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s,"mobile_bridge":%s,"mobile_tor":%s,"mobile_lan":%s,"mobile_allow_execute":%s,"mobile_allow_self_actuation":%s}\n' \
     "$([ "$background_mode" = 1 ] && printf true || printf false)" \
     "$([ "$menu_bar_icon" = 1 ] && printf true || printf false)" \
     "$([ "$voice_automations" = 1 ] && printf true || printf false)" \
     "$([ "$voice_automation_llm_prompts" = 1 ] && printf true || printf false)" \
-    "$([ "$voice_automation_llm_actions" = 1 ] && printf true || printf false)"
+    "$([ "$voice_automation_llm_actions" = 1 ] && printf true || printf false)" \
+    "$([ "$mobile_bridge" = 1 ] && printf true || printf false)" \
+    "$([ "$mobile_tor" = 1 ] && printf true || printf false)" \
+    "$([ "$mobile_lan" = 1 ] && printf true || printf false)" \
+    "$([ "$mobile_allow_execute" = 1 ] && printf true || printf false)" \
+    "$([ "$mobile_allow_self_actuation" = 1 ] && printf true || printf false)"
 }
 
 candidate_core_roots() {
@@ -269,6 +302,10 @@ automations_script() {
 
 voice_automations_script() {
   sh "$script_dir/artificer-voice-automations.sh" "$@"
+}
+
+mobile_bridge_script() {
+  sh "$script_dir/artificer-mobile-bridge.sh" "$@"
 }
 
 api_script() {
@@ -517,6 +554,41 @@ case "$action" in
       else
         voice_automations_script disable >/dev/null
       fi
+    elif [ "$key" = "mobile_bridge" ]; then
+      normalized_enabled=$(bool_pref_value "$enabled_value")
+      if [ "$normalized_enabled" = 1 ]; then
+        mobile_bridge_script enable >/dev/null
+      else
+        mobile_bridge_script disable >/dev/null
+      fi
+    elif [ "$key" = "mobile_tor" ]; then
+      normalized_enabled=$(bool_pref_value "$enabled_value")
+      mobile_bridge_script set tor_enabled "$normalized_enabled" >/dev/null
+      if [ "$normalized_enabled" = 1 ]; then
+        mobile_bridge_script restart >/dev/null
+      fi
+    elif [ "$key" = "mobile_lan" ]; then
+      normalized_enabled=$(bool_pref_value "$enabled_value")
+      if [ "$normalized_enabled" = 1 ]; then
+        mobile_bridge_script set bind_host 0.0.0.0 >/dev/null
+      else
+        mobile_bridge_script set bind_host 127.0.0.1 >/dev/null
+      fi
+      if [ "$(read_desktop_pref mobile_bridge 2>/dev/null || printf 0)" = 1 ]; then
+        mobile_bridge_script restart >/dev/null
+      fi
+    elif [ "$key" = "mobile_allow_execute" ]; then
+      normalized_enabled=$(bool_pref_value "$enabled_value")
+      mobile_bridge_script set allow_execute "$normalized_enabled" >/dev/null
+      if [ "$(read_desktop_pref mobile_bridge 2>/dev/null || printf 0)" = 1 ]; then
+        mobile_bridge_script restart >/dev/null
+      fi
+    elif [ "$key" = "mobile_allow_self_actuation" ]; then
+      normalized_enabled=$(bool_pref_value "$enabled_value")
+      mobile_bridge_script set allow_self_actuation "$normalized_enabled" >/dev/null
+      if [ "$(read_desktop_pref mobile_bridge 2>/dev/null || printf 0)" = 1 ]; then
+        mobile_bridge_script restart >/dev/null
+      fi
     fi
     desktop_prefs_json
     ;;
@@ -534,6 +606,28 @@ case "$action" in
     ;;
   voice-automations-tick)
     voice_automations_script tick
+    ;;
+  mobile-status)
+    mobile_bridge_script status
+    ;;
+  mobile-enable)
+    write_desktop_pref mobile_bridge 1
+    mobile_bridge_script enable
+    ;;
+  mobile-disable)
+    write_desktop_pref mobile_bridge 0
+    mobile_bridge_script disable
+    ;;
+  mobile-restart)
+    mobile_bridge_script restart
+    ;;
+  mobile-install-tor)
+    mobile_bridge_script install-tor
+    ;;
+  mobile-set)
+    key=${1-}
+    value=${2-}
+    mobile_bridge_script set "$key" "$value"
     ;;
   health)
     runtime_client health
@@ -619,6 +713,28 @@ case "$action" in
   dictation-status)
     api_get dictation_status
     ;;
+  dictation-language-get)
+    api_get dictation_language_get
+    ;;
+  dictation-language-set)
+    language=${1:-auto}
+    api_post dictation_language_set language "$language"
+    ;;
+  dictation-prewarm-get)
+    api_get dictation_prewarm_get
+    ;;
+  dictation-prewarm-set)
+    enabled_value=${1:-0}
+    api_post dictation_prewarm_set enabled "$enabled_value"
+    ;;
+  dictation-shortcuts-get)
+    api_get dictation_shortcuts_get
+    ;;
+  dictation-shortcuts-set)
+    hold_value=${1:-none}
+    toggle_value=${2:-none}
+    api_post dictation_shortcuts_set hold "$hold_value" toggle "$toggle_value"
+    ;;
   dictation-install-start)
     api_post dictation_install_start
     ;;
@@ -657,6 +773,39 @@ case "$action" in
   automations)
     runtime_client automation list
     ;;
+  automation-upsert)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    name=${3-}
+    prompt=${4-}
+    schedule_kind=${5-}
+    schedule_value=${6-}
+    enabled=${7-1}
+    allow_self_reschedule=${8-0}
+    run_mode=${9:-assistant}
+    compute_budget=${10:-auto}
+    command_exec_mode=${11:-ask-some}
+    permission_mode=${12:-default}
+    programmer_review=${13:-1}
+    programmer_review_rounds=${14:-2}
+    next_run=${15:-}
+    runtime_client automation upsert \
+      --workspace-id "$workspace_id" \
+      --conversation-id "$conversation_id" \
+      --name "$name" \
+      --prompt "$prompt" \
+      --schedule-kind "$schedule_kind" \
+      --schedule-value "$schedule_value" \
+      --enabled "$enabled" \
+      --allow-self-reschedule "$allow_self_reschedule" \
+      --run-mode "$run_mode" \
+      --compute-budget "$compute_budget" \
+      --command-exec-mode "$command_exec_mode" \
+      --permission-mode "$permission_mode" \
+      --programmer-review "$programmer_review" \
+      --programmer-review-rounds "$programmer_review_rounds" \
+      --next-run "$next_run"
+    ;;
   automation-run)
     automation_id=${1-}
     runtime_client automation run-now --automation-id "$automation_id"
@@ -688,6 +837,26 @@ case "$action" in
   automation-daemon-tick)
     automations_script tick >/dev/null
     daemon_fast_status_json
+    ;;
+  models)
+    api_get models
+    ;;
+  llm-runtime-settings-get)
+    api_get llm_runtime_settings_get
+    ;;
+  llm-runtime-settings-set)
+    use_gpu=${1-}
+    default_model=${2-}
+    smart_titles=${3-}
+    api_post llm_runtime_settings_set use_gpu "$use_gpu" default_model "$default_model" smart_titles "$smart_titles"
+    ;;
+  git-runtime-settings-get)
+    api_get git_runtime_settings_get
+    ;;
+  git-runtime-settings-set)
+    workflow_policy=${1-}
+    ambiguity_policy=${2-}
+    api_post git_runtime_settings_set workflow_policy "$workflow_policy" ambiguity_policy "$ambiguity_policy"
     ;;
   open-web)
     require_core_root

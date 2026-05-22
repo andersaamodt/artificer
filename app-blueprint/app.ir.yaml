@@ -56,7 +56,7 @@
       },
       {
         "id": "automation_daemon_tick",
-        "label": "Run Tick Now"
+        "label": "Run Due Automations"
       },
       {
         "id": "automation_daemon_disable",
@@ -166,7 +166,7 @@
               {
                 "id": "menuitem.daemonTick",
                 "type": "MenuItem",
-                "title": "Run Tick Now",
+                "title": "Run Due Automations",
                 "action": "automation_daemon_tick"
               },
               {

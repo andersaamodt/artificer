@@ -85,7 +85,7 @@ struct ArtificerNativeApp: App {
           Task { await model.toggleAutomationDaemonPaused() }
         }
         .disabled(!(model.daemonStatus?.enabled ?? false))
-        Button("Run Tick Now") {
+        Button("Run Due Automations") {
           Task { await model.daemon("automation-daemon-tick") }
         }
         .disabled(!(model.daemonStatus?.enabled ?? false))
@@ -174,7 +174,7 @@ private final class ArtificerStatusItemController: NSObject {
     let pauseItem = NSMenuItem(title: pauseTitle, action: #selector(toggleAutomationDaemonPaused), keyEquivalent: "")
     pauseItem.isEnabled = model.daemonStatus?.enabled ?? false
     menu.addItem(pauseItem)
-    let tickItem = NSMenuItem(title: "Run Tick Now", action: #selector(runAutomationTick), keyEquivalent: "")
+    let tickItem = NSMenuItem(title: "Run Due Automations", action: #selector(runAutomationTick), keyEquivalent: "")
     tickItem.isEnabled = model.daemonStatus?.enabled ?? false
     menu.addItem(tickItem)
     menu.addItem(.separator())
@@ -220,7 +220,11 @@ private struct RootView: View {
       WorkspaceSidebar(model: model)
         .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 460)
     } detail: {
-      SessionDetailView(model: model)
+      if model.showingAutomations {
+        AutomationsDetailView(model: model)
+      } else {
+        SessionDetailView(model: model)
+      }
     }
     .toolbar {
       ToolbarItemGroup(placement: .primaryAction) {
@@ -318,11 +322,10 @@ private struct WorkspaceSidebar: View {
 
 private struct AutomationSidebarRow: View {
   @ObservedObject var model: ArtificerModel
-  @Environment(\.openWindow) private var openWindow
 
   var body: some View {
     Button {
-      openWindow(id: "preferences")
+      Task { await model.selectAutomationsPanel() }
     } label: {
       HStack(spacing: 8) {
         Image(systemName: model.voiceAutomationsEnabled ? "waveform.circle.fill" : "clock.arrow.circlepath")
@@ -347,9 +350,11 @@ private struct AutomationSidebarRow: View {
       .padding(.vertical, 7)
       .frame(maxWidth: .infinity, alignment: .leading)
       .contentShape(Rectangle())
+      .background(model.showingAutomations ? Color.accentColor.opacity(0.13) : Color.clear)
+      .clipShape(RoundedRectangle(cornerRadius: 7))
     }
     .buttonStyle(.plain)
-    .help("Automation preferences")
+    .help("Automations")
   }
 }
 
@@ -661,6 +666,237 @@ private struct EmptyStateView: View {
   }
 }
 
+private struct AutomationsDetailView: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Automations")
+            .font(.title3)
+          Text(automationSubtitle)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+        Spacer()
+        Button {
+          Task { await model.loadAutomations() }
+        } label: {
+          Label("Refresh", systemImage: "arrow.clockwise")
+        }
+        .disabled(model.isBusy)
+        Button {
+          Task { await model.daemon("automation-daemon-tick") }
+        } label: {
+          Label("Run Due Automations", systemImage: "play.fill")
+        }
+        .disabled(!(model.daemonStatus?.enabled ?? false) || model.isBusy)
+      }
+      .padding(12)
+
+      Divider()
+
+      HSplitView {
+        AutomationCreatePane(model: model)
+          .frame(minWidth: 280, idealWidth: 340, maxWidth: 420, maxHeight: .infinity)
+        AutomationListPane(model: model)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+    }
+    .task {
+      await model.loadAutomations()
+      await model.loadDaemonStatus()
+    }
+  }
+
+  private var automationSubtitle: String {
+    if let daemon = model.daemonStatus {
+      return "Background runtime: \(daemon.status). \(model.automations.count) automation\(model.automations.count == 1 ? "" : "s")."
+    }
+    return "\(model.automations.count) automation\(model.automations.count == 1 ? "" : "s")."
+  }
+}
+
+private struct AutomationCreatePane: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    Form {
+      Section("Add Automation") {
+        TextField("Name", text: $model.automationDraftName)
+        Picker("Project", selection: Binding(
+          get: { model.automationDraftProjectID.isEmpty ? (model.selectedProjectID ?? "") : model.automationDraftProjectID },
+          set: { model.automationDraftProjectID = $0 }
+        )) {
+          Text("Select project").tag("")
+          ForEach(model.projects) { project in
+            Text(project.name).tag(project.id)
+          }
+        }
+        Picker("Thread", selection: Binding(
+          get: { model.automationDraftSessionID.isEmpty ? (model.selectedSessionID ?? "") : model.automationDraftSessionID },
+          set: { model.automationDraftSessionID = $0 }
+        )) {
+          Text("Select thread").tag("")
+          ForEach(model.automationDraftSessions) { session in
+            Text(session.title.isEmpty ? session.id : session.title).tag(session.id)
+          }
+        }
+        Picker("Schedule", selection: $model.automationDraftScheduleKind) {
+          Text("Interval").tag("interval")
+          Text("Daily").tag("daily")
+        }
+        TextField(model.automationDraftScheduleKind == "daily" ? "09:00" : "1h", text: $model.automationDraftScheduleValue)
+        TextEditor(text: $model.automationDraftPrompt)
+          .font(.body)
+          .frame(minHeight: 120)
+        Toggle("Enabled", isOn: $model.automationDraftEnabled)
+        Toggle("Allow self-reschedule", isOn: $model.automationDraftAllowSelfReschedule)
+        Toggle("Set first run time", isOn: $model.automationDraftUsesNextRun)
+        if model.automationDraftUsesNextRun {
+          DatePicker("First run", selection: $model.automationDraftNextRunDate, displayedComponents: [.date, .hourAndMinute])
+            .frame(maxWidth: 280, alignment: .leading)
+        }
+        Picker("Run mode", selection: $model.automationDraftRunMode) {
+          ForEach(model.runModes, id: \.self) { mode in
+            Text(mode).tag(mode)
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 220, alignment: .leading)
+        Picker("Compute", selection: $model.automationDraftComputeBudget) {
+          ForEach(model.computeBudgets, id: \.self) { budget in
+            Text(budget).tag(budget)
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 180, alignment: .leading)
+        Picker("Commands", selection: $model.automationDraftCommandExecMode) {
+          ForEach(model.commandExecModes, id: \.self) { mode in
+            Text(mode).tag(mode)
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 180, alignment: .leading)
+        Picker("Permission", selection: $model.automationDraftPermissionMode) {
+          ForEach(model.permissionModes, id: \.self) { mode in
+            Text(mode).tag(mode)
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 180, alignment: .leading)
+        Toggle("Programmer review", isOn: $model.automationDraftProgrammerReview)
+        Picker("Review rounds", selection: $model.automationDraftProgrammerReviewRounds) {
+          ForEach(1...4, id: \.self) { round in
+            Text("\(round)").tag(round)
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 160, alignment: .leading)
+        Button {
+          Task { await model.createAutomationFromDraft() }
+        } label: {
+          Label("Add Automation", systemImage: "plus.circle")
+        }
+        .disabled(!model.canCreateAutomation || model.isBusy)
+      }
+    }
+    .formStyle(.grouped)
+    .padding(.vertical, 8)
+    .onChange(of: model.automationDraftProjectID) { projectID in
+      Task { await model.loadAutomationDraftSessions(projectID: projectID) }
+    }
+  }
+}
+
+private struct AutomationListPane: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    Group {
+      if model.automations.isEmpty {
+        EmptyStateView(title: "No Automations", systemImage: "clock.badge.questionmark", detail: "Add an automation from the form.")
+      } else {
+        List(model.automations) { automation in
+          AutomationListRow(model: model, automation: automation)
+        }
+        .listStyle(.inset)
+      }
+    }
+  }
+}
+
+private struct AutomationListRow: View {
+  @ObservedObject var model: ArtificerModel
+  let automation: AutomationItem
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(alignment: .firstTextBaseline, spacing: 10) {
+        VStack(alignment: .leading, spacing: 3) {
+          Text(automation.name)
+            .font(.headline)
+          Text(automation.scheduleText.isEmpty ? automation.scheduleKind : automation.scheduleText)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        Spacer()
+        Toggle("", isOn: Binding(
+          get: { automation.enabled },
+          set: { enabled in
+            Task { await model.toggleAutomation(automation, enabled: enabled) }
+          }
+        ))
+        .labelsHidden()
+      }
+      HStack(spacing: 10) {
+        Label(automation.workspaceName.isEmpty ? automation.workspaceID : automation.workspaceName, systemImage: "folder")
+        Label(automation.conversationTitle.isEmpty ? automation.conversationID : automation.conversationTitle, systemImage: "text.bubble")
+      }
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      HStack(spacing: 10) {
+        if !automation.runMode.isEmpty {
+          Label(automation.runMode, systemImage: "slider.horizontal.3")
+        }
+        if !automation.commandExecMode.isEmpty {
+          Label(automation.commandExecMode, systemImage: "terminal")
+        }
+        if automation.allowSelfReschedule {
+          Label("self-reschedule", systemImage: "calendar.badge.clock")
+        }
+        if !automation.nextRunISO.isEmpty {
+          Label(automation.nextRunISO, systemImage: "calendar")
+        }
+      }
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      if !automation.prompt.isEmpty {
+        Text(automation.prompt)
+          .font(.callout)
+          .lineLimit(3)
+      }
+      HStack {
+        Button {
+          Task { await model.runAutomationNow(automation) }
+        } label: {
+          Label("Run Now", systemImage: "play.fill")
+        }
+        .disabled(model.isBusy)
+        Spacer()
+        if !automation.lastStatus.isEmpty {
+          Text(automation.lastStatus)
+            .font(.caption)
+            .foregroundColor(automation.lastError.isEmpty ? .secondary : .red)
+        }
+      }
+    }
+    .padding(.vertical, 6)
+  }
+}
+
 private struct ComposerView: View {
   @ObservedObject var model: ArtificerModel
   @State private var runOptionsExpanded = false
@@ -896,6 +1132,10 @@ private struct SettingsView: View {
         .tabItem { Label("Self-improve", systemImage: "wand.and.stars") }
       RuntimePreferencesTab(model: model)
         .tabItem { Label("Runtime", systemImage: "slider.horizontal.3") }
+      MobilePreferencesTab(model: model)
+        .tabItem { Label("Mobile", systemImage: "iphone") }
+      GitPreferencesTab(model: model)
+        .tabItem { Label("Git", systemImage: "arrow.triangle.branch") }
     }
     .padding(20)
     .task {
@@ -910,14 +1150,80 @@ private struct GeneralPreferencesTab: View {
   var body: some View {
     PreferencesPane {
       PreferencesSection("Models") {
-        Toggle("Use GPU acceleration for LLMs", isOn: .constant(true))
-          .disabled(true)
-        SettingsInfoRow(title: "Default model", value: model.health?.defaultModel ?? "Loading...")
+        Toggle("Use GPU acceleration for LLMs", isOn: Binding(
+          get: { model.llmUseGpu },
+          set: { nextValue in
+            Task { await model.saveLlmRuntimeSettings(useGpu: nextValue) }
+          }
+        ))
+        Picker("Default model", selection: Binding(
+          get: { model.selectedDefaultModel },
+          set: { nextValue in
+            Task { await model.saveLlmRuntimeSettings(defaultModel: nextValue) }
+          }
+        )) {
+          Text(model.health?.defaultModel ?? "Runtime default").tag("")
+          ForEach(model.installedModels, id: \.self) { modelName in
+            Text(modelName).tag(modelName)
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 280, alignment: .leading)
+        Toggle("Generate compact thread titles", isOn: Binding(
+          get: { model.smartConversationTitles },
+          set: { nextValue in
+            Task { await model.saveLlmRuntimeSettings(smartTitles: nextValue) }
+          }
+        ))
       }
       PreferencesSection("Dictation") {
         if let status = model.dictationStatus {
           SettingsInfoRow(title: "Backend", value: status.installed ? status.backendLabel : "Not installed")
           SettingsInfoRow(title: "Language", value: status.language)
+        }
+        Picker("Language", selection: Binding(
+          get: { model.dictationLanguage },
+          set: { nextValue in
+            Task { await model.setDictationLanguage(nextValue) }
+          }
+        )) {
+          ForEach(model.dictationLanguages) { language in
+            Text(language.label).tag(language.value)
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 240, alignment: .leading)
+        Toggle("Keep dictation warm", isOn: Binding(
+          get: { model.dictationPrewarmEnabled },
+          set: { nextValue in
+            Task { await model.setDictationPrewarm(nextValue) }
+          }
+        ))
+        HStack {
+          Picker("Hold-to-talk", selection: Binding(
+            get: { model.dictationHoldShortcut },
+            set: { nextValue in
+              Task { await model.setDictationShortcuts(hold: nextValue, toggle: model.dictationToggleShortcut) }
+            }
+          )) {
+            ForEach(model.dictationShortcutOptions, id: \.self) { option in
+              Text(model.dictationShortcutLabel(option)).tag(option)
+            }
+          }
+          .pickerStyle(.menu)
+          .frame(maxWidth: 190, alignment: .leading)
+          Picker("Toggle", selection: Binding(
+            get: { model.dictationToggleShortcut },
+            set: { nextValue in
+              Task { await model.setDictationShortcuts(hold: model.dictationHoldShortcut, toggle: nextValue) }
+            }
+          )) {
+            ForEach(model.dictationShortcutOptions, id: \.self) { option in
+              Text(model.dictationShortcutLabel(option)).tag(option)
+            }
+          }
+          .pickerStyle(.menu)
+          .frame(maxWidth: 160, alignment: .leading)
         }
         if !model.dictationInstallMessage.isEmpty {
           Text(model.dictationInstallMessage)
@@ -1006,7 +1312,7 @@ private struct AutomationsPreferencesTab: View {
             .foregroundStyle(.secondary)
         }
         HStack {
-          Button("Run Tick Now") { Task { await model.daemon("automation-daemon-tick") } }
+          Button("Run Due Automations") { Task { await model.daemon("automation-daemon-tick") } }
             .disabled(!(model.daemonStatus?.enabled ?? false))
           Button((model.daemonStatus?.paused ?? false) ? "Resume Runtime" : "Pause Runtime") {
             Task { await model.toggleAutomationDaemonPaused() }
@@ -1094,6 +1400,109 @@ private struct RuntimePreferencesTab: View {
   }
 }
 
+private struct MobilePreferencesTab: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    PreferencesPane {
+      PreferencesSection("Bridge") {
+        Toggle("Enable Mobile bridge", isOn: Binding(
+          get: { model.mobileBridgeEnabled },
+          set: { nextValue in
+            Task { await model.setDesktopPref("mobile_bridge", enabled: nextValue) }
+          }
+        ))
+        Toggle("Advertise on local network", isOn: Binding(
+          get: { model.mobileLanEnabled },
+          set: { nextValue in
+            Task { await model.setDesktopPref("mobile_lan", enabled: nextValue) }
+          }
+        ))
+        Toggle("Tor hidden service", isOn: Binding(
+          get: { model.mobileTorEnabled },
+          set: { nextValue in
+            Task { await model.setDesktopPref("mobile_tor", enabled: nextValue) }
+          }
+        ))
+        HStack {
+          Button("Install Tor") { Task { await model.installMobileTor() } }
+          Button("Restart Bridge") { Task { await model.restartMobileBridge() } }
+            .disabled(!model.mobileBridgeEnabled)
+          Button("Refresh") { Task { await model.loadMobileStatus() } }
+        }
+        .buttonStyle(.bordered)
+        if let mobile = model.mobileStatus {
+          SettingsInfoRow(title: "Local", value: mobile.localURL)
+          if !mobile.lanURL.isEmpty {
+            SettingsInfoRow(title: "IP", value: mobile.lanURL)
+          }
+          SettingsInfoRow(title: "Tor", value: mobile.torAddress.isEmpty ? (mobile.torEnabled ? "Starting..." : "Off") : "http://\(mobile.torAddress)")
+          SettingsInfoRow(title: "Pairing token", value: mobile.pairingToken)
+          SettingsInfoRow(title: "State", value: mobile.running ? "Running" : "Stopped")
+        } else {
+          Text("Mobile bridge status has not loaded yet.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+      }
+      PreferencesSection("Permissions") {
+        Toggle("Allow command execution from mobile", isOn: Binding(
+          get: { model.mobileAllowExecute },
+          set: { nextValue in
+            Task { await model.setDesktopPref("mobile_allow_execute", enabled: nextValue) }
+          }
+        ))
+        Toggle("Allow self-actuation from mobile", isOn: Binding(
+          get: { model.mobileAllowSelfActuation },
+          set: { nextValue in
+            Task { await model.setDesktopPref("mobile_allow_self_actuation", enabled: nextValue) }
+          }
+        ))
+        .disabled(!model.mobileAllowExecute)
+      }
+    }
+    .task {
+      await model.loadMobileStatus()
+    }
+  }
+}
+
+private struct GitPreferencesTab: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    PreferencesPane {
+      PreferencesSection("Workflow Policy") {
+        Picker("Dirty repo", selection: Binding(
+          get: { model.gitWorkflowPolicy },
+          set: { nextValue in
+            Task { await model.setGitRuntimeSettings(workflowPolicy: nextValue, ambiguityPolicy: model.gitAmbiguityPolicy) }
+          }
+        )) {
+          Text("Managed").tag("managed")
+          Text("Frequent commits").tag("frequent-commits")
+          Text("Commit once").tag("commit-once")
+          Text("Manual").tag("manual")
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 240, alignment: .leading)
+        Picker("Ambiguity", selection: Binding(
+          get: { model.gitAmbiguityPolicy },
+          set: { nextValue in
+            Task { await model.setGitRuntimeSettings(workflowPolicy: model.gitWorkflowPolicy, ambiguityPolicy: nextValue) }
+          }
+        )) {
+          Text("Ask when ambiguous").tag("ask")
+          Text("Preserve unrelated changes").tag("preserve")
+          Text("Snapshot all").tag("snapshot-all")
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 240, alignment: .leading)
+      }
+    }
+  }
+}
+
 private struct PreferencesPane<Content: View>: View {
   let content: Content
 
@@ -1159,6 +1568,7 @@ private final class ArtificerModel: ObservableObject {
   @Published var automations: [AutomationItem] = []
   @Published var daemonStatus: DaemonStatus?
   @Published var health: RuntimeHealth?
+  @Published var showingAutomations = false
   @Published var selectedProjectID: String?
   @Published var selectedSessionID: String?
   @Published var sessionsByProject: [String: [SessionSummary]] = [:]
@@ -1188,6 +1598,39 @@ private final class ArtificerModel: ObservableObject {
   @Published var voiceLlmPromptsEnabled = false
   @Published var voiceLlmActionsEnabled = false
   @Published var voiceAutomationStatus: VoiceAutomationStatus?
+  @Published var mobileBridgeEnabled = false
+  @Published var mobileTorEnabled = false
+  @Published var mobileLanEnabled = false
+  @Published var mobileAllowExecute = false
+  @Published var mobileAllowSelfActuation = false
+  @Published var mobileStatus: MobileBridgeStatus?
+  @Published var installedModels: [String] = []
+  @Published var llmUseGpu = true
+  @Published var selectedDefaultModel = ""
+  @Published var smartConversationTitles = true
+  @Published var dictationPrewarmEnabled = true
+  @Published var dictationLanguage = "auto"
+  @Published var dictationLanguages: [DictationLanguageOption] = [DictationLanguageOption(value: "auto", label: "Auto")]
+  @Published var dictationHoldShortcut = "none"
+  @Published var dictationToggleShortcut = "none"
+  @Published var gitWorkflowPolicy = "managed"
+  @Published var gitAmbiguityPolicy = "preserve"
+  @Published var automationDraftName = ""
+  @Published var automationDraftPrompt = ""
+  @Published var automationDraftScheduleKind = "interval"
+  @Published var automationDraftScheduleValue = "1h"
+  @Published var automationDraftProjectID = ""
+  @Published var automationDraftSessionID = ""
+  @Published var automationDraftEnabled = true
+  @Published var automationDraftAllowSelfReschedule = false
+  @Published var automationDraftUsesNextRun = false
+  @Published var automationDraftNextRunDate = Date().addingTimeInterval(3600)
+  @Published var automationDraftRunMode = "assistant"
+  @Published var automationDraftComputeBudget = "auto"
+  @Published var automationDraftCommandExecMode = "ask-some"
+  @Published var automationDraftPermissionMode = "default"
+  @Published var automationDraftProgrammerReview = true
+  @Published var automationDraftProgrammerReviewRounds = 2
 
   @Published var runMode = "auto"
   @Published var computeBudget = "auto"
@@ -1202,9 +1645,25 @@ private final class ArtificerModel: ObservableObject {
   let computeBudgets = ["auto", "low", "medium", "high"]
   let commandExecModes = ["ask-some", "all", "none"]
   let permissionModes = ["default", "ask", "never"]
+  let dictationShortcutOptions = ["none", "space", "right-option", "left-option", "right-command", "left-command", "mouse-back", "mouse-forward", "mouse-wheel-click"]
 
   var selectedProject: Project? {
     projects.first { $0.id == selectedProjectID }
+  }
+
+  var automationDraftSessions: [SessionSummary] {
+    let projectID = automationDraftProjectID.isEmpty ? (selectedProjectID ?? "") : automationDraftProjectID
+    return sessionsByProject[projectID] ?? (projectID == selectedProjectID ? sessions : [])
+  }
+
+  var canCreateAutomation: Bool {
+    let projectID = automationDraftProjectID.isEmpty ? (selectedProjectID ?? "") : automationDraftProjectID
+    let sessionID = automationDraftSessionID.isEmpty ? (selectedSessionID ?? "") : automationDraftSessionID
+    return !projectID.isEmpty
+      && !sessionID.isEmpty
+      && !automationDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && !automationDraftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && !automationDraftScheduleValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
   var isSelectedSessionLoading: Bool {
@@ -1218,6 +1677,20 @@ private final class ArtificerModel: ObservableObject {
 
   func archiveKey(projectID: String, sessionID: String) -> String {
     "\(projectID):\(sessionID)"
+  }
+
+  func dictationShortcutLabel(_ value: String) -> String {
+    switch value {
+    case "space": return "Space"
+    case "right-option": return "Right Option"
+    case "left-option": return "Left Option"
+    case "right-command": return "Right Command"
+    case "left-command": return "Left Command"
+    case "mouse-back": return "Mouse Back"
+    case "mouse-forward": return "Mouse Forward"
+    case "mouse-wheel-click": return "Wheel Click"
+    default: return "None"
+    }
   }
 
   var canSendPrompt: Bool {
@@ -1237,22 +1710,32 @@ private final class ArtificerModel: ObservableObject {
 
   func refreshAll() async {
     await loadHealth()
+    await loadModels()
+    await loadLlmRuntimeSettings()
     await loadProjects()
     await loadDaemonStatus()
     await loadAutomations()
     await loadDesktopPrefs()
     await loadVoiceAutomationStatus()
+    await loadMobileStatus()
     await loadDictationStatus()
+    await loadDictationPreferences()
     await loadSelfImproveSettings()
+    await loadGitRuntimeSettings()
   }
 
   func loadPreferences() async {
     await loadHealth()
+    await loadModels()
+    await loadLlmRuntimeSettings()
     await loadDaemonStatus()
     await loadDesktopPrefs()
     await loadVoiceAutomationStatus()
+    await loadMobileStatus()
     await loadDictationStatus()
+    await loadDictationPreferences()
     await loadSelfImproveSettings()
+    await loadGitRuntimeSettings()
   }
 
   func refreshDoctor() async {
@@ -1271,6 +1754,41 @@ private final class ArtificerModel: ObservableObject {
     if let response = decode(HealthResponse.self, from: result) {
       health = response.runtime
       statusMessage = "Runtime health loaded."
+    }
+  }
+
+  func loadModels() async {
+    let result = await runBackend("models", trackBusy: false)
+    if let response = decode(ModelsResponse.self, from: result) {
+      installedModels = response.models
+    }
+  }
+
+  func loadLlmRuntimeSettings() async {
+    let result = await runBackend("llm-runtime-settings-get", trackBusy: false)
+    if let response = decode(LlmRuntimeSettingsResponse.self, from: result) {
+      llmUseGpu = response.useGpu
+      selectedDefaultModel = response.selectedDefaultModel
+      smartConversationTitles = response.smartTitles
+    }
+  }
+
+  func saveLlmRuntimeSettings(useGpu: Bool? = nil, defaultModel: String? = nil, smartTitles: Bool? = nil) async {
+    let nextUseGpu = useGpu ?? llmUseGpu
+    let nextDefaultModel = defaultModel ?? selectedDefaultModel
+    let nextSmartTitles = smartTitles ?? smartConversationTitles
+    let result = await runBackend(
+      "llm-runtime-settings-set",
+      nextUseGpu ? "1" : "0",
+      nextDefaultModel,
+      nextSmartTitles ? "1" : "0"
+    )
+    if let response = decode(LlmRuntimeSettingsResponse.self, from: result) {
+      llmUseGpu = response.useGpu
+      selectedDefaultModel = response.selectedDefaultModel
+      smartConversationTitles = response.smartTitles
+      await loadHealth()
+      statusMessage = "Model settings saved."
     }
   }
 
@@ -1378,6 +1896,7 @@ private final class ArtificerModel: ObservableObject {
   func createSession(in projectID: String?) async {
     guard let projectID else { return }
     guard !creatingSessionProjectIDs.contains(projectID) else { return }
+    showingAutomations = false
     selectedProjectID = projectID
     expandedProjectIDs.insert(projectID)
     let title = "Native session \(DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .short))"
@@ -1439,6 +1958,7 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func selectProject(_ projectID: String) async {
+    showingAutomations = false
     selectedProjectID = projectID
     selectedSessionID = nil
     selectedSession = nil
@@ -1452,6 +1972,7 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func toggleProject(_ projectID: String) async {
+    showingAutomations = false
     selectedProjectID = projectID
     pendingArchiveSessionKey = ""
     if expandedProjectIDs.contains(projectID) {
@@ -1473,6 +1994,7 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func selectSession(projectID: String, sessionID: String) async {
+    showingAutomations = false
     selectedProjectID = projectID
     selectedSessionID = sessionID
     pendingArchiveSessionKey = ""
@@ -1553,6 +2075,82 @@ private final class ArtificerModel: ObservableObject {
     automations = response.automations.items
   }
 
+  func selectAutomationsPanel() async {
+    showingAutomations = true
+    if automationDraftProjectID.isEmpty, let selectedProjectID {
+      automationDraftProjectID = selectedProjectID
+    }
+    if automationDraftSessionID.isEmpty, let selectedSessionID {
+      automationDraftSessionID = selectedSessionID
+    }
+    await loadAutomationDraftSessions(projectID: automationDraftProjectID)
+    await loadAutomations()
+    await loadDaemonStatus()
+  }
+
+  func loadAutomationDraftSessions(projectID: String) async {
+    guard !projectID.isEmpty else { return }
+    if let loadedSessions = await loadProjectSessions(projectID, trackBusy: false) {
+      sessionsByProject[projectID] = loadedSessions
+      if automationDraftSessionID.isEmpty || !loadedSessions.contains(where: { $0.id == automationDraftSessionID }) {
+        automationDraftSessionID = loadedSessions.first?.id ?? ""
+      }
+      if projectID == selectedProjectID {
+        sessions = loadedSessions
+      }
+    }
+  }
+
+  func createAutomationFromDraft() async {
+    let projectID = automationDraftProjectID.isEmpty ? (selectedProjectID ?? "") : automationDraftProjectID
+    let sessionID = automationDraftSessionID.isEmpty ? (selectedSessionID ?? "") : automationDraftSessionID
+    let name = automationDraftName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let promptText = automationDraftPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    let scheduleValue = automationDraftScheduleValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !projectID.isEmpty, !sessionID.isEmpty, !name.isEmpty, !promptText.isEmpty, !scheduleValue.isEmpty else { return }
+    let result = await runBackend(
+      "automation-upsert",
+      projectID,
+      sessionID,
+      name,
+      promptText,
+      automationDraftScheduleKind,
+      scheduleValue,
+      automationDraftEnabled ? "1" : "0",
+      automationDraftAllowSelfReschedule ? "1" : "0",
+      automationDraftRunMode,
+      automationDraftComputeBudget,
+      automationDraftCommandExecMode,
+      automationDraftPermissionMode,
+      automationDraftProgrammerReview ? "1" : "0",
+      "\(automationDraftProgrammerReviewRounds)",
+      automationDraftUsesNextRun ? "\(Int(automationDraftNextRunDate.timeIntervalSince1970))" : ""
+    )
+    if decode(GenericSuccessResponse.self, from: result) != nil || decode(AutomationMutationResponse.self, from: result) != nil {
+      automationDraftName = ""
+      automationDraftPrompt = ""
+      automationDraftUsesNextRun = false
+      statusMessage = "Automation added."
+      await loadAutomations()
+    }
+  }
+
+  func toggleAutomation(_ automation: AutomationItem, enabled: Bool) async {
+    let result = await runBackend("automation-toggle", automation.id, enabled ? "1" : "0")
+    if decode(GenericSuccessResponse.self, from: result) != nil || decode(AutomationMutationResponse.self, from: result) != nil {
+      statusMessage = enabled ? "Automation enabled." : "Automation disabled."
+      await loadAutomations()
+    }
+  }
+
+  func runAutomationNow(_ automation: AutomationItem) async {
+    let result = await runBackend("automation-run", automation.id)
+    if decode(GenericSuccessResponse.self, from: result) != nil || decode(AutomationMutationResponse.self, from: result) != nil {
+      statusMessage = "Automation queued."
+      await loadAutomations()
+    }
+  }
+
   func loadDaemonStatus() async {
     let result = await runBackend("automation-daemon-status")
     if let daemon = decode(DaemonStatus.self, from: result) {
@@ -1567,6 +2165,11 @@ private final class ArtificerModel: ObservableObject {
       voiceAutomationsEnabled = prefs.voiceAutomations
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
+      mobileBridgeEnabled = prefs.mobileBridge
+      mobileTorEnabled = prefs.mobileTor
+      mobileLanEnabled = prefs.mobileLan
+      mobileAllowExecute = prefs.mobileAllowExecute
+      mobileAllowSelfActuation = prefs.mobileAllowSelfActuation
     }
   }
 
@@ -1598,6 +2201,21 @@ private final class ArtificerModel: ObservableObject {
     if let value = prefs["voice_automation_llm_actions"] {
       voiceLlmActionsEnabled = desktopLaunchBool(value)
     }
+    if let value = prefs["mobile_bridge"] {
+      mobileBridgeEnabled = desktopLaunchBool(value)
+    }
+    if let value = prefs["mobile_tor"] {
+      mobileTorEnabled = desktopLaunchBool(value)
+    }
+    if let value = prefs["mobile_lan"] {
+      mobileLanEnabled = desktopLaunchBool(value)
+    }
+    if let value = prefs["mobile_allow_execute"] {
+      mobileAllowExecute = desktopLaunchBool(value)
+    }
+    if let value = prefs["mobile_allow_self_actuation"] {
+      mobileAllowSelfActuation = desktopLaunchBool(value)
+    }
   }
 
   func setDesktopPref(_ key: String, enabled: Bool) async {
@@ -1607,7 +2225,13 @@ private final class ArtificerModel: ObservableObject {
       voiceAutomationsEnabled = prefs.voiceAutomations
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
+      mobileBridgeEnabled = prefs.mobileBridge
+      mobileTorEnabled = prefs.mobileTor
+      mobileLanEnabled = prefs.mobileLan
+      mobileAllowExecute = prefs.mobileAllowExecute
+      mobileAllowSelfActuation = prefs.mobileAllowSelfActuation
       await loadVoiceAutomationStatus()
+      await loadMobileStatus()
     }
   }
 
@@ -1615,6 +2239,29 @@ private final class ArtificerModel: ObservableObject {
     let result = await runBackend("voice-automations-status", trackBusy: false)
     if let status = decode(VoiceAutomationStatus.self, from: result) {
       voiceAutomationStatus = status
+    }
+  }
+
+  func loadMobileStatus() async {
+    let result = await runBackend("mobile-status", trackBusy: false)
+    if let status = decode(MobileBridgeStatus.self, from: result) {
+      mobileStatus = status
+    }
+  }
+
+  func restartMobileBridge() async {
+    let result = await runBackend("mobile-restart")
+    if let status = decode(MobileBridgeStatus.self, from: result) {
+      mobileStatus = status
+      statusMessage = "Mobile bridge restarted."
+    }
+  }
+
+  func installMobileTor() async {
+    let result = await runBackend("mobile-install-tor")
+    if decode(GenericSuccessResponse.self, from: result) != nil {
+      statusMessage = "Tor install checked."
+      await loadMobileStatus()
     }
   }
 
@@ -1660,11 +2307,59 @@ private final class ArtificerModel: ObservableObject {
     let result = await runBackend("dictation-status", trackBusy: false)
     if let response = decode(DictationStatus.self, from: result) {
       dictationStatus = response
+      dictationLanguage = response.language
       if response.installed {
         dictationInstallMessage = "Dictation ready: \(response.backendLabel)."
       } else if dictationInstallMessage.isEmpty {
         dictationInstallMessage = "Install a local dictation backend before recording."
       }
+    }
+  }
+
+  func loadDictationPreferences() async {
+    let languageResult = await runBackend("dictation-language-get", trackBusy: false)
+    if let response = decode(DictationLanguageResponse.self, from: languageResult) {
+      dictationLanguage = response.language
+      if !response.languages.isEmpty {
+        dictationLanguages = response.languages
+      }
+    }
+    let prewarmResult = await runBackend("dictation-prewarm-get", trackBusy: false)
+    if let response = decode(DictationPrewarmResponse.self, from: prewarmResult) {
+      dictationPrewarmEnabled = response.enabled
+    }
+    let shortcutsResult = await runBackend("dictation-shortcuts-get", trackBusy: false)
+    if let response = decode(DictationShortcutsResponse.self, from: shortcutsResult) {
+      dictationHoldShortcut = response.hold
+      dictationToggleShortcut = response.toggle
+    }
+  }
+
+  func setDictationLanguage(_ language: String) async {
+    let result = await runBackend("dictation-language-set", language)
+    if let response = decode(DictationLanguageResponse.self, from: result) {
+      dictationLanguage = response.language
+      if !response.languages.isEmpty {
+        dictationLanguages = response.languages
+      }
+      statusMessage = "Dictation language saved."
+    }
+  }
+
+  func setDictationPrewarm(_ enabled: Bool) async {
+    let result = await runBackend("dictation-prewarm-set", enabled ? "1" : "0")
+    if let response = decode(DictationPrewarmResponse.self, from: result) {
+      dictationPrewarmEnabled = response.enabled
+      statusMessage = enabled ? "Dictation prewarm enabled." : "Dictation prewarm disabled."
+    }
+  }
+
+  func setDictationShortcuts(hold: String, toggle: String) async {
+    let result = await runBackend("dictation-shortcuts-set", hold, toggle)
+    if let response = decode(DictationShortcutsResponse.self, from: result) {
+      dictationHoldShortcut = response.hold
+      dictationToggleShortcut = response.toggle
+      statusMessage = "Dictation shortcuts saved."
     }
   }
 
@@ -1679,6 +2374,23 @@ private final class ArtificerModel: ObservableObject {
     guard let response = decode(SelfImproveRunOptionsResponse.self, from: result) else { return }
     codexWorkCheckEnabled = response.runOptions.codexWorkCheckEnabled
     statusMessage = codexWorkCheckEnabled ? "Codex work checks enabled." : "Codex work checks disabled."
+  }
+
+  func loadGitRuntimeSettings() async {
+    let result = await runBackend("git-runtime-settings-get", trackBusy: false)
+    if let response = decode(GitRuntimeSettingsResponse.self, from: result) {
+      gitWorkflowPolicy = response.workflowPolicy
+      gitAmbiguityPolicy = response.ambiguityPolicy
+    }
+  }
+
+  func setGitRuntimeSettings(workflowPolicy: String, ambiguityPolicy: String) async {
+    let result = await runBackend("git-runtime-settings-set", workflowPolicy, ambiguityPolicy)
+    if let response = decode(GitRuntimeSettingsResponse.self, from: result) {
+      gitWorkflowPolicy = response.workflowPolicy
+      gitAmbiguityPolicy = response.ambiguityPolicy
+      statusMessage = "Git policy saved."
+    }
   }
 
   func installDictation() async {
@@ -2021,6 +2733,36 @@ private struct HealthResponse: Decodable {
   let runtime: RuntimeHealth
 }
 
+private struct ModelsResponse: Decodable {
+  let success: Bool
+  let models: [String]
+}
+
+private struct LlmRuntimeSettingsResponse: Decodable {
+  let success: Bool
+  let useGpu: Bool
+  let smartTitles: Bool
+  let selectedDefaultModel: String
+  let defaultModel: String
+
+  enum CodingKeys: String, CodingKey {
+    case success
+    case useGpu = "use_gpu"
+    case smartTitles = "smart_titles"
+    case selectedDefaultModel = "selected_default_model"
+    case defaultModel = "default_model"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    useGpu = container.decodeFlexibleBool(forKey: .useGpu)
+    smartTitles = container.decodeFlexibleBool(forKey: .smartTitles)
+    selectedDefaultModel = (try? container.decode(String.self, forKey: .selectedDefaultModel)) ?? ""
+    defaultModel = (try? container.decode(String.self, forKey: .defaultModel)) ?? ""
+  }
+}
+
 private struct RuntimeHealth: Decodable {
   let defaultModel: String
   let installedModelCount: Int
@@ -2217,18 +2959,66 @@ private struct AutomationCollection: Decodable {
 private struct AutomationItem: Identifiable, Decodable, Hashable {
   let id: String
   let name: String
+  let workspaceID: String
+  let workspaceName: String
+  let conversationID: String
+  let conversationTitle: String
+  let prompt: String
+  let scheduleKind: String
+  let scheduleText: String
+  let allowSelfReschedule: Bool
+  let nextRunISO: String
+  let runMode: String
+  let computeBudget: String
+  let commandExecMode: String
+  let permissionMode: String
   let enabled: Bool
+  let lastStatus: String
+  let lastError: String
 
   enum CodingKeys: String, CodingKey {
-    case id, name, enabled
+    case id, name, prompt, enabled
+    case workspaceID = "workspace_id"
+    case workspaceName = "workspace_name"
+    case conversationID = "conversation_id"
+    case conversationTitle = "conversation_title"
+    case scheduleKind = "schedule_kind"
+    case scheduleText = "schedule_text"
+    case allowSelfReschedule = "allow_self_reschedule"
+    case nextRunISO = "next_run_iso"
+    case runMode = "run_mode"
+    case computeBudget = "compute_budget"
+    case commandExecMode = "command_exec_mode"
+    case permissionMode = "permission_mode"
+    case lastStatus = "last_status"
+    case lastError = "last_error"
   }
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
     name = (try? container.decode(String.self, forKey: .name)) ?? id
+    workspaceID = (try? container.decode(String.self, forKey: .workspaceID)) ?? ""
+    workspaceName = (try? container.decode(String.self, forKey: .workspaceName)) ?? ""
+    conversationID = (try? container.decode(String.self, forKey: .conversationID)) ?? ""
+    conversationTitle = (try? container.decode(String.self, forKey: .conversationTitle)) ?? ""
+    prompt = (try? container.decode(String.self, forKey: .prompt)) ?? ""
+    scheduleKind = (try? container.decode(String.self, forKey: .scheduleKind)) ?? ""
+    scheduleText = (try? container.decode(String.self, forKey: .scheduleText)) ?? ""
+    allowSelfReschedule = container.decodeFlexibleBool(forKey: .allowSelfReschedule)
+    nextRunISO = (try? container.decode(String.self, forKey: .nextRunISO)) ?? ""
+    runMode = (try? container.decode(String.self, forKey: .runMode)) ?? ""
+    computeBudget = (try? container.decode(String.self, forKey: .computeBudget)) ?? ""
+    commandExecMode = (try? container.decode(String.self, forKey: .commandExecMode)) ?? ""
+    permissionMode = (try? container.decode(String.self, forKey: .permissionMode)) ?? ""
     enabled = container.decodeFlexibleBool(forKey: .enabled)
+    lastStatus = (try? container.decode(String.self, forKey: .lastStatus)) ?? ""
+    lastError = (try? container.decode(String.self, forKey: .lastError)) ?? ""
   }
+}
+
+private struct AutomationMutationResponse: Decodable {
+  let success: Bool
 }
 
 private struct DaemonStatus: Decodable {
@@ -2268,6 +3058,11 @@ private struct DesktopPrefsResponse: Decodable {
   let voiceAutomations: Bool
   let voiceLlmPrompts: Bool
   let voiceLlmActions: Bool
+  let mobileBridge: Bool
+  let mobileTor: Bool
+  let mobileLan: Bool
+  let mobileAllowExecute: Bool
+  let mobileAllowSelfActuation: Bool
 
   enum CodingKeys: String, CodingKey {
     case success
@@ -2276,6 +3071,11 @@ private struct DesktopPrefsResponse: Decodable {
     case voiceAutomations = "voice_automations"
     case voiceLlmPrompts = "voice_automation_llm_prompts"
     case voiceLlmActions = "voice_automation_llm_actions"
+    case mobileBridge = "mobile_bridge"
+    case mobileTor = "mobile_tor"
+    case mobileLan = "mobile_lan"
+    case mobileAllowExecute = "mobile_allow_execute"
+    case mobileAllowSelfActuation = "mobile_allow_self_actuation"
   }
 
   init(from decoder: Decoder) throws {
@@ -2286,6 +3086,63 @@ private struct DesktopPrefsResponse: Decodable {
     voiceAutomations = container.decodeFlexibleBool(forKey: .voiceAutomations)
     voiceLlmPrompts = container.decodeFlexibleBool(forKey: .voiceLlmPrompts)
     voiceLlmActions = container.decodeFlexibleBool(forKey: .voiceLlmActions)
+    mobileBridge = container.decodeFlexibleBool(forKey: .mobileBridge)
+    mobileTor = container.decodeFlexibleBool(forKey: .mobileTor)
+    mobileLan = container.decodeFlexibleBool(forKey: .mobileLan)
+    mobileAllowExecute = container.decodeFlexibleBool(forKey: .mobileAllowExecute)
+    mobileAllowSelfActuation = container.decodeFlexibleBool(forKey: .mobileAllowSelfActuation)
+  }
+}
+
+private struct MobileBridgeStatus: Decodable {
+  let success: Bool
+  let enabled: Bool
+  let running: Bool
+  let bindHost: String
+  let port: String
+  let localURL: String
+  let lanURL: String
+  let torEnabled: Bool
+  let torRunning: Bool
+  let torAddress: String
+  let pairingToken: String
+  let allowExecute: Bool
+  let allowSelfActuation: Bool
+  let configFile: String
+  let stateDir: String
+
+  enum CodingKeys: String, CodingKey {
+    case success, enabled, running, port
+    case bindHost = "bind_host"
+    case localURL = "local_url"
+    case lanURL = "lan_url"
+    case torEnabled = "tor_enabled"
+    case torRunning = "tor_running"
+    case torAddress = "tor_address"
+    case pairingToken = "pairing_token"
+    case allowExecute = "allow_execute"
+    case allowSelfActuation = "allow_self_actuation"
+    case configFile = "config_file"
+    case stateDir = "state_dir"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    enabled = container.decodeFlexibleBool(forKey: .enabled)
+    running = container.decodeFlexibleBool(forKey: .running)
+    bindHost = (try? container.decode(String.self, forKey: .bindHost)) ?? "127.0.0.1"
+    port = (try? container.decode(String.self, forKey: .port)) ?? "8765"
+    localURL = (try? container.decode(String.self, forKey: .localURL)) ?? ""
+    lanURL = (try? container.decode(String.self, forKey: .lanURL)) ?? ""
+    torEnabled = container.decodeFlexibleBool(forKey: .torEnabled)
+    torRunning = container.decodeFlexibleBool(forKey: .torRunning)
+    torAddress = (try? container.decode(String.self, forKey: .torAddress)) ?? ""
+    pairingToken = (try? container.decode(String.self, forKey: .pairingToken)) ?? ""
+    allowExecute = container.decodeFlexibleBool(forKey: .allowExecute)
+    allowSelfActuation = container.decodeFlexibleBool(forKey: .allowSelfActuation)
+    configFile = (try? container.decode(String.self, forKey: .configFile)) ?? ""
+    stateDir = (try? container.decode(String.self, forKey: .stateDir)) ?? ""
   }
 }
 
@@ -2397,9 +3254,99 @@ private struct DictationStatus: Decodable {
   }
 }
 
+private struct DictationLanguageResponse: Decodable {
+  let success: Bool
+  let language: String
+  let languages: [DictationLanguageOption]
+
+  enum CodingKeys: String, CodingKey {
+    case success, language, languages
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    language = (try? container.decode(String.self, forKey: .language)) ?? "auto"
+    languages = (try? container.decode([DictationLanguageOption].self, forKey: .languages)) ?? [DictationLanguageOption(value: "auto", label: "Auto")]
+  }
+}
+
+private struct DictationLanguageOption: Identifiable, Decodable, Hashable {
+  let value: String
+  let label: String
+
+  var id: String { value }
+
+  enum CodingKeys: String, CodingKey {
+    case value, label
+  }
+
+  init(value: String, label: String) {
+    self.value = value
+    self.label = label
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    value = (try? container.decode(String.self, forKey: .value)) ?? "auto"
+    label = (try? container.decode(String.self, forKey: .label)) ?? value
+  }
+}
+
+private struct DictationPrewarmResponse: Decodable {
+  let success: Bool
+  let enabled: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case success, enabled
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    enabled = container.decodeFlexibleBool(forKey: .enabled)
+  }
+}
+
+private struct DictationShortcutsResponse: Decodable {
+  let success: Bool
+  let hold: String
+  let toggle: String
+
+  enum CodingKeys: String, CodingKey {
+    case success, hold, toggle
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    hold = (try? container.decode(String.self, forKey: .hold)) ?? "none"
+    toggle = (try? container.decode(String.self, forKey: .toggle)) ?? "none"
+  }
+}
+
 private struct DictationInstallStartResponse: Decodable {
   let success: Bool
   let job: DictationInstallJob
+}
+
+private struct GitRuntimeSettingsResponse: Decodable {
+  let success: Bool
+  let workflowPolicy: String
+  let ambiguityPolicy: String
+
+  enum CodingKeys: String, CodingKey {
+    case success
+    case workflowPolicy = "workflow_policy"
+    case ambiguityPolicy = "ambiguity_policy"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    workflowPolicy = (try? container.decode(String.self, forKey: .workflowPolicy)) ?? "managed"
+    ambiguityPolicy = (try? container.decode(String.self, forKey: .ambiguityPolicy)) ?? "preserve"
+  }
 }
 
 private struct SelfImproveSettingsResponse: Decodable {
