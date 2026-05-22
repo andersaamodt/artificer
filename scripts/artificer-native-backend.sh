@@ -9,6 +9,8 @@ Actions:
   doctor
   prefs-get
   prefs-set-core-root CORE_ROOT
+  desktop-prefs-get
+  desktop-prefs-set KEY ENABLED
   health
   projects
   project-add PATH NAME [COMMAND_EXEC_MODE]
@@ -64,6 +66,14 @@ prefs_file() {
   printf '%s\n' "$(config_root)/ui-prefs.conf"
 }
 
+desktop_prefs_dir() {
+  printf '%s\n' "${XDG_CONFIG_HOME:-"$home/.config"}/artificer"
+}
+
+desktop_prefs_file() {
+  printf '%s\n' "$(desktop_prefs_dir)/ui-prefs.env"
+}
+
 reject_line_breaks() {
   value=${1-}
   label=${2-value}
@@ -117,6 +127,63 @@ write_pref() {
   mv "$tmp_file" "$file"
 }
 
+canonical_desktop_pref_key() {
+  key=$1
+  reject_line_breaks "$key" "desktop preference key"
+  case "$key" in
+    background_mode|menu_bar_icon)
+      printf '%s\n' "$key"
+      ;;
+    *)
+      printf '%s\n' "artificer-native-backend: unsupported desktop preference key" >&2
+      exit 2
+      ;;
+  esac
+}
+
+bool_pref_value() {
+  value=$1
+  reject_line_breaks "$value" "desktop preference value"
+  case "$value" in
+    1|true|yes|on|enabled) printf '%s\n' 1 ;;
+    0|false|no|off|disabled) printf '%s\n' 0 ;;
+    *)
+      printf '%s\n' "artificer-native-backend: desktop preference value must be boolean" >&2
+      exit 2
+      ;;
+  esac
+}
+
+read_desktop_pref() {
+  key=$(canonical_desktop_pref_key "$1")
+  file=$(desktop_prefs_file)
+  [ -f "$file" ] || return 1
+  awk -F= -v wanted="$key" '$1 == wanted { print substr($0, index($0, "=") + 1); found = 1 } END { exit found ? 0 : 1 }' "$file"
+}
+
+write_desktop_pref() {
+  key=$(canonical_desktop_pref_key "$1")
+  value=$(bool_pref_value "$2")
+  mkdir -p "$(desktop_prefs_dir)"
+  file=$(desktop_prefs_file)
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/artificer-native-desktop-prefs.XXXXXX")
+  if [ -f "$file" ]; then
+    awk -F= -v wanted="$key" '$1 != wanted' "$file" > "$tmp_file"
+  fi
+  printf '%s=%s\n' "$key" "$value" >> "$tmp_file"
+  mv "$tmp_file" "$file"
+}
+
+desktop_prefs_json() {
+  background_mode=$(read_desktop_pref background_mode 2>/dev/null || printf '%s\n' 0)
+  menu_bar_icon=$(read_desktop_pref menu_bar_icon 2>/dev/null || printf '%s\n' 0)
+  background_mode=$(bool_pref_value "$background_mode" 2>/dev/null || printf '%s\n' 0)
+  menu_bar_icon=$(bool_pref_value "$menu_bar_icon" 2>/dev/null || printf '%s\n' 0)
+  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s}\n' \
+    "$([ "$background_mode" = 1 ] && printf true || printf false)" \
+    "$([ "$menu_bar_icon" = 1 ] && printf true || printf false)"
+}
+
 candidate_core_roots() {
   if [ -n "${ARTIFICER_CORE_ROOT-}" ]; then
     printf '%s\n' "$ARTIFICER_CORE_ROOT"
@@ -145,7 +212,7 @@ core_root=$(resolve_core_root 2>/dev/null || true)
 
 require_core_root() {
   [ -n "$core_root" ] || {
-    json_error "Artificer core runtime was not found. Set the core root in Settings."
+    json_error "Artificer core runtime was not found. Set the core root in Preferences."
     exit 1
   }
 }
@@ -391,6 +458,15 @@ case "$action" in
     }
     write_pref core_root "$abs_value"
     printf '{"success":true,"core_root":%s}\n' "$(json_escape "$abs_value")"
+    ;;
+  desktop-prefs-get)
+    desktop_prefs_json
+    ;;
+  desktop-prefs-set)
+    key=${1-}
+    enabled_value=${2-0}
+    write_desktop_pref "$key" "$enabled_value"
+    desktop_prefs_json
     ;;
   health)
     runtime_client health

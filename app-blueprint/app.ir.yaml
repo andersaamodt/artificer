@@ -44,27 +44,27 @@
       },
       {
         "id": "automation_daemon_enable",
-        "label": "Enable Daemon"
+        "label": "Launch Background Runtime"
       },
       {
         "id": "automation_daemon_pause",
-        "label": "Pause Daemon"
+        "label": "Pause Runtime"
       },
       {
         "id": "automation_daemon_resume",
-        "label": "Resume Daemon"
+        "label": "Resume Runtime"
       },
       {
         "id": "automation_daemon_tick",
-        "label": "Run Daemon Tick"
+        "label": "Run Tick Now"
       },
       {
         "id": "automation_daemon_disable",
-        "label": "Disable Daemon"
+        "label": "Stop Background Runtime"
       },
       {
         "id": "open_settings",
-        "label": "Settings"
+        "label": "Preferences"
       }
     ],
     "window": {
@@ -88,7 +88,7 @@
               {
                 "id": "menuitem.openSettings",
                 "type": "MenuItem",
-                "title": "Settings",
+                "title": "Preferences",
                 "action": "open_settings",
                 "shortcut": "cmd+,"
               },
@@ -148,19 +148,19 @@
               {
                 "id": "menuitem.daemonEnable",
                 "type": "MenuItem",
-                "title": "Enable Daemon",
+                "title": "Launch Background Runtime",
                 "action": "automation_daemon_enable"
               },
               {
                 "id": "menuitem.daemonPause",
                 "type": "MenuItem",
-                "title": "Pause Daemon",
+                "title": "Pause Runtime",
                 "action": "automation_daemon_pause"
               },
               {
                 "id": "menuitem.daemonResume",
                 "type": "MenuItem",
-                "title": "Resume Daemon",
+                "title": "Resume Runtime",
                 "action": "automation_daemon_resume"
               },
               {
@@ -172,7 +172,7 @@
               {
                 "id": "menuitem.daemonDisable",
                 "type": "MenuItem",
-                "title": "Disable Daemon",
+                "title": "Stop Background Runtime",
                 "action": "automation_daemon_disable"
               }
             ]
@@ -208,7 +208,7 @@
           {
             "id": "toolbar.button.settings",
             "type": "Button",
-            "title": "Settings",
+            "title": "Preferences",
             "action": "open_settings"
           }
         ]

@@ -9,6 +9,7 @@ private let appDisplayName = "__APP_NAME__"
 @main
 struct ArtificerNativeApp: App {
   @StateObject private var model = ArtificerModel()
+  @Environment(\.openWindow) private var openWindow
 
   var body: some Scene {
     WindowGroup("__WINDOW_TITLE__") {
@@ -51,30 +52,42 @@ struct ArtificerNativeApp: App {
           Task { await model.openHostedArtificer() }
         }
       }
+      CommandGroup(replacing: .appSettings) {
+        Button("Preferences...") {
+          openWindow(id: "preferences")
+        }
+        .keyboardShortcut(",", modifiers: [.command])
+      }
       CommandMenu("Automation") {
-        Button("Enable Daemon") {
-          Task { await model.daemon("automation-daemon-enable") }
+        Toggle("Launch Background Runtime at Startup", isOn: Binding(
+          get: { model.daemonStatus?.enabled ?? false },
+          set: { nextValue in
+            Task { await model.setAutomationDaemonEnabled(nextValue) }
+          }
+        ))
+        Toggle("Show Menu Bar Icon", isOn: Binding(
+          get: { model.menuBarIconEnabled },
+          set: { nextValue in
+            Task { await model.setMenuBarIconEnabled(nextValue) }
+          }
+        ))
+        Divider()
+        Button((model.daemonStatus?.paused ?? false) ? "Resume Runtime" : "Pause Runtime") {
+          Task { await model.toggleAutomationDaemonPaused() }
         }
-        Button("Pause Daemon") {
-          Task { await model.daemon("automation-daemon-pause") }
-        }
-        Button("Resume Daemon") {
-          Task { await model.daemon("automation-daemon-resume") }
-        }
+        .disabled(!(model.daemonStatus?.enabled ?? false))
         Button("Run Tick Now") {
           Task { await model.daemon("automation-daemon-tick") }
         }
-        Divider()
-        Button("Disable Daemon") {
-          Task { await model.daemon("automation-daemon-disable") }
-        }
+        .disabled(!(model.daemonStatus?.enabled ?? false))
       }
     }
 
-    Settings {
+    Window("Preferences", id: "preferences") {
       SettingsView(model: model)
-        .frame(width: 720, height: 520)
+        .frame(width: 760, height: 540)
     }
+    .windowResizability(.contentSize)
   }
 }
 
@@ -167,18 +180,26 @@ private struct WorkspaceSidebar: View {
 
       Divider()
       HStack(alignment: .center, spacing: 8) {
-        Button {
-          NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } label: {
-          Image(systemName: "gearshape")
-        }
-        .help("Settings")
-        .buttonStyle(.borderless)
+        OpenPreferencesButton()
         RuntimeHealthView(model: model)
       }
       .padding(12)
       .padding(.bottom, 28)
     }
+  }
+}
+
+private struct OpenPreferencesButton: View {
+  @Environment(\.openWindow) private var openWindow
+
+  var body: some View {
+    Button {
+      openWindow(id: "preferences")
+    } label: {
+      Image(systemName: "gearshape")
+    }
+    .help("Preferences")
+    .buttonStyle(.borderless)
   }
 }
 
@@ -354,7 +375,7 @@ private struct RuntimeHealthView: View {
         Text("Model: \(health.defaultModel)")
         Text("Installed models: \(health.installedModelCount)")
       } else {
-        Text(model.resolvedCoreRoot.isEmpty ? "Set the Artificer core root in Settings." : model.resolvedCoreRoot)
+        Text(model.resolvedCoreRoot.isEmpty ? "Set the Artificer core root in Preferences." : model.resolvedCoreRoot)
           .lineLimit(2)
       }
     }
@@ -702,110 +723,198 @@ private struct SettingsView: View {
   @ObservedObject var model: ArtificerModel
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 18) {
-        SettingsPanel("Runtime") {
-          VStack(alignment: .leading, spacing: 5) {
-            Text("Artificer core root")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-            TextField("Artificer core root", text: $model.coreRootDraft)
-              .textFieldStyle(.roundedBorder)
-          }
-          HStack {
-            Button("Choose...") {
-              model.chooseCoreRoot()
-            }
-            Button("Save") {
-              Task { await model.saveCoreRoot() }
-            }
-            Button("Probe") {
-              Task { await model.refreshDoctor() }
-            }
-          }
-          .buttonStyle(.bordered)
-          Text(model.resolvedCoreRoot.isEmpty ? "No core root resolved." : "Resolved: \(model.resolvedCoreRoot)")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .textSelection(.enabled)
-        }
-
-        Divider()
-
-        SettingsPanel("Automation Daemon") {
-          if let daemon = model.daemonStatus {
-            SettingsInfoRow(title: "Status", value: daemon.status)
-            SettingsInfoRow(title: "Method", value: daemon.method)
-            SettingsInfoRow(title: "State root", value: daemon.stateRoot)
-            SettingsInfoRow(title: "Log", value: daemon.logPath)
-          } else {
-            Text("Daemon status has not loaded yet.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-          }
-          HStack {
-            Button("Enable") { Task { await model.daemon("automation-daemon-enable") } }
-            Button("Pause") { Task { await model.daemon("automation-daemon-pause") } }
-            Button("Resume") { Task { await model.daemon("automation-daemon-resume") } }
-            Button("Tick") { Task { await model.daemon("automation-daemon-tick") } }
-            Button("Disable") { Task { await model.daemon("automation-daemon-disable") } }
-          }
-          .buttonStyle(.bordered)
-        }
-
-        Divider()
-
-        SettingsPanel("Work Checks") {
-          Toggle("Codex Desktop work checks", isOn: $model.codexWorkCheckEnabled)
-            .onChange(of: model.codexWorkCheckEnabled) { nextValue in
-              Task { await model.setCodexWorkCheckEnabled(nextValue) }
-            }
-          Text(model.codexWorkCheckEnabled ? "Self-improvement runs can ask Codex Desktop to check failed or low-quality work." : "Codex Desktop work checks are off.")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-          Button("Refresh") {
-            Task { await model.loadSelfImproveSettings() }
-          }
-          .buttonStyle(.bordered)
-        }
-
-        Divider()
-
-        SettingsPanel("Dictation") {
-          if let status = model.dictationStatus {
-            SettingsInfoRow(title: "Backend", value: status.installed ? status.backendLabel : "Not installed")
-            SettingsInfoRow(title: "Language", value: status.language)
-          }
-          if !model.dictationInstallMessage.isEmpty {
-            Text(model.dictationInstallMessage)
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-              .fixedSize(horizontal: false, vertical: true)
-          }
-          HStack {
-            Button("Check") { Task { await model.loadDictationStatus() } }
-            Button(model.isDictationInstalling ? "Installing..." : "Install") {
-              Task { await model.installDictation() }
-            }
-            .disabled(model.isDictationInstalling)
-            Button("Cancel") {
-              Task { await model.cancelDictationInstall() }
-            }
-            .disabled(model.dictationInstallJobID.isEmpty)
-          }
-          .buttonStyle(.bordered)
-        }
-      }
-      .padding(24)
-      .frame(maxWidth: .infinity, alignment: .leading)
+    TabView {
+      GeneralPreferencesTab(model: model)
+        .tabItem { Label("General", systemImage: "gearshape") }
+      AutomationsPreferencesTab(model: model)
+        .tabItem { Label("Automations", systemImage: "clock.arrow.circlepath") }
+      SelfImprovePreferencesTab(model: model)
+        .tabItem { Label("Self-improve", systemImage: "wand.and.stars") }
+      RuntimePreferencesTab(model: model)
+        .tabItem { Label("Runtime", systemImage: "slider.horizontal.3") }
+    }
+    .padding(20)
+    .task {
+      await model.loadPreferences()
     }
   }
 }
 
-private struct SettingsPanel<Content: View>: View {
+private struct GeneralPreferencesTab: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    PreferencesPane {
+      PreferencesSection("Models") {
+        Toggle("Use GPU acceleration for LLMs", isOn: .constant(true))
+          .disabled(true)
+        SettingsInfoRow(title: "Default model", value: model.health?.defaultModel ?? "Loading...")
+      }
+      PreferencesSection("Dictation") {
+        if let status = model.dictationStatus {
+          SettingsInfoRow(title: "Backend", value: status.installed ? status.backendLabel : "Not installed")
+          SettingsInfoRow(title: "Language", value: status.language)
+        }
+        if !model.dictationInstallMessage.isEmpty {
+          Text(model.dictationInstallMessage)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        HStack {
+          Button("Check") { Task { await model.loadDictationStatus() } }
+          Button(model.isDictationInstalling ? "Installing..." : "Install") {
+            Task { await model.installDictation() }
+          }
+          .disabled(model.isDictationInstalling)
+          Button("Cancel") {
+            Task { await model.cancelDictationInstall() }
+          }
+          .disabled(model.dictationInstallJobID.isEmpty)
+        }
+        .buttonStyle(.bordered)
+      }
+    }
+  }
+}
+
+private struct AutomationsPreferencesTab: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    PreferencesPane {
+      PreferencesSection("Automations") {
+        Toggle("Launch background runtime at startup", isOn: Binding(
+          get: { model.daemonStatus?.enabled ?? false },
+          set: { nextValue in
+            Task { await model.setAutomationDaemonEnabled(nextValue) }
+          }
+        ))
+        Toggle("Show menu bar icon", isOn: Binding(
+          get: { model.menuBarIconEnabled },
+          set: { nextValue in
+            Task { await model.setMenuBarIconEnabled(nextValue) }
+          }
+        ))
+        if let daemon = model.daemonStatus {
+          SettingsInfoRow(title: "Status", value: daemon.status)
+          SettingsInfoRow(title: "Method", value: daemon.method)
+          SettingsInfoRow(title: "Pending", value: "\(daemon.taskPending)")
+        } else {
+          Text("Automation status has not loaded yet.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        HStack {
+          Button("Run Tick Now") { Task { await model.daemon("automation-daemon-tick") } }
+            .disabled(!(model.daemonStatus?.enabled ?? false))
+          Button((model.daemonStatus?.paused ?? false) ? "Resume Runtime" : "Pause Runtime") {
+            Task { await model.toggleAutomationDaemonPaused() }
+          }
+          .disabled(!(model.daemonStatus?.enabled ?? false))
+        }
+        .buttonStyle(.bordered)
+      }
+      PreferencesSection("Programming Mode") {
+        Toggle("Programmer does code reviews", isOn: $model.programmerReview)
+        Picker("Max review rounds", selection: $model.programmerReviewRounds) {
+          ForEach(1...4, id: \.self) { round in
+            Text("\(round)").tag(round)
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 180, alignment: .leading)
+      }
+    }
+  }
+}
+
+private struct SelfImprovePreferencesTab: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    PreferencesPane {
+      PreferencesSection("Self-improvement") {
+        Toggle("Codex Desktop work checks", isOn: Binding(
+          get: { model.codexWorkCheckEnabled },
+          set: { nextValue in
+            Task { await model.setCodexWorkCheckEnabled(nextValue) }
+          }
+        ))
+        Text(model.codexWorkCheckEnabled ? "Self-improvement runs can ask Codex Desktop to check failed or low-quality work." : "Codex Desktop work checks are off.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      PreferencesSection("Evidence Sources") {
+        Toggle("Papers", isOn: .constant(true)).disabled(true)
+        Toggle("Web signals", isOn: .constant(true)).disabled(true)
+        Toggle("Runtime telemetry", isOn: .constant(true)).disabled(true)
+        Toggle("Repo signals", isOn: .constant(true)).disabled(true)
+        Toggle("Platform checks", isOn: .constant(true)).disabled(true)
+      }
+    }
+  }
+}
+
+private struct RuntimePreferencesTab: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    PreferencesPane {
+      PreferencesSection("Artificer Core") {
+        TextField("Artificer core root", text: $model.coreRootDraft)
+          .textFieldStyle(.roundedBorder)
+        HStack {
+          Button("Choose...") {
+            model.chooseCoreRoot()
+          }
+          Button("Save") {
+            Task { await model.saveCoreRoot() }
+          }
+          Button("Probe") {
+            Task { await model.refreshDoctor() }
+          }
+        }
+        .buttonStyle(.bordered)
+        Text(model.resolvedCoreRoot.isEmpty ? "No core root resolved." : "Resolved: \(model.resolvedCoreRoot)")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+          .textSelection(.enabled)
+      }
+      PreferencesSection("Storage") {
+        if let daemon = model.daemonStatus {
+          SettingsInfoRow(title: "State root", value: daemon.stateRoot)
+          SettingsInfoRow(title: "Log", value: daemon.logPath)
+        }
+      }
+    }
+  }
+}
+
+private struct PreferencesPane<Content: View>: View {
+  let content: Content
+
+  init(@ViewBuilder content: () -> Content) {
+    self.content = content()
+  }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 18) {
+        content
+      }
+      .frame(maxWidth: 620, alignment: .leading)
+      .padding(.top, 4)
+      .padding(.horizontal, 8)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+  }
+}
+
+private struct PreferencesSection<Content: View>: View {
   let title: String
   let content: Content
 
@@ -874,12 +983,14 @@ private final class ArtificerModel: ObservableObject {
   @Published var dictationInstallMessage = ""
   @Published var isDictationInstalling = false
   @Published var codexWorkCheckEnabled = false
+  @Published var menuBarIconEnabled = false
 
   @Published var runMode = "auto"
   @Published var computeBudget = "auto"
   @Published var commandExecMode = "ask-some"
   @Published var permissionMode = "default"
   @Published var programmerReview = true
+  @Published var programmerReviewRounds = 2
   @Published var selfActuation = false
   @Published var reflexiveKnowledge = false
 
@@ -925,6 +1036,15 @@ private final class ArtificerModel: ObservableObject {
     await loadProjects()
     await loadDaemonStatus()
     await loadAutomations()
+    await loadDesktopPrefs()
+    await loadDictationStatus()
+    await loadSelfImproveSettings()
+  }
+
+  func loadPreferences() async {
+    await loadHealth()
+    await loadDaemonStatus()
+    await loadDesktopPrefs()
     await loadDictationStatus()
     await loadSelfImproveSettings()
   }
@@ -1191,7 +1311,7 @@ private final class ArtificerModel: ObservableObject {
       commandExecMode,
       permissionMode,
       programmerReview ? "1" : "0",
-      "2",
+      "\(programmerReviewRounds)",
       reflexiveKnowledge ? "1" : "0",
       selfActuation ? "1" : "0",
       attachmentIDs
@@ -1231,11 +1351,44 @@ private final class ArtificerModel: ObservableObject {
     }
   }
 
+  func loadDesktopPrefs() async {
+    let result = await runBackend("desktop-prefs-get", trackBusy: false)
+    if let prefs = decode(DesktopPrefsResponse.self, from: result) {
+      menuBarIconEnabled = prefs.menuBarIcon
+    }
+  }
+
+  func setDesktopPref(_ key: String, enabled: Bool) async {
+    let result = await runBackend("desktop-prefs-set", key, enabled ? "1" : "0")
+    if let prefs = decode(DesktopPrefsResponse.self, from: result) {
+      menuBarIconEnabled = prefs.menuBarIcon
+    }
+  }
+
   func daemon(_ action: String) async {
     let result = await runBackend(action)
     if let daemon = decode(DaemonStatus.self, from: result) {
       daemonStatus = daemon
       statusMessage = "Automation daemon: \(daemon.status)."
+    }
+  }
+
+  func setAutomationDaemonEnabled(_ enabled: Bool) async {
+    await daemon(enabled ? "automation-daemon-enable" : "automation-daemon-disable")
+    await setDesktopPref("background_mode", enabled: enabled || menuBarIconEnabled)
+  }
+
+  func setMenuBarIconEnabled(_ enabled: Bool) async {
+    await setDesktopPref("menu_bar_icon", enabled: enabled)
+    await setDesktopPref("background_mode", enabled: enabled || (daemonStatus?.enabled ?? false))
+    statusMessage = enabled ? "Menu bar icon enabled." : "Menu bar icon disabled."
+  }
+
+  func toggleAutomationDaemonPaused() async {
+    if daemonStatus?.paused ?? false {
+      await daemon("automation-daemon-resume")
+    } else {
+      await daemon("automation-daemon-pause")
     }
   }
 
@@ -1824,6 +1977,7 @@ private struct AutomationItem: Identifiable, Decodable, Hashable {
 private struct DaemonStatus: Decodable {
   let success: Bool
   let enabled: Bool
+  let paused: Bool
   let status: String
   let method: String
   let stateRoot: String
@@ -1831,7 +1985,7 @@ private struct DaemonStatus: Decodable {
   let taskPending: Int
 
   enum CodingKeys: String, CodingKey {
-    case success, enabled, status, method
+    case success, enabled, paused, status, method
     case stateRoot = "state_root"
     case logPath = "log_path"
     case taskPending = "task_pending"
@@ -1841,11 +1995,31 @@ private struct DaemonStatus: Decodable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     success = (try? container.decode(Bool.self, forKey: .success)) ?? true
     enabled = container.decodeFlexibleBool(forKey: .enabled)
+    paused = container.decodeFlexibleBool(forKey: .paused)
     status = (try? container.decode(String.self, forKey: .status)) ?? "unknown"
     method = (try? container.decode(String.self, forKey: .method)) ?? "none"
     stateRoot = (try? container.decode(String.self, forKey: .stateRoot)) ?? ""
     logPath = (try? container.decode(String.self, forKey: .logPath)) ?? ""
     taskPending = container.decodeFlexibleInt(forKey: .taskPending)
+  }
+}
+
+private struct DesktopPrefsResponse: Decodable {
+  let success: Bool
+  let backgroundMode: Bool
+  let menuBarIcon: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case success
+    case backgroundMode = "background_mode"
+    case menuBarIcon = "menu_bar_icon"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    backgroundMode = container.decodeFlexibleBool(forKey: .backgroundMode)
+    menuBarIcon = container.decodeFlexibleBool(forKey: .menuBarIcon)
   }
 }
 

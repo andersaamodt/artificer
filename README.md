@@ -45,9 +45,9 @@ Implemented natively:
   by the same `codex_work_check_enabled` option as hosted Artificer
 - run policy controls for mode, compute budget, command execution, permission,
   programmer review, reflexive knowledge, and self-actuation
-- automation list plus enable, pause, resume, disable, and tick controls for the
-  existing Artificer automation daemon
-- native Settings for selecting the Artificer core root
+- automation list plus Preferences controls for launching, pausing, and ticking
+  the existing Artificer background runtime
+- native Preferences for selecting the Artificer core root
 - macOS and Linux generated source targets through the Forge native desktop IR
   pipeline
 
