@@ -1,0 +1,59 @@
+{
+  "version": "native-mobile-ir/v1",
+  "format": "yaml-1.2-json-compatible",
+  "app": {
+    "id": "artificer-mobile",
+    "name": "Artificer Mobile",
+    "targets": ["android", "ios"],
+    "offlineFirst": false,
+    "storePolicy": "direct-first",
+    "permissions": ["network"],
+    "screens": [
+      {
+        "id": "connect",
+        "title": "Connect",
+        "node": {
+          "id": "screen.connect",
+          "type": "Form",
+          "children": [
+            {"id": "endpoint", "type": "Input", "title": "Bridge URL"},
+            {"id": "token", "type": "Input", "title": "Pairing token"},
+            {"id": "connect", "type": "Button", "title": "Connect", "action": "connect"}
+          ]
+        }
+      },
+      {
+        "id": "threads",
+        "title": "Threads",
+        "node": {
+          "id": "screen.threads",
+          "type": "NavigationStack",
+          "children": [
+            {"id": "workspace.list", "type": "List", "title": "Workspaces"},
+            {"id": "conversation.list", "type": "List", "title": "Chats"}
+          ]
+        }
+      },
+      {
+        "id": "chat",
+        "title": "Chat",
+        "node": {
+          "id": "screen.chat",
+          "type": "Detail",
+          "children": [
+            {"id": "messages", "type": "Timeline", "title": "Messages"},
+            {"id": "composer", "type": "Composer", "title": "Message"}
+          ]
+        }
+      }
+    ]
+  },
+  "extensions": [
+    {
+      "id": "artificer.bridge",
+      "transport": ["tor", "lan", "loopback"],
+      "auth": "pairing-token",
+      "defaultPermissionMode": "ask-some"
+    }
+  ]
+}

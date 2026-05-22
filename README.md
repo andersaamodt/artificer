@@ -53,9 +53,17 @@ Implemented natively:
 - voice automation Preferences and a local launchd-backed listener for
   allowlisted phrases such as `main screen turn on`, with separate opt-ins for
   voice-to-Artificer prompts and voice-triggered Artificer actions
+- Artificer Mobile as a native Android/iOS thin client, paired to this computer
+  through the desktop Mobile bridge over localhost, explicit LAN exposure, or
+  an optional Tor hidden service
 - native Preferences for selecting the Artificer core root
 - macOS and Linux generated source targets through the Forge native desktop IR
   pipeline
+
+The mobile workspace lives in `artificer-mobile/`. Its source of truth is
+`artificer-mobile/app-blueprint/mobile.ir.yaml`, rendered with
+`sh artificer-mobile/scripts/render-native-mobile.sh` into reproducible Android
+and iOS projects under `artificer-mobile/generated/mobile/`.
 
 Deferred on purpose:
 

@@ -1,0 +1,14 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'app.wizardry.artificer.mobile'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'app.wizardry.artificer.mobile'
+        minSdk 23
+        targetSdk 35
+        versionCode 104521296
+        versionName '0.1.0'
+    }
+}

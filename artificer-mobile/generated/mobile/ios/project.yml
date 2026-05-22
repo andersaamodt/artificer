@@ -1,0 +1,15 @@
+name: artificer-mobile-native-mobile
+options:
+  bundleIdPrefix: app.wizardry.artificer
+targets:
+  ArtificerMobile:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - Host
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: app.wizardry.artificer.mobile
+      INFOPLIST_KEY_CFBundleDisplayName: "Artificer Mobile"
+      CURRENT_PROJECT_VERSION: "104521296"
+      MARKETING_VERSION: "0.1.0"

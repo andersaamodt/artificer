@@ -1,0 +1,135 @@
+name: Build Artifacts
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  WIZARDRY_APPS_REF: main
+
+jobs:
+  validate:
+    name: Validate native app contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Artificer
+        uses: actions/checkout@v4
+        with:
+          path: artificer
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Validate mobile and desktop contracts
+        run: |
+          set -eu
+          sh artificer/scripts/artificer-native-backend.sh --help >/dev/null
+          sh artificer/artificer-mobile/scripts/validate-native-mobile-ir.sh \
+            artificer/artificer-mobile/app-blueprint/mobile.ir.yaml \
+            artificer/artificer-mobile/schemas/native-mobile-ir-v1.json
+          sh artificer/.tests/test-artificer-mobile-contract.sh
+
+  android:
+    name: Build Android APK
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Artificer
+        uses: actions/checkout@v4
+        with:
+          path: artificer
+
+      - name: Check out Forge pipeline
+        uses: actions/checkout@v4
+        with:
+          repository: andersaamodt/wizardry-apps
+          ref: ${{ env.WIZARDRY_APPS_REF }}
+          path: wizardry-apps
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Render native mobile project
+        run: |
+          set -eu
+          cd artificer/artificer-mobile
+          sh scripts/render-native-mobile.sh
+
+      - name: Build debug APK
+        run: |
+          set -eu
+          mkdir -p dist/android
+          gradle -p artificer/artificer-mobile/generated/mobile/android :app:assembleDebug
+          apk=$(find artificer/artificer-mobile/generated/mobile/android/app/build/outputs/apk/debug -type f -name '*.apk' | head -n 1)
+          test -n "$apk"
+          cp "$apk" dist/android/artificer-mobile-debug.apk
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artificer-mobile-android
+          path: dist/android/*.apk
+
+  ios:
+    name: Build iOS Simulator App
+    needs: validate
+    runs-on: macos-latest
+    steps:
+      - name: Check out Artificer
+        uses: actions/checkout@v4
+        with:
+          path: artificer
+
+      - name: Check out Forge pipeline
+        uses: actions/checkout@v4
+        with:
+          repository: andersaamodt/wizardry-apps
+          ref: ${{ env.WIZARDRY_APPS_REF }}
+          path: wizardry-apps
+
+      - name: Install dependencies
+        run: brew install jq xcodegen
+
+      - name: Render native mobile project
+        run: |
+          set -eu
+          cd artificer/artificer-mobile
+          sh scripts/render-native-mobile.sh
+
+      - name: Build iOS simulator app
+        run: |
+          set -eu
+          mkdir -p dist/ios
+          cd artificer/artificer-mobile/generated/mobile/ios
+          xcodegen generate
+          xcodebuild -project artificer-mobile-native-mobile.xcodeproj -scheme ArtificerMobile -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO -derivedDataPath "$RUNNER_TEMP/artificer-mobile-derived" build
+          app=$(find "$RUNNER_TEMP/artificer-mobile-derived" -type d -name '*.app' | head -n 1)
+          test -n "$app"
+          ditto -c -k --keepParent "$app" "$GITHUB_WORKSPACE/dist/ios/artificer-mobile-ios-simulator.zip"
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artificer-mobile-ios
+          path: dist/ios/*.zip

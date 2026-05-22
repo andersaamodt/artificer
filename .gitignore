@@ -8,3 +8,6 @@
 *.app
 *.dSYM
 *.log
+/artificer-mobile/generated/mobile/android/.gradle/
+/artificer-mobile/generated/mobile/android/app/build/
+/artificer-mobile/generated/mobile/ios/*.xcodeproj/

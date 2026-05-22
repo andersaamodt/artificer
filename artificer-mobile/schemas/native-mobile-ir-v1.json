@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wizardry.app/schemas/native-mobile-ir-v1.json",
+  "title": "Wizardry Native Mobile IR v1",
+  "type": "object",
+  "required": ["version", "format", "app", "extensions"],
+  "properties": {
+    "version": { "const": "native-mobile-ir/v1" },
+    "format": { "const": "yaml-1.2-json-compatible" },
+    "app": {
+      "type": "object",
+      "required": ["id", "name", "targets", "screens"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "name": { "type": "string", "minLength": 1 },
+        "targets": {
+          "type": "array",
+          "items": { "enum": ["android", "ios"] },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "offlineFirst": { "type": "boolean" },
+        "storePolicy": { "enum": ["direct-first", "store-optional"] },
+        "permissions": {
+          "type": "array",
+          "items": { "enum": ["network", "notifications", "camera", "photos", "files"] },
+          "uniqueItems": true
+        },
+        "screens": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/screen" },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "extensions": { "type": "array" }
+  },
+  "$defs": {
+    "screen": {
+      "type": "object",
+      "required": ["id", "title", "node"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$" },
+        "title": { "type": "string", "minLength": 1 },
+        "node": { "$ref": "#/$defs/node" }
+      },
+      "additionalProperties": true
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": {
+          "enum": ["NavigationStack", "TabView", "Screen", "List", "Detail", "Timeline", "Composer", "Form", "Section", "Stack", "Text", "Label", "Button", "Input", "Toggle", "Select", "Image", "Spacer", "Sheet", "StatusBar"]
+        },
+        "title": { "type": "string" },
+        "value": { "type": "string" },
+        "action": { "type": "string" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+        "child": { "$ref": "#/$defs/node" },
+        "platformOverrides": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
+  }
+}
