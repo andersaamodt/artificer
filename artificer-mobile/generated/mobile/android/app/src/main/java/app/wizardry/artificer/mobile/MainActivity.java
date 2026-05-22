@@ -39,6 +39,7 @@ public final class MainActivity extends Activity {
     private String token = "";
     private JSONArray projects = new JSONArray();
     private HashMap<String, JSONArray> sessionsByProject = new HashMap<>();
+    private HashMap<String, String> folderErrors = new HashMap<>();
     private HashSet<String> expandedProjectIds = new HashSet<>();
     private HashSet<String> loadingProjectIds = new HashSet<>();
     private JSONObject runtime = new JSONObject();
@@ -62,7 +63,11 @@ public final class MainActivity extends Activity {
         prefs = getSharedPreferences("artificer-mobile", MODE_PRIVATE);
         endpoint = prefs.getString("endpoint", "");
         token = prefs.getString("token", "");
-        showConnect();
+        if (endpoint.trim().length() > 0 && token.trim().length() > 0) {
+            loadProjects();
+        } else {
+            showConnect();
+        }
     }
 
     private TextView text(String value, int sp, int style) {
@@ -125,6 +130,8 @@ public final class MainActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         title = text(screenTitle, 22, Typeface.BOLD);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
         header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         header.addView(contextWindow(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         status = text("", 12, Typeface.NORMAL);
@@ -135,6 +142,7 @@ public final class MainActivity extends Activity {
     }
 
     private void setStatus(String value) {
+        if (status == null) return;
         runOnUiThread(() -> status.setText(value));
     }
 
@@ -155,6 +163,7 @@ public final class MainActivity extends Activity {
             output.close();
         }
         InputStream stream = conn.getResponseCode() >= 400 ? conn.getErrorStream() : conn.getInputStream();
+        if (stream == null) throw new Exception("Bridge request failed");
         BufferedReader reader = new BufferedReader(new InputStreamReader(stream, "UTF-8"));
         StringBuilder out = new StringBuilder();
         String lineValue;
@@ -183,13 +192,23 @@ public final class MainActivity extends Activity {
         connect.setOnClickListener(v -> {
             endpoint = endpointField.getText().toString().trim();
             token = tokenField.getText().toString().trim();
+            if (endpoint.length() == 0 || token.length() == 0) {
+                setStatus("Bridge URL and pairing token are required.");
+                return;
+            }
             prefs.edit().putString("endpoint", endpoint).putString("token", token).apply();
             loadProjects();
         });
     }
 
     private void loadProjects() {
+        if (endpoint.trim().length() == 0 || token.trim().length() == 0) {
+            showConnect();
+            setStatus("Bridge URL and pairing token are required.");
+            return;
+        }
         loadingHome = true;
+        if (status == null) base("Artificer");
         setStatus("Loading Artificer...");
         new Thread(() -> {
             try {
@@ -201,6 +220,7 @@ public final class MainActivity extends Activity {
                 connected = true;
                 lastUpdated = new SimpleDateFormat("h:mm a", Locale.US).format(new Date());
                 loadingHome = false;
+                folderErrors.clear();
                 runOnUiThread(this::showHome);
             } catch (Exception ex) {
                 loadingHome = false;
@@ -261,6 +281,8 @@ public final class MainActivity extends Activity {
             if (expandedProjectIds.contains(projectId) || (query.trim().length() > 0 && sessionsByProject.containsKey(projectId))) {
                 if (loadingProjectIds.contains(projectId)) {
                     noteRow(list, "Loading chats...");
+                } else if (folderErrors.containsKey(projectId)) {
+                    noteRow(list, "Could not load chats. Tap folder to retry.");
                 } else {
                     JSONArray sessions = sessionsByProject.get(projectId);
                     if (sessions == null) {
@@ -326,7 +348,7 @@ public final class MainActivity extends Activity {
         boolean expanded = expandedProjectIds.contains(projectId);
         String label = (expanded ? "v " : "> ") + project.optString("name", projectId);
         int count = project.optInt("session_count", -1);
-        if (count >= 0) label += "  " + count;
+        if (count >= 0) label += "  " + count + " chats";
         TextView row = text(label, 16, Typeface.BOLD);
         row.setPadding(12, 12, 12, 8);
         row.setBackground(rounded(Color.rgb(250, 248, 242), line, 10));
@@ -390,12 +412,16 @@ public final class MainActivity extends Activity {
     private void toggleProject(JSONObject project) {
         String projectId = project.optString("id", "");
         if (expandedProjectIds.contains(projectId)) {
+            if (folderErrors.containsKey(projectId)) {
+                loadSessions(projectId);
+                return;
+            }
             expandedProjectIds.remove(projectId);
             renderTree();
             return;
         }
         expandedProjectIds.add(projectId);
-        if (!sessionsByProject.containsKey(projectId)) {
+        if (!sessionsByProject.containsKey(projectId) || folderErrors.containsKey(projectId)) {
             selectedProject = project;
             loadSessions(projectId);
         } else {
@@ -405,6 +431,7 @@ public final class MainActivity extends Activity {
 
     private void loadSessions(String workspaceId) {
         loadingProjectIds.add(workspaceId);
+        folderErrors.remove(workspaceId);
         renderTree();
         new Thread(() -> {
             try {
@@ -416,10 +443,20 @@ public final class MainActivity extends Activity {
                 runOnUiThread(this::renderTree);
             } catch (Exception ex) {
                 loadingProjectIds.remove(workspaceId);
+                folderErrors.put(workspaceId, ex.getMessage());
                 setStatus(ex.getMessage());
                 runOnUiThread(this::renderTree);
             }
         }).start();
+    }
+
+    private void slideIn(int direction) {
+        root.post(() -> {
+            int width = root.getWidth();
+            if (width <= 0) return;
+            root.setTranslationX(direction * width);
+            root.animate().translationX(0).setDuration(180).start();
+        });
     }
 
     private String enc(String value) {
@@ -443,8 +480,13 @@ public final class MainActivity extends Activity {
     private void showChat() {
         base(selectedSession.optString("title", "Chat"));
         Button back = button("Folders");
-        back.setOnClickListener(v -> showHome());
+        back.setOnClickListener(v -> {
+            showHome();
+            slideIn(-1);
+        });
         root.addView(back, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        String chatDetail = sessionDetailLine(selectedSession);
+        if (chatDetail.length() > 0) noteRow(root, chatDetail);
         ScrollView scroll = new ScrollView(this);
         LinearLayout messages = new LinearLayout(this);
         messages.setOrientation(LinearLayout.VERTICAL);
@@ -473,6 +515,7 @@ public final class MainActivity extends Activity {
         compose.addView(send, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(compose);
         send.setOnClickListener(v -> sendMessage(composer.getText().toString()));
+        slideIn(1);
     }
 
     private void sendMessage(String prompt) {

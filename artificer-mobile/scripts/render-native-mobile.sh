@@ -132,6 +132,7 @@ public final class MainActivity extends Activity {
     private String token = "";
     private JSONArray projects = new JSONArray();
     private HashMap<String, JSONArray> sessionsByProject = new HashMap<>();
+    private HashMap<String, String> folderErrors = new HashMap<>();
     private HashSet<String> expandedProjectIds = new HashSet<>();
     private HashSet<String> loadingProjectIds = new HashSet<>();
     private JSONObject runtime = new JSONObject();
@@ -155,7 +156,11 @@ public final class MainActivity extends Activity {
         prefs = getSharedPreferences("artificer-mobile", MODE_PRIVATE);
         endpoint = prefs.getString("endpoint", "");
         token = prefs.getString("token", "");
-        showConnect();
+        if (endpoint.trim().length() > 0 && token.trim().length() > 0) {
+            loadProjects();
+        } else {
+            showConnect();
+        }
     }
 
     private TextView text(String value, int sp, int style) {
@@ -218,6 +223,8 @@ public final class MainActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         title = text(screenTitle, 22, Typeface.BOLD);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
         header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         header.addView(contextWindow(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         status = text("", 12, Typeface.NORMAL);
@@ -228,6 +235,7 @@ public final class MainActivity extends Activity {
     }
 
     private void setStatus(String value) {
+        if (status == null) return;
         runOnUiThread(() -> status.setText(value));
     }
 
@@ -248,6 +256,7 @@ public final class MainActivity extends Activity {
             output.close();
         }
         InputStream stream = conn.getResponseCode() >= 400 ? conn.getErrorStream() : conn.getInputStream();
+        if (stream == null) throw new Exception("Bridge request failed");
         BufferedReader reader = new BufferedReader(new InputStreamReader(stream, "UTF-8"));
         StringBuilder out = new StringBuilder();
         String lineValue;
@@ -276,13 +285,23 @@ public final class MainActivity extends Activity {
         connect.setOnClickListener(v -> {
             endpoint = endpointField.getText().toString().trim();
             token = tokenField.getText().toString().trim();
+            if (endpoint.length() == 0 || token.length() == 0) {
+                setStatus("Bridge URL and pairing token are required.");
+                return;
+            }
             prefs.edit().putString("endpoint", endpoint).putString("token", token).apply();
             loadProjects();
         });
     }
 
     private void loadProjects() {
+        if (endpoint.trim().length() == 0 || token.trim().length() == 0) {
+            showConnect();
+            setStatus("Bridge URL and pairing token are required.");
+            return;
+        }
         loadingHome = true;
+        if (status == null) base("Artificer");
         setStatus("Loading Artificer...");
         new Thread(() -> {
             try {
@@ -294,6 +313,7 @@ public final class MainActivity extends Activity {
                 connected = true;
                 lastUpdated = new SimpleDateFormat("h:mm a", Locale.US).format(new Date());
                 loadingHome = false;
+                folderErrors.clear();
                 runOnUiThread(this::showHome);
             } catch (Exception ex) {
                 loadingHome = false;
@@ -354,6 +374,8 @@ public final class MainActivity extends Activity {
             if (expandedProjectIds.contains(projectId) || (query.trim().length() > 0 && sessionsByProject.containsKey(projectId))) {
                 if (loadingProjectIds.contains(projectId)) {
                     noteRow(list, "Loading chats...");
+                } else if (folderErrors.containsKey(projectId)) {
+                    noteRow(list, "Could not load chats. Tap folder to retry.");
                 } else {
                     JSONArray sessions = sessionsByProject.get(projectId);
                     if (sessions == null) {
@@ -419,7 +441,7 @@ public final class MainActivity extends Activity {
         boolean expanded = expandedProjectIds.contains(projectId);
         String label = (expanded ? "v " : "> ") + project.optString("name", projectId);
         int count = project.optInt("session_count", -1);
-        if (count >= 0) label += "  " + count;
+        if (count >= 0) label += "  " + count + " chats";
         TextView row = text(label, 16, Typeface.BOLD);
         row.setPadding(12, 12, 12, 8);
         row.setBackground(rounded(Color.rgb(250, 248, 242), line, 10));
@@ -483,12 +505,16 @@ public final class MainActivity extends Activity {
     private void toggleProject(JSONObject project) {
         String projectId = project.optString("id", "");
         if (expandedProjectIds.contains(projectId)) {
+            if (folderErrors.containsKey(projectId)) {
+                loadSessions(projectId);
+                return;
+            }
             expandedProjectIds.remove(projectId);
             renderTree();
             return;
         }
         expandedProjectIds.add(projectId);
-        if (!sessionsByProject.containsKey(projectId)) {
+        if (!sessionsByProject.containsKey(projectId) || folderErrors.containsKey(projectId)) {
             selectedProject = project;
             loadSessions(projectId);
         } else {
@@ -498,6 +524,7 @@ public final class MainActivity extends Activity {
 
     private void loadSessions(String workspaceId) {
         loadingProjectIds.add(workspaceId);
+        folderErrors.remove(workspaceId);
         renderTree();
         new Thread(() -> {
             try {
@@ -509,10 +536,20 @@ public final class MainActivity extends Activity {
                 runOnUiThread(this::renderTree);
             } catch (Exception ex) {
                 loadingProjectIds.remove(workspaceId);
+                folderErrors.put(workspaceId, ex.getMessage());
                 setStatus(ex.getMessage());
                 runOnUiThread(this::renderTree);
             }
         }).start();
+    }
+
+    private void slideIn(int direction) {
+        root.post(() -> {
+            int width = root.getWidth();
+            if (width <= 0) return;
+            root.setTranslationX(direction * width);
+            root.animate().translationX(0).setDuration(180).start();
+        });
     }
 
     private String enc(String value) {
@@ -536,8 +573,13 @@ public final class MainActivity extends Activity {
     private void showChat() {
         base(selectedSession.optString("title", "Chat"));
         Button back = button("Folders");
-        back.setOnClickListener(v -> showHome());
+        back.setOnClickListener(v -> {
+            showHome();
+            slideIn(-1);
+        });
         root.addView(back, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        String chatDetail = sessionDetailLine(selectedSession);
+        if (chatDetail.length() > 0) noteRow(root, chatDetail);
         ScrollView scroll = new ScrollView(this);
         LinearLayout messages = new LinearLayout(this);
         messages.setOrientation(LinearLayout.VERTICAL);
@@ -566,6 +608,7 @@ public final class MainActivity extends Activity {
         compose.addView(send, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(compose);
         send.setOnClickListener(v -> sendMessage(composer.getText().toString()));
+        slideIn(1);
     }
 
     private void sendMessage(String prompt) {
@@ -729,6 +772,16 @@ struct BridgeMessage: Identifiable, Codable {
     var id: String { "\(role)-\(content.hashValue)-\(content.count)" }
     let role: String
     let content: String
+
+    enum CodingKeys: String, CodingKey {
+        case role, content
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        role = (try? container.decode(String.self, forKey: .role)) ?? "message"
+        content = (try? container.decode(String.self, forKey: .content)) ?? ""
+    }
 }
 
 struct SessionDetail: Codable {
@@ -738,6 +791,20 @@ struct SessionDetail: Codable {
     let updated: Int
     let queue: QueueState
     let messages: [BridgeMessage]
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, model, updated, queue, messages
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? container.decode(String.self, forKey: .id)) ?? ""
+        title = (try? container.decode(String.self, forKey: .title)) ?? id
+        model = (try? container.decode(String.self, forKey: .model)) ?? ""
+        updated = (try? container.decode(Int.self, forKey: .updated)) ?? 0
+        queue = (try? container.decode(QueueState.self, forKey: .queue)) ?? .empty
+        messages = (try? container.decode([BridgeMessage].self, forKey: .messages)) ?? []
+    }
 }
 
 @MainActor
@@ -748,6 +815,7 @@ final class BridgeModel: ObservableObject {
     @Published var sessionsByProject: [String: [BridgeSession]] = [:]
     @Published var expandedProjectIDs: Set<String> = []
     @Published var loadingProjectIDs: Set<String> = []
+    @Published var folderErrors: [String: String] = [:]
     @Published var selectedProject: BridgeProject?
     @Published var selectedSession: BridgeSession?
     @Published var detail: SessionDetail?
@@ -756,15 +824,26 @@ final class BridgeModel: ObservableObject {
     @Published var draft = ""
     @Published var query = ""
     @Published var isRefreshing = false
+    @Published var isSending = false
     @Published var lastUpdated = ""
 
     func connect() async {
         await refresh()
     }
 
+    func autoConnectIfPossible() async {
+        guard projects.isEmpty, !isRefreshing, hasPairingDetails else { return }
+        await refresh()
+    }
+
     func refresh() async {
+        guard hasPairingDetails else {
+            status = "Bridge URL and pairing token are required."
+            return
+        }
+        isRefreshing = true
+        defer { isRefreshing = false }
         do {
-            isRefreshing = true
             status = "Loading Artificer..."
             let healthPayload = try await get("/health")
             runtime = (try? JSONDecoder().decode(HealthResponse.self, from: healthPayload).runtime)
@@ -773,12 +852,12 @@ final class BridgeModel: ObservableObject {
             projects = projects.filter(\.pathExists)
             sessionsByProject = sessionsByProject.filter { key, _ in projects.contains { $0.id == key } }
             expandedProjectIDs = expandedProjectIDs.filter { id in projects.contains { $0.id == id } }
+            folderErrors = folderErrors.filter { key, _ in projects.contains { $0.id == key } }
             lastUpdated = Self.timeFormatter.string(from: Date())
             status = projects.isEmpty ? "No folders returned" : "\(projects.count) folders"
         } catch {
             status = error.localizedDescription
         }
-        isRefreshing = false
     }
 
     func setExpanded(_ project: BridgeProject, expanded: Bool) async {
@@ -793,12 +872,14 @@ final class BridgeModel: ObservableObject {
     func ensureSessions(_ project: BridgeProject) async {
         guard sessionsByProject[project.id] == nil, !loadingProjectIDs.contains(project.id) else { return }
         loadingProjectIDs.insert(project.id)
+        folderErrors[project.id] = nil
         do {
             let payload = try await get("/sessions?workspace_id=\(project.id.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")
             let sessions = (try? JSONDecoder().decode(SessionList.self, from: payload).sessions) ?? []
             sessionsByProject[project.id] = sessions
             status = "\(sessions.count) chats in \(project.name)"
         } catch {
+            folderErrors[project.id] = error.localizedDescription
             status = error.localizedDescription
         }
         loadingProjectIDs.remove(project.id)
@@ -820,9 +901,12 @@ final class BridgeModel: ObservableObject {
     func send() async {
         guard let project = selectedProject, let session = selectedSession else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty, !isSending else { return }
         draft = ""
+        isSending = true
+        defer { isSending = false }
         do {
+            status = "Sending..."
             _ = try await post("/message", body: MessageRequest(workspace_id: project.id, conversation_id: session.id, prompt: text, run_after: true))
             await open(session)
         } catch {
@@ -857,6 +941,13 @@ final class BridgeModel: ObservableObject {
         if session.queue.pending > 0 { return "queued \(session.queue.pending)" }
         if session.queue.done > 0 { return "done \(session.queue.done)" }
         return ""
+    }
+
+    func queueColor(_ session: BridgeSession) -> Color {
+        if session.queue.running > 0 { return .green }
+        if session.queue.pending > 0 { return .orange }
+        if session.queue.done > 0 { return .blue }
+        return .secondary
     }
 
     func detailLine(_ session: BridgeSession) -> String {
@@ -915,9 +1006,25 @@ final class BridgeModel: ObservableObject {
         formatter.timeStyle = .short
         return formatter
     }()
+
+    private var hasPairingDetails: Bool {
+        !endpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        && !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
-struct HealthResponse: Codable { let runtime: RuntimeHealth }
+struct HealthResponse: Codable {
+    let runtime: RuntimeHealth
+
+    enum CodingKeys: String, CodingKey {
+        case runtime
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        runtime = (try? container.decode(RuntimeHealth.self, forKey: .runtime)) ?? RuntimeHealth()
+    }
+}
 struct ProjectList: Codable { let projects: [BridgeProject] }
 struct SessionList: Codable { let sessions: [BridgeSession] }
 struct SessionResponse: Codable { let session: SessionDetail }
@@ -945,6 +1052,7 @@ struct ContentView: View {
                     StatusBar(text: model.status)
                 }
             }
+            .task { await model.autoConnectIfPossible() }
         }
     }
 
@@ -1015,6 +1123,7 @@ struct ContextWindow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
+        .frame(maxWidth: 158, alignment: .trailing)
         .background(Color.teal.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
@@ -1041,6 +1150,16 @@ struct ProjectDisclosure: View {
                 HStack {
                     ProgressView()
                     Text("Loading chats...")
+                }
+            } else if let error = model.folderErrors[project.id] {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Could not load chats")
+                        .font(.caption.bold())
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    Button("Retry") { Task { await model.ensureSessions(project) } }
                 }
             } else if model.sessionsByProject[project.id] == nil {
                 Button("Load chats") { Task { await model.ensureSessions(project) } }
@@ -1086,7 +1205,7 @@ struct ChatRow: View {
                 if !detail.isEmpty {
                     Text(detail)
                         .font(.caption)
-                        .foregroundStyle(session.queue.running > 0 ? .green : .orange)
+                        .foregroundStyle(model.queueColor(session))
                         .lineLimit(1)
                 }
             }
@@ -1111,7 +1230,7 @@ struct ChatView: View {
                     if !queue.isEmpty {
                         Text(queue)
                             .font(.caption2)
-                            .foregroundStyle(session.queue.running > 0 ? .green : .orange)
+                            .foregroundStyle(model.queueColor(session))
                     }
                     if !session.model.isEmpty {
                         Text(session.model)
@@ -1126,6 +1245,7 @@ struct ChatView: View {
             .padding(.vertical, 8)
             .background(.bar)
             messageList
+                .refreshable { await model.open(session) }
             composer
         }
         .navigationTitle(session.title.isEmpty ? "Chat" : session.title)
@@ -1133,7 +1253,6 @@ struct ChatView: View {
             model.selectedProject = project
             await model.open(session)
         }
-        .refreshable { await model.open(session) }
     }
 
     private var messageList: some View {
@@ -1170,9 +1289,17 @@ struct ChatView: View {
         HStack(alignment: .bottom) {
             TextField("Message Artificer", text: $model.draft, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
-            Button("Send") { Task { await model.send() } }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button {
+                Task { await model.send() }
+            } label: {
+                if model.isSending {
+                    ProgressView()
+                } else {
+                    Text("Send")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isSending)
         }
         .padding()
         .background(.bar)

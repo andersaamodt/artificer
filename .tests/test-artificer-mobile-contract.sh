@@ -102,6 +102,26 @@ grep -q 'Refresh' "$renderer" || {
   exit 1
 }
 
+grep -q 'autoConnectIfPossible' "$renderer" || {
+  printf '%s\n' "iOS mobile app should auto-connect when pairing details are saved" >&2
+  exit 1
+}
+
+grep -q 'endpoint.trim().length() > 0 && token.trim().length() > 0' "$renderer" || {
+  printf '%s\n' "Android mobile app should auto-connect when pairing details are saved" >&2
+  exit 1
+}
+
+grep -q 'folderErrors' "$renderer" || {
+  printf '%s\n' "mobile app should expose per-folder chat load retry state" >&2
+  exit 1
+}
+
+grep -q 'isSending' "$renderer" || {
+  printf '%s\n' "iOS mobile app should show send progress and prevent duplicate sends" >&2
+  exit 1
+}
+
 grep -q 'artificer/artificer-mobile/generated/mobile/android' "$root/.github/workflows/build-artifacts.yml" || {
   printf '%s\n' "GitHub Actions should build the Artificer Mobile Android artifact" >&2
   exit 1

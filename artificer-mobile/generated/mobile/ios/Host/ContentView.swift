@@ -107,6 +107,16 @@ struct BridgeMessage: Identifiable, Codable {
     var id: String { "\(role)-\(content.hashValue)-\(content.count)" }
     let role: String
     let content: String
+
+    enum CodingKeys: String, CodingKey {
+        case role, content
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        role = (try? container.decode(String.self, forKey: .role)) ?? "message"
+        content = (try? container.decode(String.self, forKey: .content)) ?? ""
+    }
 }
 
 struct SessionDetail: Codable {
@@ -116,6 +126,20 @@ struct SessionDetail: Codable {
     let updated: Int
     let queue: QueueState
     let messages: [BridgeMessage]
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, model, updated, queue, messages
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? container.decode(String.self, forKey: .id)) ?? ""
+        title = (try? container.decode(String.self, forKey: .title)) ?? id
+        model = (try? container.decode(String.self, forKey: .model)) ?? ""
+        updated = (try? container.decode(Int.self, forKey: .updated)) ?? 0
+        queue = (try? container.decode(QueueState.self, forKey: .queue)) ?? .empty
+        messages = (try? container.decode([BridgeMessage].self, forKey: .messages)) ?? []
+    }
 }
 
 @MainActor
@@ -126,6 +150,7 @@ final class BridgeModel: ObservableObject {
     @Published var sessionsByProject: [String: [BridgeSession]] = [:]
     @Published var expandedProjectIDs: Set<String> = []
     @Published var loadingProjectIDs: Set<String> = []
+    @Published var folderErrors: [String: String] = [:]
     @Published var selectedProject: BridgeProject?
     @Published var selectedSession: BridgeSession?
     @Published var detail: SessionDetail?
@@ -134,15 +159,26 @@ final class BridgeModel: ObservableObject {
     @Published var draft = ""
     @Published var query = ""
     @Published var isRefreshing = false
+    @Published var isSending = false
     @Published var lastUpdated = ""
 
     func connect() async {
         await refresh()
     }
 
+    func autoConnectIfPossible() async {
+        guard projects.isEmpty, !isRefreshing, hasPairingDetails else { return }
+        await refresh()
+    }
+
     func refresh() async {
+        guard hasPairingDetails else {
+            status = "Bridge URL and pairing token are required."
+            return
+        }
+        isRefreshing = true
+        defer { isRefreshing = false }
         do {
-            isRefreshing = true
             status = "Loading Artificer..."
             let healthPayload = try await get("/health")
             runtime = (try? JSONDecoder().decode(HealthResponse.self, from: healthPayload).runtime)
@@ -151,12 +187,12 @@ final class BridgeModel: ObservableObject {
             projects = projects.filter(\.pathExists)
             sessionsByProject = sessionsByProject.filter { key, _ in projects.contains { $0.id == key } }
             expandedProjectIDs = expandedProjectIDs.filter { id in projects.contains { $0.id == id } }
+            folderErrors = folderErrors.filter { key, _ in projects.contains { $0.id == key } }
             lastUpdated = Self.timeFormatter.string(from: Date())
             status = projects.isEmpty ? "No folders returned" : "\(projects.count) folders"
         } catch {
             status = error.localizedDescription
         }
-        isRefreshing = false
     }
 
     func setExpanded(_ project: BridgeProject, expanded: Bool) async {
@@ -171,12 +207,14 @@ final class BridgeModel: ObservableObject {
     func ensureSessions(_ project: BridgeProject) async {
         guard sessionsByProject[project.id] == nil, !loadingProjectIDs.contains(project.id) else { return }
         loadingProjectIDs.insert(project.id)
+        folderErrors[project.id] = nil
         do {
             let payload = try await get("/sessions?workspace_id=\(project.id.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")
             let sessions = (try? JSONDecoder().decode(SessionList.self, from: payload).sessions) ?? []
             sessionsByProject[project.id] = sessions
             status = "\(sessions.count) chats in \(project.name)"
         } catch {
+            folderErrors[project.id] = error.localizedDescription
             status = error.localizedDescription
         }
         loadingProjectIDs.remove(project.id)
@@ -198,9 +236,12 @@ final class BridgeModel: ObservableObject {
     func send() async {
         guard let project = selectedProject, let session = selectedSession else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty, !isSending else { return }
         draft = ""
+        isSending = true
+        defer { isSending = false }
         do {
+            status = "Sending..."
             _ = try await post("/message", body: MessageRequest(workspace_id: project.id, conversation_id: session.id, prompt: text, run_after: true))
             await open(session)
         } catch {
@@ -235,6 +276,13 @@ final class BridgeModel: ObservableObject {
         if session.queue.pending > 0 { return "queued \(session.queue.pending)" }
         if session.queue.done > 0 { return "done \(session.queue.done)" }
         return ""
+    }
+
+    func queueColor(_ session: BridgeSession) -> Color {
+        if session.queue.running > 0 { return .green }
+        if session.queue.pending > 0 { return .orange }
+        if session.queue.done > 0 { return .blue }
+        return .secondary
     }
 
     func detailLine(_ session: BridgeSession) -> String {
@@ -293,9 +341,25 @@ final class BridgeModel: ObservableObject {
         formatter.timeStyle = .short
         return formatter
     }()
+
+    private var hasPairingDetails: Bool {
+        !endpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        && !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
-struct HealthResponse: Codable { let runtime: RuntimeHealth }
+struct HealthResponse: Codable {
+    let runtime: RuntimeHealth
+
+    enum CodingKeys: String, CodingKey {
+        case runtime
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        runtime = (try? container.decode(RuntimeHealth.self, forKey: .runtime)) ?? RuntimeHealth()
+    }
+}
 struct ProjectList: Codable { let projects: [BridgeProject] }
 struct SessionList: Codable { let sessions: [BridgeSession] }
 struct SessionResponse: Codable { let session: SessionDetail }
@@ -323,6 +387,7 @@ struct ContentView: View {
                     StatusBar(text: model.status)
                 }
             }
+            .task { await model.autoConnectIfPossible() }
         }
     }
 
@@ -393,6 +458,7 @@ struct ContextWindow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
+        .frame(maxWidth: 158, alignment: .trailing)
         .background(Color.teal.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
@@ -419,6 +485,16 @@ struct ProjectDisclosure: View {
                 HStack {
                     ProgressView()
                     Text("Loading chats...")
+                }
+            } else if let error = model.folderErrors[project.id] {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Could not load chats")
+                        .font(.caption.bold())
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    Button("Retry") { Task { await model.ensureSessions(project) } }
                 }
             } else if model.sessionsByProject[project.id] == nil {
                 Button("Load chats") { Task { await model.ensureSessions(project) } }
@@ -464,7 +540,7 @@ struct ChatRow: View {
                 if !detail.isEmpty {
                     Text(detail)
                         .font(.caption)
-                        .foregroundStyle(session.queue.running > 0 ? .green : .orange)
+                        .foregroundStyle(model.queueColor(session))
                         .lineLimit(1)
                 }
             }
@@ -489,7 +565,7 @@ struct ChatView: View {
                     if !queue.isEmpty {
                         Text(queue)
                             .font(.caption2)
-                            .foregroundStyle(session.queue.running > 0 ? .green : .orange)
+                            .foregroundStyle(model.queueColor(session))
                     }
                     if !session.model.isEmpty {
                         Text(session.model)
@@ -504,6 +580,7 @@ struct ChatView: View {
             .padding(.vertical, 8)
             .background(.bar)
             messageList
+                .refreshable { await model.open(session) }
             composer
         }
         .navigationTitle(session.title.isEmpty ? "Chat" : session.title)
@@ -511,7 +588,6 @@ struct ChatView: View {
             model.selectedProject = project
             await model.open(session)
         }
-        .refreshable { await model.open(session) }
     }
 
     private var messageList: some View {
@@ -548,9 +624,17 @@ struct ChatView: View {
         HStack(alignment: .bottom) {
             TextField("Message Artificer", text: $model.draft, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
-            Button("Send") { Task { await model.send() } }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button {
+                Task { await model.send() }
+            } label: {
+                if model.isSending {
+                    ProgressView()
+                } else {
+                    Text("Send")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isSending)
         }
         .padding()
         .background(.bar)
