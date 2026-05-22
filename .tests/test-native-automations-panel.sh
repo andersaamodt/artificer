@@ -42,6 +42,14 @@ for file in "$template" "$generated"; do
     printf '%s\n' "Preferences should include a clear save control for local voice actions: $file" >&2
     exit 1
   }
+  grep -q 'Play sound when command is recognized' "$file" || {
+    printf '%s\n' "Preferences should expose recognized-command sound feedback: $file" >&2
+    exit 1
+  }
+  grep -q 'voice_automation_sound' "$file" || {
+    printf '%s\n' "Native UI should persist recognized-command sound feedback: $file" >&2
+    exit 1
+  }
   grep -q 'voice_local_action_1_phrases' "$file" || {
     printf '%s\n' "Native UI should load and save local action voice phrases: $file" >&2
     exit 1
@@ -104,6 +112,16 @@ grep -q 'voice_local_action_1_phrases' "$backend" || {
 
 grep -q 'voice_local_action_1_command' "$backend" || {
   printf '%s\n' "Native backend should persist local action commands" >&2
+  exit 1
+}
+
+grep -q 'voice_automation_sound' "$backend" || {
+  printf '%s\n' "Native backend should persist recognized-command sound feedback" >&2
+  exit 1
+}
+
+grep -q 'play_recognition_sound' "$root/scripts/artificer-voice-automations.sh" || {
+  printf '%s\n' "Voice listener should play feedback when a command is recognized" >&2
   exit 1
 }
 

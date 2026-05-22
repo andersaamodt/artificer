@@ -175,7 +175,7 @@ canonical_desktop_pref_key() {
   key=$1
   reject_line_breaks "$key" "desktop preference key"
   case "$key" in
-    background_mode|menu_bar_icon|voice_automations|voice_automation_llm_prompts|voice_automation_llm_actions|mobile_bridge|mobile_tor|mobile_lan|mobile_allow_execute|mobile_allow_self_actuation)
+    background_mode|menu_bar_icon|voice_automations|voice_automation_sound|voice_automation_llm_prompts|voice_automation_llm_actions|mobile_bridge|mobile_tor|mobile_lan|mobile_allow_execute|mobile_allow_self_actuation)
       printf '%s\n' "$key"
       ;;
     *)
@@ -257,6 +257,7 @@ desktop_prefs_json() {
   background_mode=$(read_desktop_pref background_mode 2>/dev/null || printf '%s\n' 0)
   menu_bar_icon=$(read_desktop_pref menu_bar_icon 2>/dev/null || printf '%s\n' 0)
   voice_automations=$(read_desktop_pref voice_automations 2>/dev/null || printf '%s\n' 0)
+  voice_automation_sound=$(read_desktop_pref voice_automation_sound 2>/dev/null || printf '%s\n' 0)
   voice_automation_llm_prompts=$(read_desktop_pref voice_automation_llm_prompts 2>/dev/null || printf '%s\n' 0)
   voice_automation_llm_actions=$(read_desktop_pref voice_automation_llm_actions 2>/dev/null || printf '%s\n' 0)
   voice_local_action_1_name=$(read_desktop_value voice_local_action_1_name 2>/dev/null || printf '')
@@ -273,6 +274,7 @@ desktop_prefs_json() {
   background_mode=$(bool_pref_value "$background_mode" 2>/dev/null || printf '%s\n' 0)
   menu_bar_icon=$(bool_pref_value "$menu_bar_icon" 2>/dev/null || printf '%s\n' 0)
   voice_automations=$(bool_pref_value "$voice_automations" 2>/dev/null || printf '%s\n' 0)
+  voice_automation_sound=$(bool_pref_value "$voice_automation_sound" 2>/dev/null || printf '%s\n' 0)
   voice_automation_llm_prompts=$(bool_pref_value "$voice_automation_llm_prompts" 2>/dev/null || printf '%s\n' 0)
   voice_automation_llm_actions=$(bool_pref_value "$voice_automation_llm_actions" 2>/dev/null || printf '%s\n' 0)
   mobile_bridge=$(bool_pref_value "$mobile_bridge" 2>/dev/null || printf '%s\n' 0)
@@ -280,10 +282,11 @@ desktop_prefs_json() {
   mobile_lan=$(bool_pref_value "$mobile_lan" 2>/dev/null || printf '%s\n' 0)
   mobile_allow_execute=$(bool_pref_value "$mobile_allow_execute" 2>/dev/null || printf '%s\n' 0)
   mobile_allow_self_actuation=$(bool_pref_value "$mobile_allow_self_actuation" 2>/dev/null || printf '%s\n' 0)
-  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s,"voice_local_action_1_name":%s,"voice_local_action_1_command":%s,"voice_local_action_1_phrases":%s,"voice_local_action_2_name":%s,"voice_local_action_2_command":%s,"voice_local_action_2_phrases":%s,"mobile_bridge":%s,"mobile_tor":%s,"mobile_lan":%s,"mobile_allow_execute":%s,"mobile_allow_self_actuation":%s}\n' \
+  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_sound":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s,"voice_local_action_1_name":%s,"voice_local_action_1_command":%s,"voice_local_action_1_phrases":%s,"voice_local_action_2_name":%s,"voice_local_action_2_command":%s,"voice_local_action_2_phrases":%s,"mobile_bridge":%s,"mobile_tor":%s,"mobile_lan":%s,"mobile_allow_execute":%s,"mobile_allow_self_actuation":%s}\n' \
     "$([ "$background_mode" = 1 ] && printf true || printf false)" \
     "$([ "$menu_bar_icon" = 1 ] && printf true || printf false)" \
     "$([ "$voice_automations" = 1 ] && printf true || printf false)" \
+    "$([ "$voice_automation_sound" = 1 ] && printf true || printf false)" \
     "$([ "$voice_automation_llm_prompts" = 1 ] && printf true || printf false)" \
     "$([ "$voice_automation_llm_actions" = 1 ] && printf true || printf false)" \
     "$(json_escape "$voice_local_action_1_name")" \

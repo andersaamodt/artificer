@@ -1534,6 +1534,16 @@ private struct AutomationsPreferencesTab: View {
           .font(.caption)
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+          Toggle("Play sound when command is recognized", isOn: Binding(
+            get: { model.voiceRecognitionSoundEnabled },
+            set: { nextValue in
+              Task { await model.setDesktopPref("voice_automation_sound", enabled: nextValue) }
+            }
+          ))
+        }
+        .padding(.leading, 18)
+        .disabled(!model.voiceAutomationsEnabled)
         VStack(alignment: .leading, spacing: 6) {
           Text("Voice Commands")
             .font(.subheadline)
@@ -2008,6 +2018,7 @@ private final class ArtificerModel: ObservableObject {
   @Published var isSelfImproveRunning = false
   @Published var menuBarIconEnabled = false
   @Published var voiceAutomationsEnabled = false
+  @Published var voiceRecognitionSoundEnabled = false
   @Published var voiceLlmPromptsEnabled = false
   @Published var voiceLlmActionsEnabled = false
   @Published var voiceLocalAction1Name = ""
@@ -2697,6 +2708,7 @@ private final class ArtificerModel: ObservableObject {
     if let prefs = decode(DesktopPrefsResponse.self, from: result) {
       menuBarIconEnabled = prefs.menuBarIcon
       voiceAutomationsEnabled = prefs.voiceAutomations
+      voiceRecognitionSoundEnabled = prefs.voiceRecognitionSound
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
       loadVoiceLocalActions(from: prefs)
@@ -2729,6 +2741,9 @@ private final class ArtificerModel: ObservableObject {
     }
     if let value = prefs["voice_automations"] {
       voiceAutomationsEnabled = desktopLaunchBool(value)
+    }
+    if let value = prefs["voice_automation_sound"] {
+      voiceRecognitionSoundEnabled = desktopLaunchBool(value)
     }
     if let value = prefs["voice_automation_llm_prompts"] {
       voiceLlmPromptsEnabled = desktopLaunchBool(value)
@@ -2764,6 +2779,7 @@ private final class ArtificerModel: ObservableObject {
     if let prefs = decode(DesktopPrefsResponse.self, from: result) {
       menuBarIconEnabled = prefs.menuBarIcon
       voiceAutomationsEnabled = prefs.voiceAutomations
+      voiceRecognitionSoundEnabled = prefs.voiceRecognitionSound
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
       loadVoiceLocalActions(from: prefs)
@@ -3807,6 +3823,7 @@ private struct DesktopPrefsResponse: Decodable {
   let backgroundMode: Bool
   let menuBarIcon: Bool
   let voiceAutomations: Bool
+  let voiceRecognitionSound: Bool
   let voiceLlmPrompts: Bool
   let voiceLlmActions: Bool
   let voiceLocalAction1Name: String
@@ -3826,6 +3843,7 @@ private struct DesktopPrefsResponse: Decodable {
     case backgroundMode = "background_mode"
     case menuBarIcon = "menu_bar_icon"
     case voiceAutomations = "voice_automations"
+    case voiceRecognitionSound = "voice_automation_sound"
     case voiceLlmPrompts = "voice_automation_llm_prompts"
     case voiceLlmActions = "voice_automation_llm_actions"
     case voiceLocalAction1Name = "voice_local_action_1_name"
@@ -3847,6 +3865,7 @@ private struct DesktopPrefsResponse: Decodable {
     backgroundMode = container.decodeFlexibleBool(forKey: .backgroundMode)
     menuBarIcon = container.decodeFlexibleBool(forKey: .menuBarIcon)
     voiceAutomations = container.decodeFlexibleBool(forKey: .voiceAutomations)
+    voiceRecognitionSound = container.decodeFlexibleBool(forKey: .voiceRecognitionSound)
     voiceLlmPrompts = container.decodeFlexibleBool(forKey: .voiceLlmPrompts)
     voiceLlmActions = container.decodeFlexibleBool(forKey: .voiceLlmActions)
     voiceLocalAction1Name = (try? container.decode(String.self, forKey: .voiceLocalAction1Name)) ?? ""

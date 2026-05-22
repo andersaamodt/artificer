@@ -125,6 +125,12 @@ write_status() {
   message=$2
   phrase=$3
   action=$4
+  if [ -z "$phrase" ]; then
+    phrase=$(status_value last_phrase 2>/dev/null || printf '')
+  fi
+  if [ -z "$action" ]; then
+    action=$(status_value last_action 2>/dev/null || printf '')
+  fi
   now=$(date +%s 2>/dev/null || printf '0')
   tmp_file="$status_file.$$"
   {
@@ -135,6 +141,13 @@ write_status() {
     printf 'updated_at=%s\n' "$now"
   } > "$tmp_file"
   mv "$tmp_file" "$status_file"
+}
+
+play_recognition_sound() {
+  [ "$(pref_bool voice_automation_sound)" = 1 ] || return 0
+  if command -v afplay >/dev/null 2>&1; then
+    afplay /System/Library/Sounds/Glass.aiff >/dev/null 2>&1 &
+  fi
 }
 
 status_value() {
@@ -218,6 +231,7 @@ run_known_action() {
     [ -n "$name" ] || name="Local action $slot"
     if phrase_in_list "$phrase" "$phrases"; then
       if /bin/sh -c "$command_text" >/dev/null 2>&1; then
+        play_recognition_sound
         write_status triggered "Ran local action: $name." "$phrase" "$command_text"
         return 0
       fi
@@ -261,6 +275,7 @@ queue_llm_prompt() {
 
   "$backend_script" session-message "$workspace_id" "$conversation_id" "$prompt" auto medium "$command_mode" default 1 2 0 "$self_actuation" "" >/dev/null
   "$backend_script" session-run-next "$workspace_id" "$conversation_id" >/dev/null
+  play_recognition_sound
   write_status triggered "Queued voice prompt for Artificer." "$phrase" "llm-prompt"
   return 0
 }
