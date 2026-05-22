@@ -44,10 +44,10 @@ nl='
 '
 
 reject_line_breaks() {
-  value=${1-}
-  label=${2-value}
-  case "$value" in
-    *"$nl"*) printf '%s\n' "artificer-mobile-bridge: $label must not contain line breaks" >&2; exit 2 ;;
+  rlb_value=${1-}
+  rlb_label=${2-value}
+  case "$rlb_value" in
+    *"$nl"*) printf '%s\n' "artificer-mobile-bridge: $rlb_label must not contain line breaks" >&2; exit 2 ;;
   esac
 }
 
@@ -169,6 +169,13 @@ def run_backend(args):
         raise RuntimeError(text or "backend action failed")
     return text or "{}"
 
+def existing_projects(payload):
+    projects = payload.get("projects", [])
+    return [
+        project for project in projects
+        if str(project.get("path_exists", "1")).lower() not in ("0", "false", "no")
+    ]
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ArtificerMobileBridge/0.1"
 
@@ -208,12 +215,20 @@ class Handler(BaseHTTPRequestHandler):
                 self.write_json(200, self.backend_json(["health"]))
             elif parsed.path == "/projects":
                 payload = self.backend_json(["projects"])
-                projects = payload.get("projects", [])
-                payload["projects"] = [
-                    project for project in projects
-                    if str(project.get("path_exists", "1")).lower() not in ("0", "false", "no")
-                ]
+                payload["projects"] = existing_projects(payload)
                 self.write_json(200, payload)
+            elif parsed.path == "/tree":
+                health = self.backend_json(["health"])
+                projects_payload = self.backend_json(["projects"])
+                projects = existing_projects(projects_payload)
+                for project in projects:
+                    workspace_id = str(project.get("id", ""))
+                    if not workspace_id:
+                        project["sessions"] = []
+                        continue
+                    sessions_payload = self.backend_json(["sessions", workspace_id])
+                    project["sessions"] = sessions_payload.get("sessions", [])
+                self.write_json(200, {"success": True, "runtime": health.get("runtime", {}), "projects": projects})
             elif parsed.path == "/sessions":
                 workspace_id = params.get("workspace_id", [""])[0]
                 self.write_json(200, self.backend_json(["sessions", workspace_id]))

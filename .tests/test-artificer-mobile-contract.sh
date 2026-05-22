@@ -6,6 +6,12 @@ mobile="$root/artificer-mobile"
 bridge="$root/scripts/artificer-mobile-bridge.sh"
 backend="$root/scripts/artificer-native-backend.sh"
 template="$root/templates/macos/App.swift.template"
+renderer="$mobile/scripts/render-native-mobile.sh"
+tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/artificer-mobile-contract.XXXXXX")
+cleanup() {
+  rm -rf "$tmp_dir"
+}
+trap cleanup EXIT HUP INT TERM
 
 sh "$mobile/scripts/validate-native-mobile-ir.sh" "$mobile/app-blueprint/mobile.ir.yaml" "$mobile/schemas/native-mobile-ir-v1.json" >/dev/null
 
@@ -36,6 +42,63 @@ grep -q 'allow_execute' "$bridge" || {
 
 grep -q 'path_exists' "$bridge" || {
   printf '%s\n' "mobile bridge should filter stale workspaces before mobile list rendering" >&2
+  exit 1
+}
+
+XDG_CONFIG_HOME="$tmp_dir/config" XDG_STATE_HOME="$tmp_dir/state" sh "$bridge" set port 18765 >/dev/null
+XDG_CONFIG_HOME="$tmp_dir/config" XDG_STATE_HOME="$tmp_dir/state" sh "$bridge" set bind_host 127.0.0.1 >/dev/null
+XDG_CONFIG_HOME="$tmp_dir/config" XDG_STATE_HOME="$tmp_dir/state" sh "$bridge" status | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["port"] == "18765", p; assert p["bind_host"] == "127.0.0.1", p' || {
+  printf '%s\n' "mobile bridge settings should round-trip through temp config" >&2
+  exit 1
+}
+
+grep -q 'parsed.path == "/tree"' "$bridge" || {
+  printf '%s\n' "mobile bridge should expose a full folder/chat tree endpoint" >&2
+  exit 1
+}
+
+grep -q 'Search folders and chats' "$renderer" || {
+  printf '%s\n' "mobile app should include folder/chat search" >&2
+  exit 1
+}
+
+grep -q 'contextWindow' "$renderer" || {
+  printf '%s\n' "Android mobile UI should render the runtime context window" >&2
+  exit 1
+}
+
+grep -q 'ContextWindow' "$renderer" || {
+  printf '%s\n' "iOS mobile UI should render the runtime context window" >&2
+  exit 1
+}
+
+grep -q 'expandedProjectIds' "$renderer" || {
+  printf '%s\n' "Android mobile UI should support expandable folder hierarchy" >&2
+  exit 1
+}
+
+grep -q 'ProjectDisclosure' "$renderer" || {
+  printf '%s\n' "iOS mobile UI should support expandable folder hierarchy" >&2
+  exit 1
+}
+
+grep -q 'queueText' "$renderer" || {
+  printf '%s\n' "Android mobile UI should show queue/running state" >&2
+  exit 1
+}
+
+grep -q 'queueLabel' "$renderer" || {
+  printf '%s\n' "iOS mobile UI should show queue/running state" >&2
+  exit 1
+}
+
+grep -q 'No folders' "$renderer" || {
+  printf '%s\n' "mobile app should include empty folder states" >&2
+  exit 1
+}
+
+grep -q 'Refresh' "$renderer" || {
+  printf '%s\n' "mobile app should include explicit refresh behavior" >&2
   exit 1
 }
 
