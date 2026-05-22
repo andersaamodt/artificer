@@ -282,6 +282,7 @@ candidate_core_roots() {
   fi
   printf '%s\n' "$project_dir/vendor/artificer"
   printf '%s\n' "$project_dir/../artificer"
+  printf '%s\n' "$home/git/artificer-nonnative"
   printf '%s\n' "$home/.local/share/artificer/app"
   printf '%s\n' "$home/git/artificer"
 }

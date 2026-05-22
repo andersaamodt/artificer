@@ -59,6 +59,18 @@ grep -q 'VOICE_RECOGNITION_ROOT_DIR="$voice_root"' "$backend" || {
   exit 1
 }
 
+grep -q '"$home/git/artificer-nonnative"' "$backend" || {
+  printf '%s\n' "Native backend should prefer the current nonnative Artificer runtime checkout" >&2
+  exit 1
+}
+
+codex_toggle_json=$("$backend" self-improve-codex-work-check-set 1)
+printf '%s' "$codex_toggle_json" | python3 -c 'import json,sys; payload=json.load(sys.stdin); assert payload["run_options"]["codex_work_check_enabled"] is True' || {
+  printf '%s\n' "Codex work-check toggle should persist and return enabled state" >&2
+  exit 1
+}
+"$backend" self-improve-codex-work-check-set 0 >/dev/null
+
 if "$backend" desktop-prefs-set 'bad
 key' 1 >/tmp/artificer-native-settings-parity.out 2>/tmp/artificer-native-settings-parity.err; then
   printf '%s\n' "desktop preference keys with line breaks must be rejected" >&2
