@@ -717,6 +717,7 @@ private struct EmptyStateView: View {
 
 private struct AutomationsDetailView: View {
   @ObservedObject var model: ArtificerModel
+  @Environment(\.openWindow) private var openWindow
 
   var body: some View {
     VStack(spacing: 0) {
@@ -747,6 +748,13 @@ private struct AutomationsDetailView: View {
 
       Divider()
 
+      VoiceCommandsOverviewPane(model: model) {
+        openWindow(id: "preferences")
+      }
+      .padding(12)
+
+      Divider()
+
       HSplitView {
         AutomationCreatePane(model: model)
           .frame(minWidth: 280, idealWidth: 340, maxWidth: 420, maxHeight: .infinity)
@@ -757,6 +765,8 @@ private struct AutomationsDetailView: View {
     .task {
       await model.loadAutomations()
       await model.loadDaemonStatus()
+      await model.loadDesktopPrefs()
+      await model.loadVoiceAutomationStatus()
     }
   }
 
@@ -765,6 +775,61 @@ private struct AutomationsDetailView: View {
       return "Background runtime: \(daemon.status). \(model.automations.count) automation\(model.automations.count == 1 ? "" : "s")."
     }
     return "\(model.automations.count) automation\(model.automations.count == 1 ? "" : "s")."
+  }
+}
+
+private struct VoiceCommandsOverviewPane: View {
+  @ObservedObject var model: ArtificerModel
+  let openPreferences: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(alignment: .firstTextBaseline, spacing: 10) {
+        Label("Voice Commands", systemImage: model.voiceAutomationsEnabled ? "waveform.circle.fill" : "waveform.circle")
+          .font(.headline)
+        Text(model.voiceAutomationStatus?.status ?? (model.voiceAutomationsEnabled ? "enabled" : "off"))
+          .font(.caption)
+          .foregroundStyle(model.voiceAutomationsEnabled ? Color.secondary : Color.orange)
+        Spacer()
+        Button {
+          openPreferences()
+        } label: {
+          Label("Edit Voice Commands", systemImage: "slider.horizontal.3")
+        }
+        .buttonStyle(.bordered)
+      }
+      Text("Local phrases can trigger allowlisted actions even when push-to-talk is not active.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      VoicePhraseSummary(title: "Main screen", phrases: model.mainScreenVoicePhrases)
+      if model.voiceLlmPromptsEnabled {
+        VoicePhraseSummary(title: "Ask Artificer", phrases: "artificer summarize this thread, ask artificer check the build")
+      }
+      if model.voiceLlmActionsEnabled {
+        Text("Artificer action phrases use the selected thread and may run with the enabled action permissions.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+private struct VoicePhraseSummary: View {
+  let title: String
+  let phrases: String
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 10) {
+      Text(title)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .frame(width: 86, alignment: .leading)
+      Text(phrases)
+        .font(.caption)
+        .lineLimit(2)
+        .textSelection(.enabled)
+    }
   }
 }
 
@@ -1459,6 +1524,29 @@ private struct AutomationsPreferencesTab: View {
           .font(.caption)
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 6) {
+          Text("Voice Commands")
+            .font(.subheadline)
+          Text("Separate phrases with commas. Matching ignores case and punctuation.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          HStack(spacing: 8) {
+            TextField("main screen turn on, main screen on", text: $model.mainScreenVoicePhrases)
+              .textFieldStyle(.roundedBorder)
+              .frame(maxWidth: 460)
+              .onSubmit {
+                Task { await model.saveVoiceCommandPhrases() }
+              }
+            Button("Save Phrases") {
+              Task { await model.saveVoiceCommandPhrases() }
+            }
+            .disabled(model.mainScreenVoicePhrases.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          }
+          VoiceCommandExampleRow(title: "Main screen action", example: model.mainScreenVoicePhrases)
+          VoiceCommandExampleRow(title: "Ask Artificer", example: "artificer summarize this thread, ask artificer check the build")
+          VoiceCommandExampleRow(title: "Action prompt", example: "hey artificer turn this into a pull request")
+        }
+        .padding(.leading, 18)
         VStack(alignment: .leading, spacing: 8) {
           Toggle("Allow voice phrases to ask Artificer", isOn: Binding(
             get: { model.voiceLlmPromptsEnabled },
@@ -1652,6 +1740,23 @@ private struct RuntimePreferencesTab: View {
         }
       }
     }
+  }
+}
+
+private struct VoiceCommandExampleRow: View {
+  let title: String
+  let example: String
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 10) {
+      Text(title)
+        .foregroundStyle(.secondary)
+        .frame(width: 112, alignment: .leading)
+      Text(example)
+        .textSelection(.enabled)
+        .lineLimit(2)
+    }
+    .font(.caption)
   }
 }
 
@@ -1865,6 +1970,7 @@ private final class ArtificerModel: ObservableObject {
   @Published var voiceAutomationsEnabled = false
   @Published var voiceLlmPromptsEnabled = false
   @Published var voiceLlmActionsEnabled = false
+  @Published var mainScreenVoicePhrases = "main screen turn on, main screen on, turn on main screen, turn main screen on"
   @Published var voiceAutomationStatus: VoiceAutomationStatus?
   @Published var mobileBridgeEnabled = false
   @Published var mobileTorEnabled = false
@@ -2520,6 +2626,7 @@ private final class ArtificerModel: ObservableObject {
       voiceAutomationsEnabled = prefs.voiceAutomations
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
+      mainScreenVoicePhrases = prefs.mainScreenVoicePhrases
       mobileBridgeEnabled = prefs.mobileBridge
       mobileTorEnabled = prefs.mobileTor
       mobileLanEnabled = prefs.mobileLan
@@ -2556,6 +2663,9 @@ private final class ArtificerModel: ObservableObject {
     if let value = prefs["voice_automation_llm_actions"] {
       voiceLlmActionsEnabled = desktopLaunchBool(value)
     }
+    if let value = prefs["voice_main_screen_phrases"], !value.isEmpty {
+      mainScreenVoicePhrases = value
+    }
     if let value = prefs["mobile_bridge"] {
       mobileBridgeEnabled = desktopLaunchBool(value)
     }
@@ -2580,6 +2690,7 @@ private final class ArtificerModel: ObservableObject {
       voiceAutomationsEnabled = prefs.voiceAutomations
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
+      mainScreenVoicePhrases = prefs.mainScreenVoicePhrases
       mobileBridgeEnabled = prefs.mobileBridge
       mobileTorEnabled = prefs.mobileTor
       mobileLanEnabled = prefs.mobileLan
@@ -2595,6 +2706,24 @@ private final class ArtificerModel: ObservableObject {
     if let status = decode(VoiceAutomationStatus.self, from: result) {
       voiceAutomationStatus = status
     }
+  }
+
+  func setDesktopValue(_ key: String, value: String) async {
+    let result = await runBackend("desktop-value-set", key, value)
+    if let prefs = decode(DesktopPrefsResponse.self, from: result) {
+      mainScreenVoicePhrases = prefs.mainScreenVoicePhrases
+      statusMessage = "Voice commands saved."
+      await loadVoiceAutomationStatus()
+    }
+  }
+
+  func saveVoiceCommandPhrases() async {
+    let trimmed = mainScreenVoicePhrases.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      statusMessage = "Add at least one voice phrase."
+      return
+    }
+    await setDesktopValue("voice_main_screen_phrases", value: trimmed)
   }
 
   func loadMobileStatus() async {
@@ -3591,6 +3720,7 @@ private struct DesktopPrefsResponse: Decodable {
   let voiceAutomations: Bool
   let voiceLlmPrompts: Bool
   let voiceLlmActions: Bool
+  let mainScreenVoicePhrases: String
   let mobileBridge: Bool
   let mobileTor: Bool
   let mobileLan: Bool
@@ -3604,6 +3734,7 @@ private struct DesktopPrefsResponse: Decodable {
     case voiceAutomations = "voice_automations"
     case voiceLlmPrompts = "voice_automation_llm_prompts"
     case voiceLlmActions = "voice_automation_llm_actions"
+    case mainScreenVoicePhrases = "voice_main_screen_phrases"
     case mobileBridge = "mobile_bridge"
     case mobileTor = "mobile_tor"
     case mobileLan = "mobile_lan"
@@ -3619,6 +3750,7 @@ private struct DesktopPrefsResponse: Decodable {
     voiceAutomations = container.decodeFlexibleBool(forKey: .voiceAutomations)
     voiceLlmPrompts = container.decodeFlexibleBool(forKey: .voiceLlmPrompts)
     voiceLlmActions = container.decodeFlexibleBool(forKey: .voiceLlmActions)
+    mainScreenVoicePhrases = (try? container.decode(String.self, forKey: .mainScreenVoicePhrases)) ?? "main screen turn on, main screen on, turn on main screen, turn main screen on"
     mobileBridge = container.decodeFlexibleBool(forKey: .mobileBridge)
     mobileTor = container.decodeFlexibleBool(forKey: .mobileTor)
     mobileLan = container.decodeFlexibleBool(forKey: .mobileLan)

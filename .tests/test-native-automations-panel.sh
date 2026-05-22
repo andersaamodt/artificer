@@ -28,6 +28,22 @@ for file in "$template" "$generated"; do
     printf '%s\n' "Automations panel should create automations through the model: $file" >&2
     exit 1
   }
+  grep -q 'VoiceCommandsOverviewPane(model: model)' "$file" || {
+    printf '%s\n' "Automations panel should expose voice commands: $file" >&2
+    exit 1
+  }
+  grep -q 'Edit Voice Commands' "$file" || {
+    printf '%s\n' "Automations panel should point users to voice command editing: $file" >&2
+    exit 1
+  }
+  grep -q 'Save Phrases' "$file" || {
+    printf '%s\n' "Preferences should include a clear save control for voice phrases: $file" >&2
+    exit 1
+  }
+  grep -q 'voice_main_screen_phrases' "$file" || {
+    printf '%s\n' "Native UI should load and save main-screen voice phrases: $file" >&2
+    exit 1
+  }
 done
 
 for file in "$template" "$generated" "$blueprint"; do
@@ -59,6 +75,16 @@ grep -q 'automation-upsert WORKSPACE_ID CONVERSATION_ID NAME PROMPT SCHEDULE_KIN
 
 grep -q 'runtime_client automation upsert' "$backend" || {
   printf '%s\n' "Native backend should call runtime automation upsert" >&2
+  exit 1
+}
+
+grep -q 'desktop-value-set KEY VALUE' "$backend" || {
+  printf '%s\n' "Native backend should expose text desktop preference updates" >&2
+  exit 1
+}
+
+grep -q 'voice_main_screen_phrases' "$backend" || {
+  printf '%s\n' "Native backend should persist main-screen voice phrases" >&2
   exit 1
 }
 

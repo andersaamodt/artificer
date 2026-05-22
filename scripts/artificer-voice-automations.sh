@@ -14,6 +14,7 @@ lock_dir="$daemon_dir/tick.lock"
 label="com.artificer.voice-automations"
 plist="$home/Library/LaunchAgents/$label.plist"
 log_file="$daemon_dir/voice-automations.log"
+default_main_screen_phrases='main screen turn on, main screen on, turn on main screen, turn main screen on'
 
 usage() {
   cat <<'USAGE'
@@ -71,6 +72,27 @@ text = text.lower()
 text = re.sub(r"[^a-z0-9 ]+", " ", text)
 text = re.sub(r"\s+", " ", text).strip()
 print(text)
+PY
+}
+
+phrase_in_list() {
+  phrase=$1
+  list=$2
+  python3 - "$phrase" "$list" <<'PY'
+import re
+import sys
+
+phrase = sys.argv[1] if len(sys.argv) > 1 else ""
+items = sys.argv[2] if len(sys.argv) > 2 else ""
+
+def normalize(text):
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9 ]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+allowed = {normalize(item) for item in re.split(r"[,;|]", items) if normalize(item)}
+raise SystemExit(0 if phrase in allowed else 1)
 PY
 }
 
@@ -188,17 +210,17 @@ disable_launchd() {
 
 run_known_action() {
   phrase=$1
-  case "$phrase" in
-    "main screen turn on"|"main screen on"|"turn on main screen"|"turn main screen on")
-      if command -v main-screen-turn-on >/dev/null 2>&1; then
-        main-screen-turn-on >/dev/null 2>&1
-        write_status triggered "Turned on the main screen." "$phrase" "main-screen-turn-on"
-        return 0
-      fi
-      write_status error "main-screen-turn-on is not available." "$phrase" "main-screen-turn-on"
-      return 1
-      ;;
-  esac
+  main_screen_phrases=$(pref_text voice_main_screen_phrases)
+  [ -n "$main_screen_phrases" ] || main_screen_phrases=$default_main_screen_phrases
+  if phrase_in_list "$phrase" "$main_screen_phrases"; then
+    if command -v main-screen-turn-on >/dev/null 2>&1; then
+      main-screen-turn-on >/dev/null 2>&1
+      write_status triggered "Turned on the main screen." "$phrase" "main-screen-turn-on"
+      return 0
+    fi
+    write_status error "main-screen-turn-on is not available." "$phrase" "main-screen-turn-on"
+    return 1
+  fi
   return 2
 }
 

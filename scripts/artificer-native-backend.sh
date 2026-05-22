@@ -11,6 +11,7 @@ Actions:
   prefs-set-core-root CORE_ROOT
   desktop-prefs-get
   desktop-prefs-set KEY ENABLED
+  desktop-value-set KEY VALUE
   desktop-selection-set WORKSPACE_ID CONVERSATION_ID
   voice-automations-status
   voice-automations-tick
@@ -188,7 +189,7 @@ canonical_desktop_value_key() {
   key=$1
   reject_line_breaks "$key" "desktop preference key"
   case "$key" in
-    selected_workspace_id|selected_conversation_id)
+    selected_workspace_id|selected_conversation_id|voice_main_screen_phrases)
       printf '%s\n' "$key"
       ;;
     *)
@@ -245,12 +246,21 @@ write_desktop_value() {
   mv "$tmp_file" "$file"
 }
 
+read_desktop_value() {
+  key=$(canonical_desktop_value_key "$1")
+  file=$(desktop_prefs_file)
+  [ -f "$file" ] || return 1
+  awk -F= -v wanted="$key" '$1 == wanted { print substr($0, index($0, "=") + 1); found = 1 } END { exit found ? 0 : 1 }' "$file"
+}
+
 desktop_prefs_json() {
+  default_main_screen_phrases='main screen turn on, main screen on, turn on main screen, turn main screen on'
   background_mode=$(read_desktop_pref background_mode 2>/dev/null || printf '%s\n' 0)
   menu_bar_icon=$(read_desktop_pref menu_bar_icon 2>/dev/null || printf '%s\n' 0)
   voice_automations=$(read_desktop_pref voice_automations 2>/dev/null || printf '%s\n' 0)
   voice_automation_llm_prompts=$(read_desktop_pref voice_automation_llm_prompts 2>/dev/null || printf '%s\n' 0)
   voice_automation_llm_actions=$(read_desktop_pref voice_automation_llm_actions 2>/dev/null || printf '%s\n' 0)
+  voice_main_screen_phrases=$(read_desktop_value voice_main_screen_phrases 2>/dev/null || printf '%s\n' "$default_main_screen_phrases")
   mobile_bridge=$(read_desktop_pref mobile_bridge 2>/dev/null || printf '%s\n' 0)
   mobile_tor=$(read_desktop_pref mobile_tor 2>/dev/null || printf '%s\n' 0)
   mobile_lan=$(read_desktop_pref mobile_lan 2>/dev/null || printf '%s\n' 0)
@@ -266,12 +276,13 @@ desktop_prefs_json() {
   mobile_lan=$(bool_pref_value "$mobile_lan" 2>/dev/null || printf '%s\n' 0)
   mobile_allow_execute=$(bool_pref_value "$mobile_allow_execute" 2>/dev/null || printf '%s\n' 0)
   mobile_allow_self_actuation=$(bool_pref_value "$mobile_allow_self_actuation" 2>/dev/null || printf '%s\n' 0)
-  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s,"mobile_bridge":%s,"mobile_tor":%s,"mobile_lan":%s,"mobile_allow_execute":%s,"mobile_allow_self_actuation":%s}\n' \
+  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s,"voice_main_screen_phrases":%s,"mobile_bridge":%s,"mobile_tor":%s,"mobile_lan":%s,"mobile_allow_execute":%s,"mobile_allow_self_actuation":%s}\n' \
     "$([ "$background_mode" = 1 ] && printf true || printf false)" \
     "$([ "$menu_bar_icon" = 1 ] && printf true || printf false)" \
     "$([ "$voice_automations" = 1 ] && printf true || printf false)" \
     "$([ "$voice_automation_llm_prompts" = 1 ] && printf true || printf false)" \
     "$([ "$voice_automation_llm_actions" = 1 ] && printf true || printf false)" \
+    "$(json_escape "$voice_main_screen_phrases")" \
     "$([ "$mobile_bridge" = 1 ] && printf true || printf false)" \
     "$([ "$mobile_tor" = 1 ] && printf true || printf false)" \
     "$([ "$mobile_lan" = 1 ] && printf true || printf false)" \
@@ -615,6 +626,12 @@ case "$action" in
         mobile_bridge_script restart >/dev/null
       fi
     fi
+    desktop_prefs_json
+    ;;
+  desktop-value-set)
+    key=${1-}
+    value=${2-}
+    write_desktop_value "$key" "$value"
     desktop_prefs_json
     ;;
   desktop-selection-set)
