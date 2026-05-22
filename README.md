@@ -47,8 +47,9 @@ Implemented natively:
   by the same `codex_work_check_enabled` option as hosted Artificer
 - run policy controls for mode, compute budget, command execution, permission,
   programmer review, reflexive knowledge, and self-actuation
-- automation list plus Preferences controls for launching, pausing, and ticking
-  the existing Artificer background runtime
+- Automations sidebar panel with add/list/run controls plus Preferences controls
+  for launching, pausing, and checking due automations in the existing Artificer
+  background runtime
 - voice automation Preferences and a local launchd-backed listener for
   allowlisted phrases such as `main screen turn on`, with separate opt-ins for
   voice-to-Artificer prompts and voice-triggered Artificer actions
