@@ -163,6 +163,12 @@ private struct WorkspaceSidebar: View {
 
       Divider()
 
+      AutomationSidebarRow(model: model)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+
+      Divider()
+
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 4) {
           if model.projects.isEmpty {
@@ -186,6 +192,43 @@ private struct WorkspaceSidebar: View {
       .padding(12)
       .padding(.bottom, 28)
     }
+  }
+}
+
+private struct AutomationSidebarRow: View {
+  @ObservedObject var model: ArtificerModel
+  @Environment(\.openWindow) private var openWindow
+
+  var body: some View {
+    Button {
+      openWindow(id: "preferences")
+    } label: {
+      HStack(spacing: 8) {
+        Image(systemName: model.voiceAutomationsEnabled ? "waveform.circle.fill" : "clock.arrow.circlepath")
+          .foregroundStyle(model.voiceAutomationsEnabled ? Color.accentColor : Color.secondary)
+          .frame(width: 18)
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Automations")
+            .font(.system(size: 13, weight: .semibold))
+          Text(model.voiceAutomationStatus?.status ?? "background runtime")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+        Spacer()
+        if model.voiceAutomationsEnabled {
+          Circle()
+            .fill(Color.green)
+            .frame(width: 7, height: 7)
+        }
+      }
+      .padding(.horizontal, 8)
+      .padding(.vertical, 7)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .help("Automation preferences")
   }
 }
 
@@ -796,6 +839,42 @@ private struct AutomationsPreferencesTab: View {
             Task { await model.setMenuBarIconEnabled(nextValue) }
           }
         ))
+        Toggle("Voice automations", isOn: Binding(
+          get: { model.voiceAutomationsEnabled },
+          set: { nextValue in
+            Task { await model.setDesktopPref("voice_automations", enabled: nextValue) }
+          }
+        ))
+        Text("Listens continuously for local automation phrases. Audio is handled by the local dictation backend.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+          Toggle("Allow voice phrases to ask Artificer", isOn: Binding(
+            get: { model.voiceLlmPromptsEnabled },
+            set: { nextValue in
+              Task { await model.setDesktopPref("voice_automation_llm_prompts", enabled: nextValue) }
+            }
+          ))
+          Toggle("Allow voice-triggered Artificer actions", isOn: Binding(
+            get: { model.voiceLlmActionsEnabled },
+            set: { nextValue in
+              Task { await model.setDesktopPref("voice_automation_llm_actions", enabled: nextValue) }
+            }
+          ))
+          .disabled(!model.voiceLlmPromptsEnabled)
+        }
+        .padding(.leading, 18)
+        .disabled(!model.voiceAutomationsEnabled)
+        if let voice = model.voiceAutomationStatus {
+          SettingsInfoRow(title: "Voice", value: voice.status)
+          if !voice.message.isEmpty {
+            Text(voice.message)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
         if let daemon = model.daemonStatus {
           SettingsInfoRow(title: "Status", value: daemon.status)
           SettingsInfoRow(title: "Method", value: daemon.method)
@@ -984,6 +1063,10 @@ private final class ArtificerModel: ObservableObject {
   @Published var isDictationInstalling = false
   @Published var codexWorkCheckEnabled = false
   @Published var menuBarIconEnabled = false
+  @Published var voiceAutomationsEnabled = false
+  @Published var voiceLlmPromptsEnabled = false
+  @Published var voiceLlmActionsEnabled = false
+  @Published var voiceAutomationStatus: VoiceAutomationStatus?
 
   @Published var runMode = "auto"
   @Published var computeBudget = "auto"
@@ -1037,6 +1120,7 @@ private final class ArtificerModel: ObservableObject {
     await loadDaemonStatus()
     await loadAutomations()
     await loadDesktopPrefs()
+    await loadVoiceAutomationStatus()
     await loadDictationStatus()
     await loadSelfImproveSettings()
   }
@@ -1045,6 +1129,7 @@ private final class ArtificerModel: ObservableObject {
     await loadHealth()
     await loadDaemonStatus()
     await loadDesktopPrefs()
+    await loadVoiceAutomationStatus()
     await loadDictationStatus()
     await loadSelfImproveSettings()
   }
@@ -1159,6 +1244,7 @@ private final class ArtificerModel: ObservableObject {
     guard let response = decode(SessionResponse.self, from: result) else { return }
     guard selectedProjectID == projectID, selectedSessionID == sessionID else { return }
     selectedSession = response.session
+    await saveSelectedVoiceTarget(projectID: projectID, sessionID: sessionID)
     if let nextStatus {
       statusMessage = nextStatus
     }
@@ -1206,6 +1292,7 @@ private final class ArtificerModel: ObservableObject {
     sessions = sessionsByProject[projectID] ?? []
     selectedSessionID = response.session.id
     selectedSession = response.session
+    await saveSelectedVoiceTarget(projectID: projectID, sessionID: response.session.id)
     statusMessage = "Session created."
   }
 
@@ -1273,6 +1360,7 @@ private final class ArtificerModel: ObservableObject {
     }
     statusMessage = "Opening thread..."
     await loadSelectedSession(status: "Thread opened.", trackBusy: false)
+    await saveSelectedVoiceTarget(projectID: projectID, sessionID: sessionID)
   }
 
   func requestOrConfirmArchive(projectID: String, sessionID: String) async {
@@ -1355,6 +1443,9 @@ private final class ArtificerModel: ObservableObject {
     let result = await runBackend("desktop-prefs-get", trackBusy: false)
     if let prefs = decode(DesktopPrefsResponse.self, from: result) {
       menuBarIconEnabled = prefs.menuBarIcon
+      voiceAutomationsEnabled = prefs.voiceAutomations
+      voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
+      voiceLlmActionsEnabled = prefs.voiceLlmActions
     }
   }
 
@@ -1362,7 +1453,22 @@ private final class ArtificerModel: ObservableObject {
     let result = await runBackend("desktop-prefs-set", key, enabled ? "1" : "0")
     if let prefs = decode(DesktopPrefsResponse.self, from: result) {
       menuBarIconEnabled = prefs.menuBarIcon
+      voiceAutomationsEnabled = prefs.voiceAutomations
+      voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
+      voiceLlmActionsEnabled = prefs.voiceLlmActions
+      await loadVoiceAutomationStatus()
     }
+  }
+
+  func loadVoiceAutomationStatus() async {
+    let result = await runBackend("voice-automations-status", trackBusy: false)
+    if let status = decode(VoiceAutomationStatus.self, from: result) {
+      voiceAutomationStatus = status
+    }
+  }
+
+  func saveSelectedVoiceTarget(projectID: String, sessionID: String) async {
+    _ = await runBackend("desktop-selection-set", projectID, sessionID, trackBusy: false)
   }
 
   func daemon(_ action: String) async {
@@ -2008,11 +2114,17 @@ private struct DesktopPrefsResponse: Decodable {
   let success: Bool
   let backgroundMode: Bool
   let menuBarIcon: Bool
+  let voiceAutomations: Bool
+  let voiceLlmPrompts: Bool
+  let voiceLlmActions: Bool
 
   enum CodingKeys: String, CodingKey {
     case success
     case backgroundMode = "background_mode"
     case menuBarIcon = "menu_bar_icon"
+    case voiceAutomations = "voice_automations"
+    case voiceLlmPrompts = "voice_automation_llm_prompts"
+    case voiceLlmActions = "voice_automation_llm_actions"
   }
 
   init(from decoder: Decoder) throws {
@@ -2020,6 +2132,39 @@ private struct DesktopPrefsResponse: Decodable {
     success = (try? container.decode(Bool.self, forKey: .success)) ?? true
     backgroundMode = container.decodeFlexibleBool(forKey: .backgroundMode)
     menuBarIcon = container.decodeFlexibleBool(forKey: .menuBarIcon)
+    voiceAutomations = container.decodeFlexibleBool(forKey: .voiceAutomations)
+    voiceLlmPrompts = container.decodeFlexibleBool(forKey: .voiceLlmPrompts)
+    voiceLlmActions = container.decodeFlexibleBool(forKey: .voiceLlmActions)
+  }
+}
+
+private struct VoiceAutomationStatus: Decodable {
+  let success: Bool
+  let enabled: Bool
+  let active: Bool
+  let status: String
+  let message: String
+  let lastPhrase: String
+  let lastAction: String
+  let logPath: String
+
+  enum CodingKeys: String, CodingKey {
+    case success, enabled, active, status, message
+    case lastPhrase = "last_phrase"
+    case lastAction = "last_action"
+    case logPath = "log_path"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    enabled = container.decodeFlexibleBool(forKey: .enabled)
+    active = container.decodeFlexibleBool(forKey: .active)
+    status = (try? container.decode(String.self, forKey: .status)) ?? "unknown"
+    message = (try? container.decode(String.self, forKey: .message)) ?? ""
+    lastPhrase = (try? container.decode(String.self, forKey: .lastPhrase)) ?? ""
+    lastAction = (try? container.decode(String.self, forKey: .lastAction)) ?? ""
+    logPath = (try? container.decode(String.self, forKey: .logPath)) ?? ""
   }
 }
 

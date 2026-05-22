@@ -11,6 +11,9 @@ Actions:
   prefs-set-core-root CORE_ROOT
   desktop-prefs-get
   desktop-prefs-set KEY ENABLED
+  desktop-selection-set WORKSPACE_ID CONVERSATION_ID
+  voice-automations-status
+  voice-automations-tick
   health
   projects
   project-add PATH NAME [COMMAND_EXEC_MODE]
@@ -131,11 +134,25 @@ canonical_desktop_pref_key() {
   key=$1
   reject_line_breaks "$key" "desktop preference key"
   case "$key" in
-    background_mode|menu_bar_icon)
+    background_mode|menu_bar_icon|voice_automations|voice_automation_llm_prompts|voice_automation_llm_actions)
       printf '%s\n' "$key"
       ;;
     *)
       printf '%s\n' "artificer-native-backend: unsupported desktop preference key" >&2
+      exit 2
+      ;;
+  esac
+}
+
+canonical_desktop_value_key() {
+  key=$1
+  reject_line_breaks "$key" "desktop preference key"
+  case "$key" in
+    selected_workspace_id|selected_conversation_id)
+      printf '%s\n' "$key"
+      ;;
+    *)
+      printf '%s\n' "artificer-native-backend: unsupported desktop value key" >&2
       exit 2
       ;;
   esac
@@ -174,14 +191,37 @@ write_desktop_pref() {
   mv "$tmp_file" "$file"
 }
 
+write_desktop_value() {
+  key=$(canonical_desktop_value_key "$1")
+  value=$2
+  reject_line_breaks "$value" "desktop preference value"
+  mkdir -p "$(desktop_prefs_dir)"
+  file=$(desktop_prefs_file)
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/artificer-native-desktop-prefs.XXXXXX")
+  if [ -f "$file" ]; then
+    awk -F= -v wanted="$key" '$1 != wanted' "$file" > "$tmp_file"
+  fi
+  printf '%s=%s\n' "$key" "$value" >> "$tmp_file"
+  mv "$tmp_file" "$file"
+}
+
 desktop_prefs_json() {
   background_mode=$(read_desktop_pref background_mode 2>/dev/null || printf '%s\n' 0)
   menu_bar_icon=$(read_desktop_pref menu_bar_icon 2>/dev/null || printf '%s\n' 0)
+  voice_automations=$(read_desktop_pref voice_automations 2>/dev/null || printf '%s\n' 0)
+  voice_automation_llm_prompts=$(read_desktop_pref voice_automation_llm_prompts 2>/dev/null || printf '%s\n' 0)
+  voice_automation_llm_actions=$(read_desktop_pref voice_automation_llm_actions 2>/dev/null || printf '%s\n' 0)
   background_mode=$(bool_pref_value "$background_mode" 2>/dev/null || printf '%s\n' 0)
   menu_bar_icon=$(bool_pref_value "$menu_bar_icon" 2>/dev/null || printf '%s\n' 0)
-  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s}\n' \
+  voice_automations=$(bool_pref_value "$voice_automations" 2>/dev/null || printf '%s\n' 0)
+  voice_automation_llm_prompts=$(bool_pref_value "$voice_automation_llm_prompts" 2>/dev/null || printf '%s\n' 0)
+  voice_automation_llm_actions=$(bool_pref_value "$voice_automation_llm_actions" 2>/dev/null || printf '%s\n' 0)
+  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s}\n' \
     "$([ "$background_mode" = 1 ] && printf true || printf false)" \
-    "$([ "$menu_bar_icon" = 1 ] && printf true || printf false)"
+    "$([ "$menu_bar_icon" = 1 ] && printf true || printf false)" \
+    "$([ "$voice_automations" = 1 ] && printf true || printf false)" \
+    "$([ "$voice_automation_llm_prompts" = 1 ] && printf true || printf false)" \
+    "$([ "$voice_automation_llm_actions" = 1 ] && printf true || printf false)"
 }
 
 candidate_core_roots() {
@@ -225,6 +265,10 @@ runtime_client() {
 automations_script() {
   require_core_root
   sh "$core_root/scripts/artificer-automations.sh" "$@"
+}
+
+voice_automations_script() {
+  sh "$script_dir/artificer-voice-automations.sh" "$@"
 }
 
 api_script() {
@@ -466,7 +510,30 @@ case "$action" in
     key=${1-}
     enabled_value=${2-0}
     write_desktop_pref "$key" "$enabled_value"
+    if [ "$key" = "voice_automations" ]; then
+      normalized_enabled=$(bool_pref_value "$enabled_value")
+      if [ "$normalized_enabled" = 1 ]; then
+        voice_automations_script enable >/dev/null
+      else
+        voice_automations_script disable >/dev/null
+      fi
+    fi
     desktop_prefs_json
+    ;;
+  desktop-selection-set)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    reject_line_breaks "$workspace_id" "workspace id"
+    reject_line_breaks "$conversation_id" "conversation id"
+    write_desktop_value selected_workspace_id "$workspace_id"
+    write_desktop_value selected_conversation_id "$conversation_id"
+    printf '{"success":true}\n'
+    ;;
+  voice-automations-status)
+    voice_automations_script status
+    ;;
+  voice-automations-tick)
+    voice_automations_script tick
     ;;
   health)
     runtime_client health

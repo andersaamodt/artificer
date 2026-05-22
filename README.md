@@ -27,8 +27,10 @@ The app locates Artificer core in this order:
 - `~/.local/share/artificer/app`
 - `~/git/artificer`
 
-Durable native UI preferences live in
-`${XDG_CONFIG_HOME:-$HOME/.config}/wizardry-apps/artificer-native`.
+Durable native UI Preferences live in
+`${XDG_CONFIG_HOME:-$HOME/.config}/artificer/ui-prefs.env`. Native runtime
+state, including voice automation status and logs, lives under
+`${XDG_STATE_HOME:-$HOME/.local/state}/artificer-native`.
 
 ## Feature Scope
 
@@ -47,6 +49,9 @@ Implemented natively:
   programmer review, reflexive knowledge, and self-actuation
 - automation list plus Preferences controls for launching, pausing, and ticking
   the existing Artificer background runtime
+- voice automation Preferences and a local launchd-backed listener for
+  allowlisted phrases such as `main screen turn on`, with separate opt-ins for
+  voice-to-Artificer prompts and voice-triggered Artificer actions
 - native Preferences for selecting the Artificer core root
 - macOS and Linux generated source targets through the Forge native desktop IR
   pipeline
