@@ -101,20 +101,69 @@ struct ArtificerNativeApp: App {
 }
 
 private func artificerMenuBarImage() -> NSImage? {
-  let candidates = [
-    Bundle.module.url(forResource: "menu-bar-icon", withExtension: "png"),
-    Bundle.main.resourceURL?.appendingPathComponent("menu-bar-icon.png"),
-    URL(fileURLWithPath: fallbackProjectDir).appendingPathComponent("assets/menu-bar-icon.png")
-  ]
-  for candidate in candidates {
-    guard let url = candidate, let image = NSImage(contentsOf: url) else {
-      continue
+  let side: CGFloat = 18
+  let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+    let minX = rect.minX
+    let maxX = rect.maxX
+    let minY = rect.minY
+    let maxY = rect.maxY
+    let midX = rect.midX
+    let strokeWidth: CGFloat = 2.0
+    let topPadding = max(2.0, floor(side * 0.14 * 2.0) / 2.0)
+    let bottomPadding = max(0.5, floor(side * 0.02 * 2.0) / 2.0)
+    let topY = ceil((maxY - topPadding) * 2.0) / 2.0
+    let maxSegmentByWidth = floor(min(midX - minX, maxX - midX) * 2.0) / 2.0
+    let maxSegmentByHeight = floor(((topY - (minY + bottomPadding)) / 5.0) * 2.0) / 2.0
+    let segment = max(1.5, min(maxSegmentByWidth, maxSegmentByHeight))
+    let bottomFootY = topY - segment * 5.0
+
+    let upperTop = NSPoint(x: midX, y: topY)
+    let upperLeft = NSPoint(x: midX - segment, y: topY - segment)
+    let upperRight = NSPoint(x: midX + segment, y: topY - segment)
+    let sharedUpperBottom = NSPoint(x: midX, y: topY - segment * 2.0)
+    let lowerLeft = NSPoint(x: midX - segment, y: topY - segment * 3.0)
+    let lowerRight = NSPoint(x: midX + segment, y: topY - segment * 3.0)
+    let lowerBottom = NSPoint(x: midX, y: topY - segment * 4.0)
+    let leftFoot = NSPoint(x: midX - segment, y: bottomFootY)
+    let rightFoot = NSPoint(x: midX + segment, y: bottomFootY)
+
+    let capTip = NSBezierPath()
+    capTip.move(to: upperLeft)
+    capTip.line(to: upperTop)
+    capTip.line(to: upperRight)
+
+    let upperCross = NSBezierPath()
+    upperCross.move(to: upperLeft)
+    upperCross.line(to: sharedUpperBottom)
+    upperCross.line(to: lowerRight)
+
+    let upperCrossMirror = NSBezierPath()
+    upperCrossMirror.move(to: upperRight)
+    upperCrossMirror.line(to: sharedUpperBottom)
+    upperCrossMirror.line(to: lowerLeft)
+
+    let lowerCross = NSBezierPath()
+    lowerCross.move(to: lowerLeft)
+    lowerCross.line(to: lowerBottom)
+    lowerCross.line(to: rightFoot)
+
+    let lowerCrossMirror = NSBezierPath()
+    lowerCrossMirror.move(to: lowerRight)
+    lowerCrossMirror.line(to: lowerBottom)
+    lowerCrossMirror.line(to: leftFoot)
+
+    NSColor.black.setStroke()
+    for path in [capTip, upperCross, upperCrossMirror, lowerCross, lowerCrossMirror] {
+      path.lineWidth = strokeWidth
+      path.lineJoinStyle = .miter
+      path.lineCapStyle = .butt
+      path.miterLimit = 12.0
+      path.stroke()
     }
-    image.size = NSSize(width: 18, height: 18)
-    image.isTemplate = false
-    return image
+    return true
   }
-  return nil
+  image.isTemplate = true
+  return image
 }
 
 @MainActor
@@ -158,7 +207,7 @@ private final class ArtificerStatusItemController: NSObject {
       item.button?.toolTip = "Artificer"
       item.button?.imagePosition = .imageOnly
       item.button?.image = artificerMenuBarImage()
-      item.button?.image?.isTemplate = false
+      item.button?.image?.isTemplate = true
       statusItem = item
     }
     refreshMenu()
