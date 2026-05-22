@@ -1,0 +1,2 @@
+task_id	prompt
+release-pack-holdout	Recover the bounded remote release pack in this workspace with the bastion helper plus the private core/edge boundary helpers. Limit the repair to the shared pack config, open the bastion tunnel, land the core boundary cut first, land the edge boundary cut second, publish the shared release pack, run the release verifier, keep rollback intact, and end with Outcome, Verification Evidence, Risks, Next Improvement.

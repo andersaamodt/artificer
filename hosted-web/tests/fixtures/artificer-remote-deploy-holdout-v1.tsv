@@ -1,0 +1,4 @@
+task_id	prompt
+single-host-deploy	This workspace represents one remote host deploy only. Use `./bin/ssh.sh status`, `./bin/ssh.sh deploy`, `./bin/ssh.sh health`, and `./bin/rollback.sh`. Do the smallest safe remote release repair, rerun health, preserve rollback, and end with Outcome, Verification Evidence, Risks, Next Improvement.
+remote-deploy	Repair the bounded remote deploy state in this workspace without widening to fleet work. Use the SSH helper to inspect, deploy, and verify; keep rollback intact; and end with Outcome, Verification Evidence, Risks, Next Improvement.
+ssh-helper-deploy	Do the bounded SSH-helper deploy recovery only. Use `./bin/ssh.sh status`, `./bin/ssh.sh deploy`, `./bin/ssh.sh health`, and `./bin/rollback.sh`. Keep rollback ready, make the smallest safe release fix, and end with Outcome, Verification Evidence, Risks, Next Improvement.

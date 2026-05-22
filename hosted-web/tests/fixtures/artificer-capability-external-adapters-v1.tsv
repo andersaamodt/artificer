@@ -1,0 +1,2 @@
+adapter_id	name	kind	model	command_template	notes
+mock-frontier	Mock Frontier Reference	model	gpt-5.4	sh {site_root}/tests/fixtures/mock-capability-external-adapter.sh --label {label} --manifest {manifest} --out-json {out_json} --out-md {out_md}	Fixture adapter for deterministic external benchmark execution

@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en" class="artificer-booting">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Artificer</title>
+  <style>
+    :root {
+      --boot-bg: #eceaf4;
+      --boot-fg: #2a2e47;
+      --boot-muted: #5d6486;
+      --boot-line: #d4d0e6;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--boot-bg);
+      overflow: hidden;
+      font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: var(--boot-bg);
+    }
+
+    body.artificer-booting #app {
+      visibility: hidden;
+    }
+
+    #boot-splash {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: var(--boot-bg);
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    #boot-splash.hidden {
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 140ms ease;
+    }
+
+    .boot-card {
+      display: grid;
+      justify-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      border: 1px solid color-mix(in srgb, var(--boot-line) 80%, transparent);
+      border-radius: 14px;
+      background: color-mix(in srgb, #ffffff 72%, var(--boot-bg));
+      box-shadow: 0 12px 34px rgba(27, 22, 56, 0.1);
+    }
+
+    .boot-icon {
+      width: 112px;
+      height: 112px;
+      object-fit: contain;
+      border-radius: 12px;
+    }
+
+    #status {
+      color: var(--boot-muted);
+      font-size: 0.92rem;
+      line-height: 1.35;
+      text-align: center;
+      max-width: 24rem;
+    }
+
+    #status.error {
+      color: #a14d5b;
+      white-space: pre-wrap;
+      padding: 0.15rem 0.35rem;
+      background: color-mix(in srgb, #ffffff 64%, transparent);
+      border: 1px solid color-mix(in srgb, #a14d5b 26%, transparent);
+      border-radius: 8px;
+    }
+
+    .boot-title {
+      margin: 0;
+      color: var(--boot-fg);
+      font-size: 0.96rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    .boot-subtitle {
+      margin: 0;
+      color: var(--boot-muted);
+      font-size: 0.82rem;
+    }
+  </style>
+</head>
+<body class="artificer-booting">
+  <div id="boot-splash" aria-live="polite" aria-busy="true">
+    <div class="boot-card">
+      <img class="boot-icon" src="assets/forge-icon.png" alt="Artificer">
+      <p class="boot-title">Artificer</p>
+      <p class="boot-subtitle">Preparing local runtime</p>
+      <div id="status">Starting Artificer…</div>
+    </div>
+  </div>
+  <iframe id="app" src="about:blank" title="Artificer"></iframe>
+
+  <script>
+    (function loadBridge() {
+      var candidates = [
+        './.host/shared/wizardry-bridge.js',
+        '../.host/shared/wizardry-bridge.js',
+        '../../.host/shared/wizardry-bridge.js'
+      ];
+      var i = 0;
+      function installInlineBridgeFallback() {
+        if (window.wizardry && window.wizardry.rpc && window.wizardry.subscribe && window.wizardry.unsubscribe) {
+          return;
+        }
+        window.__wizardry_callbacks = window.__wizardry_callbacks || {};
+        window.__wizardry_subscriptions = window.__wizardry_subscriptions || {};
+        function nextId() {
+          return Math.random().toString(36).slice(2);
+        }
+        function post(message) {
+          if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.wizardry) {
+            window.webkit.messageHandlers.wizardry.postMessage(message);
+            return true;
+          }
+          if (window.WizardryBridge && typeof window.WizardryBridge.postMessage === 'function') {
+            window.WizardryBridge.postMessage(JSON.stringify(message));
+            return true;
+          }
+          return false;
+        }
+        window.wizardry = {
+          rpc: function (method, params) {
+            return new Promise(function (resolve, reject) {
+              var id = nextId();
+              window.__wizardry_callbacks[id] = function (payload) {
+                if (payload && payload.error) {
+                  reject(new Error(payload.error.message || 'rpc error'));
+                  return;
+                }
+                if (payload && typeof payload.exit_code !== 'undefined') {
+                  resolve(payload);
+                  return;
+                }
+                resolve(payload && payload.result ? payload.result : payload);
+              };
+              if (method === 'bridge.exec' && params && Array.isArray(params.argv)) {
+                if (!post({ id: id, command: params.argv })) {
+                  setTimeout(function () {
+                    window.__wizardry_callbacks[id]({ stdout: '', stderr: 'native bridge unavailable', exit_code: 1, error: null });
+                  }, 0);
+                }
+                return;
+              }
+              if (!post({ type: 'rpc', id: id, method: method, params: params || {} })) {
+                setTimeout(function () {
+                  window.__wizardry_callbacks[id]({ error: { code: -32603, message: 'native bridge unavailable or method unsupported' } });
+                }, 0);
+              }
+            });
+          },
+          subscribe: function (eventName, fn) {
+            var token = nextId();
+            window.__wizardry_subscriptions[token] = { event: eventName, fn: fn };
+            post({ type: 'subscribe', token: token, event: eventName });
+            return token;
+          },
+          unsubscribe: function (token) {
+            delete window.__wizardry_subscriptions[token];
+            post({ type: 'unsubscribe', token: token });
+          },
+          exec: function (argv) {
+            return this.rpc('bridge.exec', { argv: argv });
+          }
+        };
+        window.__wizardry_emit = function (eventName, payload) {
+          Object.keys(window.__wizardry_subscriptions).forEach(function (token) {
+            var sub = window.__wizardry_subscriptions[token];
+            if (sub && sub.event === eventName) {
+              sub.fn(payload);
+            }
+          });
+        };
+      }
+      function tryNext() {
+        if (i >= candidates.length) {
+          installInlineBridgeFallback();
+          return;
+        }
+        var s = document.createElement('script');
+        s.src = candidates[i++];
+        s.onerror = tryNext;
+        s.onload = function () {
+          if (!(window.wizardry && window.wizardry.rpc)) {
+            tryNext();
+          }
+        };
+        document.head.appendChild(s);
+      }
+      tryNext();
+    })();
+  </script>
+
+  <script>
+    var siteName = 'artificer';
+    var entryPath = '/pages/index.html';
+    var launchCacheKey = Date.now().toString(36);
+    function resolveAppDirPath() {
+      try {
+        var p = decodeURIComponent(String((window.location && window.location.pathname) || ''));
+        if (p && /\/index\.html$/i.test(p)) {
+          return p.replace(/\/index\.html$/i, '');
+        }
+      } catch (_err) {}
+      return '';
+    }
+
+    function backendCommand(action) {
+      var appDir = resolveAppDirPath();
+      var backend = appDir ? (appDir + '/scripts/artificer-backend.sh') : 'scripts/artificer-backend.sh';
+      return ['sh', backend, action, appDir];
+    }
+    var hostBootReadySent = false;
+    var bootFailed = false;
+
+    function statusEl() {
+      return document.getElementById('status');
+    }
+
+    function setStatus(text, isError) {
+      var el = statusEl();
+      el.textContent = text;
+      el.className = isError ? 'error' : '';
+    }
+
+    function handleHostedBootMessage(event) {
+      var data = event && event.data;
+      if (!data || data.source !== 'artificer-hosted-web') {
+        return;
+      }
+      if (String(data.launch || '') !== String(launchCacheKey || '')) {
+        return;
+      }
+      if (data.type === 'status' && !bootFailed) {
+        var text = String(data.text || '').trim();
+        if (text) {
+          setStatus(text, false);
+        }
+        return;
+      }
+      if (data.type === 'ready') {
+        onAppFrameReady();
+      }
+    }
+
+    window.addEventListener('message', handleHostedBootMessage);
+
+    function revealBootUi() {
+      if (bootFailed) {
+        return;
+      }
+      var splash = document.getElementById('boot-splash');
+      if (splash) {
+        splash.classList.add('hidden');
+      }
+      document.documentElement.classList.remove('artificer-booting');
+      document.body.classList.remove('artificer-booting');
+      if (hostBootReadySent) {
+        return;
+      }
+      hostBootReadySent = true;
+      if (!hasBridge()) {
+        return;
+      }
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          bridgeExec(['__wizardry_host_boot_ready']).catch(function () {
+            return;
+          });
+        });
+      });
+    }
+
+    function onAppFrameReady() {
+      bootFailed = false;
+      setStatus('Artificer ready.', false);
+      revealBootUi();
+    }
+
+    function hasBridge() {
+      return !!(window.wizardry && typeof window.wizardry.rpc === 'function');
+    }
+
+    async function waitForBridge(timeoutMs) {
+      var start = Date.now();
+      while (!hasBridge()) {
+        if (Date.now() - start > (timeoutMs || 4000)) {
+          throw new Error('wizardry bridge unavailable; run this app in the native host');
+        }
+        await new Promise(function (resolve) { setTimeout(resolve, 50); });
+      }
+    }
+
+    function bridgeExecTimeoutMs(argv) {
+      var action = String((argv && argv[2]) || '');
+      switch (action) {
+        case 'ensure-site':
+          return 120000;
+        case 'start-serve':
+        case 'ensure-data-root':
+        case 'ensure-usable-port':
+          return 45000;
+        default:
+          return 15000;
+      }
+    }
+
+    async function bridgeExec(argv) {
+      await waitForBridge(4000);
+      var timeoutMs = bridgeExecTimeoutMs(argv);
+      var timeoutId = null;
+      var res;
+      try {
+        res = await Promise.race([
+          window.wizardry.rpc('bridge.exec', { argv: argv }),
+          new Promise(function (_resolve, reject) {
+            timeoutId = setTimeout(function () {
+              reject(new Error('bridge.exec timed out after ' + timeoutMs + 'ms: ' + String((argv && argv[2]) || (argv && argv[0]) || 'command')));
+            }, timeoutMs);
+          })
+        ]);
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
+      var code = Number(res && res.exit_code);
+      if (!Number.isFinite(code) || code === 0) {
+        return res || {};
+      }
+      var stderr = String((res && res.stderr) || '').trim();
+      var stdout = String((res && res.stdout) || '').trim();
+      var detail = stderr || stdout || ('exit ' + code);
+      throw new Error(detail);
+    }
+
+    async function resolvePort() {
+      var res = await bridgeExec(backendCommand('get-port'));
+      var raw = String((res && res.stdout) || '').trim();
+      if (!/^[0-9]+$/.test(raw)) {
+        throw new Error('unable to resolve Artificer port from site.conf');
+      }
+      return raw;
+    }
+
+    async function detectReadyPort() {
+      var res = await bridgeExec(backendCommand('detect-ready-port'));
+      var raw = String((res && res.stdout) || '').trim();
+      if (!/^[0-9]+$/.test(raw)) {
+        return '';
+      }
+      return raw;
+    }
+
+    async function setConfiguredPort(port) {
+      var cmd = backendCommand('set-port');
+      cmd.push(String(port));
+      await bridgeExec(cmd);
+    }
+
+    async function waitUntilRunning(timeoutMs) {
+      var start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        try {
+          if (await detectReadyPort()) {
+            return true;
+          }
+        } catch (_) {
+          // Keep polling.
+        }
+        await new Promise(function (resolve) { setTimeout(resolve, 125); });
+      }
+      return false;
+    }
+
+    async function ensureSiteIfNeeded() {
+      await bridgeExec(backendCommand('ensure-site'));
+    }
+
+    async function startWithFallbackPort() {
+      await bridgeExec(backendCommand('start-serve'));
+      if (await waitUntilRunning(8000)) {
+        return;
+      }
+
+      // One emergency retry after re-checking port usability.
+      await bridgeExec(backendCommand('ensure-usable-port'));
+      await bridgeExec(backendCommand('start-serve'));
+      if (await waitUntilRunning(8000)) {
+        return;
+      }
+
+      throw new Error('daemon start timed out');
+    }
+
+    async function boot() {
+      var iframe = document.getElementById('app');
+      try {
+        await waitForBridge(4000);
+        try {
+          await bridgeExec(backendCommand('ensure-data-root'));
+        } catch (_) {
+          // Non-fatal: continue startup even if migration probe fails.
+        }
+        setStatus('Preparing Artificer…', false);
+        try {
+          await bridgeExec(backendCommand('ensure-usable-port'));
+        } catch (_) {
+          // Non-fatal: probe/start path below handles failures.
+        }
+
+        var hotPort = await detectReadyPort();
+        if (hotPort) {
+          try {
+            await setConfiguredPort(hotPort);
+          } catch (_) {
+            // Non-fatal: use detected port for this launch.
+          }
+          iframe.onload = function () {
+            setStatus('Loading Artificer data…', false);
+          };
+          iframe.onerror = function () {
+            setStatus('Error: failed to load local Artificer page', true);
+          };
+          iframe.src = 'http://localhost:' + hotPort + entryPath + '?launch=' + encodeURIComponent(launchCacheKey);
+          return;
+        }
+
+        setStatus('Starting Artificer…', false);
+        try {
+          await startWithFallbackPort();
+        } catch (_startErr) {
+          setStatus('Preparing Artificer…', false);
+          await ensureSiteIfNeeded();
+          try {
+            await bridgeExec(backendCommand('ensure-usable-port'));
+          } catch (_) {
+            // Non-fatal.
+          }
+          setStatus('Starting Artificer…', false);
+          await startWithFallbackPort();
+        }
+
+        var port = await detectReadyPort();
+        if (!port) {
+          setStatus('Preparing Artificer…', false);
+          await ensureSiteIfNeeded();
+          port = await resolvePort();
+        } else {
+          try {
+            await setConfiguredPort(port);
+          } catch (_) {
+            // Non-fatal.
+          }
+        }
+        var url = 'http://localhost:' + port + entryPath + '?launch=' + encodeURIComponent(launchCacheKey);
+        iframe.onload = function () {
+          setStatus('Loading Artificer data…', false);
+        };
+        iframe.onerror = function () {
+          setStatus('Error: failed to load local Artificer page', true);
+        };
+        iframe.src = url;
+      } catch (error) {
+        bootFailed = true;
+        iframe.src = 'about:blank';
+        setStatus('Error: ' + String(error && error.message ? error.message : error), true);
+        document.documentElement.classList.remove('artificer-booting');
+        document.body.classList.remove('artificer-booting');
+        if (!hostBootReadySent && hasBridge()) {
+          hostBootReadySent = true;
+          bridgeExec(['__wizardry_host_boot_ready']).catch(function () {
+            return;
+          });
+        }
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', function () {
+      setTimeout(boot, 20);
+    });
+  </script>
+</body>
+</html>

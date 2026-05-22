@@ -1,0 +1,72 @@
+# feature_id	behavior_contract	tests
+feature_coverage_matrix	Feature coverage matrix references every release behavioral test script.	test-feature-coverage-matrix.sh
+startup_bridge_timeouts	Desktop startup bridge actions use explicit timeout policy.	test-startup-bridge-timeouts.sh
+startup_boot_order	Desktop startup prefers ready-port detect/start before ensure-site fallback.	test-startup-boot-order.sh
+startup_port_resolution	Desktop launcher resolves URL port without command-substitution capture hangs.	test-startup-run-artificer-port-resolution.sh
+splash_status_contract	Splash keeps a stable preparing message until ready or error.	test-splash-status-contract.sh
+run_stream_poll_lifecycle	Run stream polling drains final deltas before stop and avoids lost streamed content.	test-run-stream-poll-lifecycle.sh
+run_event_status_copy	Run status copy remains latest-run scoped and non-contradictory while active runs continue.	test-run-event-status-copy-consistency.sh
+run_mode_domain_parity	Run-mode tuning, policy, controller directives, quick/budget routing, stream security parity, and state-memory focus stay synchronized across adaptive, programming, security, reporting, teaching, chat, and instant domains.	test-run-mode-domain-parity.sh
+run_mode_ui_normalization_parity	Canonical run modes and default-profile depth contracts stay synchronized across backend normalization, backend tuning, frontend normalization, and run-mode menus.	test-run-mode-ui-normalization-parity.sh
+runtime_capability_guidance	Measured capability benchmark evidence is converted into bounded task-relevant controller guidance for ordinary runs and remains wired into the main controller prompt.	test-runtime-capability-guidance-block.sh,test-run-controller-capability-guidance-surface.sh
+runtime_capability_guidance_trace	Ordinary runs preserve benchmark-guidance focus as structured run-event trace data, including derived severity, scope, and trend metadata, and keep it visible through run-event normalization and advanced trace rendering.	test-runtime-capability-guidance-trace.sh,test-run-event-capability-guidance-surface.sh
+runtime_capability_guided_model_routing	Ordinary runs can reroute onto a better-matched installed model when benchmark-guidance families indicate a materially stronger choice for the current task, and severe sustained regressions carry stronger routing weight than mild improving cases.	test-capability-guided-model-routing.sh,test-capability-guided-model-routing-surface.sh
+runtime_capability_guided_effort_profile	Ordinary runs can raise reasoning floor and iteration minima from measured benchmark-guidance families, and report the resulting benchmark-aware effort profile in the stream.	test-capability-guided-effort-profile.sh,test-capability-guided-effort-profile-surface.sh
+capability_benchmark_internal_closure_report	Recent internal benchmark scorecards produce family-level improving/flat/regressing trajectories that propagate into runtime signals and ordinary-run guidance.	test-capability-benchmark-internal-closure-report.sh,test-self-improve-runtime-capability-benchmark.sh,test-runtime-capability-guidance-block.sh
+control_plane_runtime_api	Headless control-plane describe, health, projects, sessions, session events, and embedding-client flows succeed against isolated runtime state with stable JSON envelopes.	test-control-plane-runtime-api.sh
+control_plane_session_run_next_runtime	Headless session control-plane clients can dequeue and execute the next queued run through the same backend runtime path the GUI uses, with refreshed session messages, queue state, trace, and accurate idle/busy stream identifiers returned afterward.	test-control-plane-session-run-next-runtime.sh,test-control-plane-session-run-next-idle-busy.sh
+control_plane_attention_workflow	Headless attention surfaces list pending approvals and decisions and can answer them durably back into session state.	test-control-plane-attention-workflow.sh
+control_plane_attention_resume_runtime	Headless clients can hit a real approval gate, answer it through attention surfaces, and resume the same queued session to completion through `session run-next` without the GUI.	test-control-plane-attention-resume-runtime.sh
+control_plane_self_actuation_runtime	Headless self-actuation preview and apply route through the control plane with confirm-token and idempotency behavior preserved.	test-control-plane-self-actuation-runtime.sh
+runtime_lsp_code_context	Headless code-context requests can surface compact LSP diagnostics and symbols through the control plane when a local probe is available.	test-lsp-code-context-runtime.sh
+runtime_tool_hook_and_structured_evidence	Structured runtime evidence and internal tool hooks preserve git/LSP enrichment plus pre/post tool execution records without requiring the GUI.	test-tool-hook-and-structured-evidence.sh
+control_mode_ui_normalization_parity	Compute budget, command execution mode, and permissions normalization stay synchronized across backend runtime rules, frontend state normalization, and visible control menus.	test-control-mode-ui-normalization-parity.sh
+runtime_alias_normalization_contract	Runtime action surfaces canonicalize accepted aliases consistently for queue runs, automations, and command policy mode persistence.	test-runtime-alias-normalization-contract.sh
+workspace_add_modal_and_tilde	Add Project supports ~/ expansion and modal action order.	test-add-workspace-tilde-and-modal-actions.sh,test-add-workspace-tilde-runtime.sh
+workspace_browse_path_population	Browse and directory picker populate folder path and placeholder.	test-workspace-browse-path-population.sh
+workspace_drag_surface	Project rows drag from row surface (not drag-handle controls).	test-workspace-drag-surface-behavior.sh
+automations_layout	Automations appears as left-nav section with right-pane workflow.	test-automations-pane-layout.sh
+gui_lifecycle_smoke_safari_driver	Safari GUI lifecycle smoke uses safaridriver/WebDriver with Safari session-continue interlock handling instead of deprecated Apple-event page scripting.	test-gui-lifecycle-smoke-safaridriver-contract.sh
+self_reflexive_self_actuation	Permissions include reflexive knowledge plus self-actuation and wire both through run/queue/runtime command gating.	test-self-reflexive-self-actuation-permissions.sh
+self_knowledge_introspection	Reflexive knowledge runtime exposes structured self-knowledge and contributor-level LLM/Ollama teaching surfaces through API and appctl.	test-self-knowledge-introspection-surface.sh
+self_actuation_command_surface	Self-actuation supports id-safe list-and-mutate command workflows through appctl, runtime allowlists, and controller guidance.	test-self-actuation-command-surface.sh
+self_actuation_allowlist_validation	Self-actuation and reflexive allowlists enforce strict per-command argument shape and gate-sensitive command access.	test-self-actuation-allowlist-validation.sh
+self_actuation_e2e_lifecycle	Self-actuation mediated operations succeed end-to-end in isolated runtime state (project/thread/automation create-list-mutate-verify-delete).	test-self-actuation-e2e-lifecycle.sh
+self_actuation_orchestration_policy_audit	Self-actuation orchestration enforces preview/confirm, policy controls, idempotent apply replay, and auditable event history.	test-self-actuation-orchestrate-policy-audit.sh
+self_actuation_orchestrate_operation_coverage	Every orchestrated self-actuation operation executes through preview/apply with state verification in isolated runtime.	test-self-actuation-orchestrate-operation-coverage.sh
+self_knowledge_drift_guards	Registry topics, reflexive prompt topics, GUI labels, and command-surface contracts stay synchronized without silent drift.	test-self-knowledge-drift-guards.sh
+self_knowledge_capability_roadmap_quality	Self-knowledge teach/show payloads explain current strengths, model ceilings, engineering gaps, and measurable next improvements.	test-self-knowledge-capability-roadmap-quality.sh
+self_improve_runtime_capability_benchmark	Self-improvement runtime evidence exposes the latest capability benchmark scorecards and comparisons for measured gap-aware improvement planning.	test-self-improve-runtime-capability-benchmark.sh
+self_improve_benchmark_adoption_policy	Benchmark compare evidence automatically adopts, stages, or rejects self-improvement plugins and disables unproven ideas after hold results.	test-self-improve-benchmark-adoption-policy.sh
+self_improve_benchmark_adoption_stability	Self-improvement plugins keep one current lineage record, accumulate benchmark outcome history, and require repeated evidence before adoption or rejection.	test-self-improve-benchmark-adoption-stability.sh
+self_improve_operator_override_control_surface	Manual self-improvement override controls, event handlers, action params, and backend persistence helpers stay wired together.	test-self-improve-operator-override-control-surface.sh
+self_improve_operator_override_lock	Operator overrides can force and lock plugin adoption state across lineage replacement while preserving the underlying automatic benchmark judgment for inspection.	test-self-improve-operator-override-lock.sh
+self_improve_archived_plugin_control_surface	Archived self-improvement plugins remain inspectable and operable through restore/delete controls, action surfaces, and backend helpers.	test-self-improve-archived-plugin-control-surface.sh
+self_improve_archived_plugin_restore	Archived self-improvement plugins can be listed, restored into locked review with stale age reset, blocked on active-lineage conflicts, and deleted from archive storage.	test-self-improve-archived-plugin-restore.sh
+self_improve_stale_plugin_pruning	Stale auto-managed review/rejected plugins archive by compare-cycle age while adopted and operator-managed plugins remain visible and inventory stays inspectable.	test-self-improve-stale-plugin-pruning.sh
+self_improve_benchmark_guided_prioritization	Benchmark weak-family evidence changes self-improvement lane scoring, merged plugin priority, and stored plugin promotion metadata.	test-self-improve-benchmark-guided-prioritization.sh
+self_improve_capability_benchmark_cycle	Cross-domain capability benchmark manifest, plan, score, and compare flows remain deterministic and promotable against real family scorecards.	test-capability-benchmark-cycle.sh
+self_improve_capability_benchmark_external_adapter_run	Registry-backed external benchmark adapters can be listed, planned, and executed into valid external reference scorecards.	test-capability-benchmark-external-adapter-run.sh
+self_improve_capability_benchmark_external_compare	Capability benchmark external-compare writes first-class external baseline metadata, family gap deltas, and explicit recommendation artifacts.	test-capability-benchmark-external-compare.sh
+self_improve_frontend_benchmark_surfacing	Self-improvement UI summary, capability trend report, and plugin cards surface benchmark recommendation, internal regressions, external deficits, benchmark-guided plugin metadata, and plugin inventory counts.	test-self-improve-frontend-benchmark-surfacing.sh
+self_improve_runtime_external_capability_benchmark	Self-improvement runtime evidence exposes latest external capability benchmark compares, persistent external gap history, closing/flat/worsening trend signals, gap families, and external compare counts.	test-self-improve-runtime-external-capability-benchmark.sh
+self_improve_external_gap_trend_streaks	Self-improvement runtime evidence distinguishes one-step external gap motion from sustained multi-cycle worsening or closing and preserves trajectory summaries.	test-self-improve-external-gap-trend-streaks.sh
+self_improve_external_gap_prioritization	External baseline gap evidence, including persistent recurring deficit trends, changes self-improvement lane scoring, merged plugin priority, and stored last-run benchmark metadata.	test-self-improve-external-gap-prioritization.sh
+self_knowledge_self_actuation_quality	Self-knowledge teach/show payloads for self-actuation remain explicit, operational, and diagnostically complete.	test-self-knowledge-self-actuation-quality.sh
+model_catalog_metadata	Model rows preserve description optionality and always include size metadata.	test-model-catalog-installed-metadata.sh
+model_auto_refresh_recovery	Model list refresh loop recovers after failed fetch cycles.	test-model-auto-refresh-recovery.sh
+ui_state_durable_backend	Desktop preferences persist via backend UI state API.	test-ui-state-durable-backend.sh
+frontend_module_bundle_order	Runtime module fragments remain bounded and deterministically bundled.	test-frontend-module-fragment-order.sh
+form_control_width_policy	Short form controls avoid global full-width anti-patterns.	test-form-controls-no-global-fullwidth.sh
+site_cgi_runtime_sync	Site runtime ensure-site sync keeps cgi runtime tree and links consistent.	test-site-cgi-runtime-sync.sh
+cgi_action_surface_contract	Public CGI action surface remains allowlisted and bounded.	test-cgi-action-surface-contract.sh
+backend_modular_loaders	Large backend runtimes load from modular shard directories.	test-backend-modular-loaders.sh
+wizardry_runtime_fallback	Runtime bootstrap falls back to home wizardry install safely.	test-wizardry-runtime-fallback.sh
+core_runtime_perl_fallback	Core runtime optional perl helpers have safe fallbacks.	test-core-runtime-perl-fallback.sh
+local_paths_script_isolation	Local paths and assay script site roots remain isolated from repo tree.	test-local-paths-script-site-isolation.sh
+generated_artifacts_policy	Generated artifacts are either ignored or regenerated from canonical sources.	test-generated-artifacts-policy.sh
+publish_surface_defaults	Public publish surface avoids local/private defaults.	test-publish-surface-neutral-defaults.sh
+third_party_notices_integrity	Third-party notices remain present and consistent.	test-third-party-notices.sh
+shell_strict_mode	Executable shell entrypoints enforce strict mode and safe PATH policy.	test-executable-shell-strict-mode.sh
+ci_shell_lint_workflow	CI includes shell lint workflow for release scripts.	test-ci-shell-lint-workflow.sh
+ci_release_suite_hook	CI runs full release test suite hook.	test-ci-workflow-runs-release-test-suite.sh

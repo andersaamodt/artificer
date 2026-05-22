@@ -1,0 +1,4 @@
+task	mode	budget	prompt
+scenario-depth-teach	teacher	standard	Teach why reducing queue wait can still hurt reliability, and include a scenario-specific check with an explicit if/when trigger that would force a recommendation pivot.
+scenario-depth-strategy	report	standard	Create a strategy balancing margin, legal risk, and reliability, and include one context anchor plus one scenario-specific if/when condition that triggers fallback.
+scenario-depth-incident	assistant	standard	Provide an incident plan under conflicting telemetry and require a scenario-specific if/when trigger for rollback versus continue decisions.

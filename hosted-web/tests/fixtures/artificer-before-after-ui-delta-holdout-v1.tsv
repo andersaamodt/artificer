@@ -1,0 +1,2 @@
+task_id	scenario	prompt
+delta-grid	card-grid-wrap	Compare the two attached Safari screenshots of the same local admin page. The first screenshot is BEFORE and the second screenshot is AFTER. Ignore browser chrome and use only visible screenshot evidence. Respond in exactly four lines starting with `Change:`, `Before Evidence:`, `After Evidence:`, and `Impact:`. Name the concrete visual or layout improvement, cite one visible cue from the before screenshot, cite one visible cue from the after screenshot, and explain why the change matters.

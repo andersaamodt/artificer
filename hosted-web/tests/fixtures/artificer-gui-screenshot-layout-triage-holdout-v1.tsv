@@ -1,0 +1,2 @@
+task_id	scenario	prompt
+triage-grid	card-grid-overflow	Inspect the attached Safari screenshot of a local admin page. Ignore browser chrome and use only visible screenshot evidence. Respond in exactly four lines starting with `Issue:`, `Evidence:`, `Likely Cause:`, and `Fix Direction:`. Identify the concrete layout defect, point to the affected UI region, and give one actionable fix direction.

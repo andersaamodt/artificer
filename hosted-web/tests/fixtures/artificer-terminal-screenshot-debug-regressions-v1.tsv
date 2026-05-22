@@ -1,0 +1,3 @@
+task_id	scenario	prompt
+terminal-module	node-module-missing	Inspect the attached terminal screenshot. Use only visible terminal or log evidence. Respond in exactly four lines starting with `Finding:`, `Evidence:`, `Next Command:`, and `Risk:`. Identify the main failure, cite the exact visible error line or code, name one concrete next command, and explain the operational risk.
+terminal-port	port-in-use	Inspect the attached terminal screenshot. Use only visible terminal or log evidence. Respond in exactly four lines starting with `Finding:`, `Evidence:`, `Next Command:`, and `Risk:`. Identify the main failure, cite the exact visible error line or code, name one concrete next command, and explain the operational risk.

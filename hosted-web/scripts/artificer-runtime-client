@@ -1,0 +1,410 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+site_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+default_api_script="$site_root/cgi/artificer-api"
+api_script=${ARTIFICER_API_SCRIPT:-$default_api_script}
+
+if [ ! -x "$api_script" ]; then
+  printf '%s\n' "artificer-runtime-client: API script not found: $api_script" >&2
+  exit 1
+fi
+
+usage() {
+  cat <<'EOF'
+Usage:
+  artificer-runtime-client describe
+  artificer-runtime-client health
+  artificer-runtime-client project list|get|add|rename|delete [options]
+  artificer-runtime-client session list|get|create|archive|message|run-next|events|stream [options]
+  artificer-runtime-client attention list|approval-answer|decision-answer [options]
+  artificer-runtime-client automation list|get|upsert|toggle|run-now|delete [options]
+  artificer-runtime-client self-actuation preview|apply|policy-get|policy-set|audit [options]
+  artificer-runtime-client code-context file --workspace-id <id> --path <relative-path>
+
+Common options:
+  --workspace-id <id>
+  --conversation-id <id>
+  --automation-id <id>
+  --path <path>
+  --name <name>
+  --title <title>
+  --model <model>
+  --prompt <text>
+  --schedule-kind <kind>
+  --schedule-value <value>
+  --command-exec-mode <mode>
+  --permission-mode <mode>
+  --run-mode <mode>
+  --assistant-mode-id <id>
+  --compute-budget <budget>
+  --programmer-review <0|1>
+  --programmer-review-rounds <n>
+  --enabled <0|1>
+  --allow-self-reschedule <0|1>
+  --answer <text>
+  --decision <allow|deny>
+  --scope <once|remember>
+  --match-mode <exact|regex>
+  --pattern <pattern>
+  --command <command>
+  --offset <n>
+  --limit <n>
+  --stream-session <id>
+  --explicit-skill-ids <csv>
+  --assay-task-id <id>
+  --confirm-token <token>
+  --idempotency-key <key>
+  --action <name>
+EOF
+}
+
+url_encode() {
+  input=$1
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$input" <<'PY'
+import sys
+import urllib.parse
+print(urllib.parse.quote(sys.argv[1], safe=""))
+PY
+    return 0
+  fi
+  printf '%s' "$input" | sed 's/%/%25/g;s/ /%20/g;s/\t/%09/g;s/\n/%0A/g;s/\r/%0D/g;s/&/%26/g;s/=/%3D/g;s/?/%3F/g;s/#/%23/g'
+}
+
+strip_headers() {
+  awk '
+    BEGIN { body = 0 }
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (body == 1) {
+        print line
+        next
+      }
+      if (line == "") {
+        body = 1
+      }
+    }
+  '
+}
+
+call_action_get() {
+  action_name=$1
+  shift
+  query="action=$(url_encode "$action_name")"
+  while [ "$#" -gt 0 ]; do
+    key=$1
+    value=$2
+    shift 2
+    query="${query}&$(url_encode "$key")=$(url_encode "$value")"
+  done
+  response=$(REQUEST_METHOD=GET QUERY_STRING="$query" "$api_script" 2>&1 || true)
+  json_payload=$(printf '%s\n' "$response" | strip_headers)
+  if [ -n "$json_payload" ]; then
+    printf '%s\n' "$json_payload"
+    return 0
+  fi
+  printf '%s\n' "$response"
+}
+
+call_action_post() {
+  action_name=$1
+  shift
+  body="action=$(url_encode "$action_name")"
+  while [ "$#" -gt 0 ]; do
+    key=$1
+    value=$2
+    shift 2
+    body="${body}&$(url_encode "$key")=$(url_encode "$value")"
+  done
+  content_length=$(printf '%s' "$body" | wc -c | tr -d ' ')
+  response=$(printf '%s' "$body" | REQUEST_METHOD=POST CONTENT_TYPE='application/x-www-form-urlencoded' CONTENT_LENGTH="$content_length" "$api_script" 2>&1 || true)
+  json_payload=$(printf '%s\n' "$response" | strip_headers)
+  if [ -n "$json_payload" ]; then
+    printf '%s\n' "$json_payload"
+    return 0
+  fi
+  printf '%s\n' "$response"
+}
+
+resource=${1:-}
+if [ -z "$resource" ]; then
+  usage >&2
+  exit 1
+fi
+shift || true
+
+operation=""
+case "$resource" in
+  describe|health)
+    ;;
+  *)
+    operation=${1:-}
+    [ -n "$operation" ] || {
+      usage >&2
+      exit 1
+    }
+    shift || true
+    ;;
+esac
+
+workspace_id=""
+conversation_id=""
+automation_id=""
+path_value=""
+name_value=""
+title_value=""
+model_value=""
+prompt_value=""
+schedule_kind=""
+schedule_value=""
+command_exec_mode=""
+permission_mode=""
+run_mode=""
+assistant_mode_id=""
+compute_budget=""
+programmer_review=""
+programmer_review_rounds=""
+enabled_value=""
+allow_self_reschedule=""
+answer_value=""
+decision_value=""
+scope_value=""
+match_mode=""
+pattern_value=""
+command_value=""
+offset_value=""
+limit_value=""
+stream_session=""
+explicit_skill_ids=""
+assay_task_id=""
+confirm_token=""
+idempotency_key=""
+action_value=""
+next_run=""
+attachments=""
+position=""
+reflexive_knowledge=""
+self_actuation=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --workspace-id) workspace_id=$2; shift 2 ;;
+    --conversation-id) conversation_id=$2; shift 2 ;;
+    --automation-id) automation_id=$2; shift 2 ;;
+    --path) path_value=$2; shift 2 ;;
+    --name) name_value=$2; shift 2 ;;
+    --title) title_value=$2; shift 2 ;;
+    --model) model_value=$2; shift 2 ;;
+    --prompt) prompt_value=$2; shift 2 ;;
+    --schedule-kind) schedule_kind=$2; shift 2 ;;
+    --schedule-value) schedule_value=$2; shift 2 ;;
+    --command-exec-mode|--command-exec) command_exec_mode=$2; shift 2 ;;
+    --permission-mode) permission_mode=$2; shift 2 ;;
+    --run-mode) run_mode=$2; shift 2 ;;
+    --assistant-mode-id) assistant_mode_id=$2; shift 2 ;;
+    --compute-budget) compute_budget=$2; shift 2 ;;
+    --programmer-review) programmer_review=$2; shift 2 ;;
+    --programmer-review-rounds) programmer_review_rounds=$2; shift 2 ;;
+    --enabled) enabled_value=$2; shift 2 ;;
+    --allow-self-reschedule) allow_self_reschedule=$2; shift 2 ;;
+    --answer) answer_value=$2; shift 2 ;;
+    --decision) decision_value=$2; shift 2 ;;
+    --scope) scope_value=$2; shift 2 ;;
+    --match-mode) match_mode=$2; shift 2 ;;
+    --pattern) pattern_value=$2; shift 2 ;;
+    --command) command_value=$2; shift 2 ;;
+    --offset) offset_value=$2; shift 2 ;;
+    --limit) limit_value=$2; shift 2 ;;
+    --stream-session) stream_session=$2; shift 2 ;;
+    --explicit-skill-ids) explicit_skill_ids=$2; shift 2 ;;
+    --assay-task-id) assay_task_id=$2; shift 2 ;;
+    --confirm-token) confirm_token=$2; shift 2 ;;
+    --idempotency-key) idempotency_key=$2; shift 2 ;;
+    --action) action_value=$2; shift 2 ;;
+    --next-run) next_run=$2; shift 2 ;;
+    --attachments) attachments=$2; shift 2 ;;
+    --position) position=$2; shift 2 ;;
+    --reflexive-knowledge) reflexive_knowledge=$2; shift 2 ;;
+    --self-actuation) self_actuation=$2; shift 2 ;;
+    --help|-h) usage; exit 0 ;;
+    *)
+      printf '%s\n' "artificer-runtime-client: unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+case "$resource" in
+  describe)
+    call_action_get "control_plane_describe"
+    ;;
+  health)
+    call_action_get "control_plane_health"
+    ;;
+  project)
+    case "$operation" in
+      list|get)
+        call_action_get "control_plane_projects" "op" "$operation" "workspace_id" "$workspace_id"
+        ;;
+      add|rename|delete)
+        call_action_post "control_plane_projects" "op" "$operation" "workspace_id" "$workspace_id" "path" "$path_value" "name" "$name_value" "command_exec_mode" "$command_exec_mode"
+        ;;
+      *)
+        usage >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  session)
+    case "$operation" in
+      list|get|events|stream)
+        call_action_get "control_plane_sessions" \
+          "op" "$operation" \
+          "workspace_id" "$workspace_id" \
+          "conversation_id" "$conversation_id" \
+          "stream_session" "$stream_session" \
+          "offset" "$offset_value"
+        ;;
+      create|archive|message|run-next)
+        call_action_post "control_plane_sessions" \
+          "op" "$operation" \
+          "workspace_id" "$workspace_id" \
+          "conversation_id" "$conversation_id" \
+          "title" "$title_value" \
+          "model" "$model_value" \
+          "prompt" "$prompt_value" \
+          "position" "$position" \
+          "attachments" "$attachments" \
+          "run_mode" "$run_mode" \
+          "assistant_mode_id" "$assistant_mode_id" \
+          "compute_budget" "$compute_budget" \
+          "command_exec_mode" "$command_exec_mode" \
+          "permission_mode" "$permission_mode" \
+          "reflexive_knowledge" "$reflexive_knowledge" \
+          "self_actuation" "$self_actuation" \
+          "programmer_review" "$programmer_review" \
+          "programmer_review_rounds" "$programmer_review_rounds" \
+          "explicit_skill_ids" "$explicit_skill_ids" \
+          "assay_task_id" "$assay_task_id" \
+          "stream_session" "$stream_session"
+        ;;
+      *)
+        usage >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  attention)
+    case "$operation" in
+      list)
+        call_action_get "control_plane_attention" "op" "$operation"
+        ;;
+      approval-answer|decision-answer)
+        call_action_post "control_plane_attention" \
+          "op" "$operation" \
+          "workspace_id" "$workspace_id" \
+          "conversation_id" "$conversation_id" \
+          "decision" "$decision_value" \
+          "scope" "$scope_value" \
+          "match_mode" "$match_mode" \
+          "pattern" "$pattern_value" \
+          "command" "$command_value" \
+          "answer" "$answer_value"
+        ;;
+      *)
+        usage >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  automation)
+    case "$operation" in
+      list|get)
+        call_action_get "control_plane_automations" "op" "$operation" "automation_id" "$automation_id"
+        ;;
+      upsert|toggle|run-now|delete)
+        call_action_post "control_plane_automations" \
+          "op" "$operation" \
+          "automation_id" "$automation_id" \
+          "workspace_id" "$workspace_id" \
+          "conversation_id" "$conversation_id" \
+          "name" "$name_value" \
+          "prompt" "$prompt_value" \
+          "schedule_kind" "$schedule_kind" \
+          "schedule_value" "$schedule_value" \
+          "enabled" "$enabled_value" \
+          "allow_self_reschedule" "$allow_self_reschedule" \
+          "run_mode" "$run_mode" \
+          "assistant_mode_id" "$assistant_mode_id" \
+          "compute_budget" "$compute_budget" \
+          "command_exec_mode" "$command_exec_mode" \
+          "permission_mode" "$permission_mode" \
+          "programmer_review" "$programmer_review" \
+          "programmer_review_rounds" "$programmer_review_rounds" \
+          "assay_task_id" "$assay_task_id" \
+          "explicit_skill_ids" "$explicit_skill_ids" \
+          "next_run" "$next_run"
+        ;;
+      *)
+        usage >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  self-actuation)
+    case "$operation" in
+      preview|apply)
+        call_action_post "control_plane_self_actuation" \
+          "op" "$operation" \
+          "operation" "$action_value" \
+          "workspace_id" "$workspace_id" \
+          "conversation_id" "$conversation_id" \
+          "automation_id" "$automation_id" \
+          "path" "$path_value" \
+          "name" "$name_value" \
+          "title" "$title_value" \
+          "model" "$model_value" \
+          "prompt" "$prompt_value" \
+          "schedule_kind" "$schedule_kind" \
+          "schedule_value" "$schedule_value" \
+          "command_exec_mode" "$command_exec_mode" \
+          "enabled" "$enabled_value" \
+          "allow_self_reschedule" "$allow_self_reschedule" \
+          "confirm_token" "$confirm_token" \
+          "idempotency_key" "$idempotency_key"
+        ;;
+      policy-set)
+        call_action_post "control_plane_self_actuation" \
+          "op" "$operation" \
+          "workspace_id" "$workspace_id" \
+          "enabled" "$enabled_value" \
+          "action" "$action_value"
+        ;;
+      policy-get|audit)
+        call_action_get "control_plane_self_actuation" "op" "$operation" "workspace_id" "$workspace_id" "limit" "$limit_value" "action" "$action_value"
+        ;;
+      *)
+        usage >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  code-context)
+    case "$operation" in
+      file)
+        call_action_get "control_plane_code_context" "op" "$operation" "workspace_id" "$workspace_id" "path" "$path_value"
+        ;;
+      *)
+        usage >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac

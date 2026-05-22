@@ -1,11 +1,91 @@
 # Artificer
 
-Artificer is a platform-native desktop front end for the existing Artificer
-runtime. It is built with the Forge native desktop pipeline and keeps the
-existing Artificer core as the source of truth for workspaces, sessions,
-automations, model routing, and queue execution.
+Artificer is a local-first AI assistant that runs against local models, keeps
+workspaces on disk, and exposes native desktop, hosted desktop, headless, and
+mobile thin-client surfaces from one repository.
 
-## Run
+The public runtime contract is simple:
+
+- install Artificer for your platform
+- run `artificer` or open `Artificer.app`
+- add a workspace and start working
+
+App Forge is not required for installed releases. The native desktop and mobile
+sources are still generated through the Forge native pipeline so the UI can stay
+reproducible across platforms.
+
+## Supported Platforms
+
+Artificer currently targets the same desktop platform set tracked in Wizardry,
+plus Android and iOS mobile thin clients.
+
+| Platform | Status | Artifact |
+| --- | --- | --- |
+| macOS | supported | `.app` bundle zip |
+| Debian / Ubuntu | supported via portable Linux bundle | `.tar.gz` |
+| NixOS | supported via portable Linux bundle | `.tar.gz` |
+| Arch | supported via portable Linux bundle | `.tar.gz` |
+| Android | supported as a mobile thin client | APK artifact |
+| iOS | supported as a mobile thin client | simulator app zip artifact |
+| Windows | no native support planned (WSL only if you know what you are doing) | none |
+
+## Runtime Requirements
+
+- [Ollama](https://ollama.com/) installed and running
+- at least one local model installed in Ollama
+- Wizardry runtime, auto-installed by `./install` if missing
+- `python3` and `perl` available for advanced runtime pipelines; details:
+  [docs/RUNTIME_DEPENDENCIES.md](docs/RUNTIME_DEPENDENCIES.md)
+
+Artificer no longer depends on App Forge for install or launch, but it still
+uses the Wizardry runtime internally.
+
+## Install
+
+### From a release artifact
+
+1. Download the artifact for your platform from GitHub Releases.
+2. Unpack it.
+3. Run the bundled installer:
+
+```sh
+./install
+```
+
+This installs:
+
+- the standalone runtime under `~/.local/share/artificer/app`
+- a launcher at `~/.local/bin/artificer`
+- desktop integration on macOS or Linux
+
+### From a source checkout
+
+```sh
+./install
+```
+
+Then start Artificer with:
+
+```sh
+artificer
+```
+
+On macOS you can also open `Artificer.app` after install.
+
+## Quick Start
+
+```sh
+artificer
+```
+
+The launcher will:
+
+1. prepare the served Artificer site
+2. start the local Artificer server if needed
+3. print the local URL
+4. open the app in your browser
+
+## Native Desktop And Mobile
 
 From the Forge app list, select `Artificer (native)` and run the native desktop
 target.
@@ -18,7 +98,7 @@ swift build --package-path generated/macos
 swift run --package-path generated/macos
 ```
 
-The app locates Artificer core in this order:
+The native desktop app locates Artificer core in this order:
 
 - `ARTIFICER_CORE_ROOT`
 - the saved native app setting
@@ -31,8 +111,6 @@ Durable native UI Preferences live in
 `${XDG_CONFIG_HOME:-$HOME/.config}/artificer/ui-prefs.env`. Native runtime
 state, including voice automation status and logs, lives under
 `${XDG_STATE_HOME:-$HOME/.local/state}/artificer-native`.
-
-## Feature Scope
 
 Implemented natively:
 
@@ -61,18 +139,77 @@ Implemented natively:
   pipeline
 
 The mobile workspace lives in `artificer-mobile/`. Its source of truth is
-`artificer-mobile/app-blueprint/mobile.ir.yaml`, rendered with
-`sh artificer-mobile/scripts/render-native-mobile.sh` into reproducible Android
-and iOS projects under `artificer-mobile/generated/mobile/`.
+`artificer-mobile/app-blueprint/mobile.ir.yaml`, rendered with:
+
+```sh
+sh artificer-mobile/scripts/render-native-mobile.sh
+```
+
+Rendered Android and iOS projects live under
+`artificer-mobile/generated/mobile/`.
 
 Deferred on purpose:
 
 - rich attachment previews and download/open affordances remain hosted for now;
-  native upload and queued-run attachment handling are implemented.
+  native upload and queued-run attachment handling are implemented
 - the detailed self-improvement/assay dashboards stay in hosted Artificer; the
   native app exposes the underlying run/session controls without cloning every
-  diagnostic visualization.
+  diagnostic visualization
+
+## Source Layout
+
+- [docs/README.md](docs/README.md): user and contributor docs
+- [hosted-web/README.md](hosted-web/README.md): developer-facing app internals
+- [docs/HEADLESS_RUNTIME_API.md](docs/HEADLESS_RUNTIME_API.md): headless
+  embedding and operator-control runtime
+- [tools/release](tools/release): installers, packagers, publish audit helpers
+- [scripts/artificer-backend.sh](scripts/artificer-backend.sh): internal
+  launcher/runtime helper
+- [artificer-mobile](artificer-mobile): Android and iOS mobile thin-client
+  source and generated projects
+
+## Release Artifacts
+
+The GitHub Actions builds create:
+
+- `artificer-<version>-linux-x86_64.tar.gz`
+- `artificer-<version>-linux-arm64.tar.gz`
+- `artificer-<version>-macos.zip`
+- `artificer-mobile-android`
+- `artificer-mobile-ios`
+
+The Linux bundles are portable artifacts for Debian, Ubuntu, NixOS, and Arch on
+their corresponding CPU architecture. The mobile artifacts are CI-built
+thin-client packages for testing against an Artificer desktop bridge.
+
+## Documentation
+
+Human-facing docs, by intent:
+
+- Start here: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md),
+  [docs/USER_GUIDE.md](docs/USER_GUIDE.md),
+  [docs/SETTINGS_AND_MODELS.md](docs/SETTINGS_AND_MODELS.md)
+- Intelligence and reasoning: [docs/HOW_ARTIFICER_LLMS_WORK.md](docs/HOW_ARTIFICER_LLMS_WORK.md),
+  [docs/OLLAMA_CONTRIBUTOR_PATH.md](docs/OLLAMA_CONTRIBUTOR_PATH.md),
+  [docs/INTELLIGENCE_MENTORING_EXPLAINED.md](docs/INTELLIGENCE_MENTORING_EXPLAINED.md),
+  [docs/CAPABILITY_ROADMAP.md](docs/CAPABILITY_ROADMAP.md)
+- Capability measurement: [docs/CAPABILITY_BENCHMARKS.md](docs/CAPABILITY_BENCHMARKS.md)
+- Reference: [docs/GLOSSARY.md](docs/GLOSSARY.md),
+  [docs/REPO_OVERVIEW.md](docs/REPO_OVERVIEW.md),
+  [docs/PROJECT_LAYOUT.md](docs/PROJECT_LAYOUT.md)
+- Headless embedding/runtime API: [docs/HEADLESS_RUNTIME_API.md](docs/HEADLESS_RUNTIME_API.md)
+- Release and contribution: [docs/release-notes/v0.1.0.md](docs/release-notes/v0.1.0.md),
+  [docs/PUBLISHING_AUDIT.md](docs/PUBLISHING_AUDIT.md),
+  [docs/CODEBASE_HARDENING_CHECKLIST.md](docs/CODEBASE_HARDENING_CHECKLIST.md),
+  [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md)
+- Runtime/tooling dependencies: [docs/RUNTIME_DEPENDENCIES.md](docs/RUNTIME_DEPENDENCIES.md)
+- Third-party bundle attribution: [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md)
+- Full index: [docs/README.md](docs/README.md)
+- Internals map: [hosted-web/README.md](hosted-web/README.md)
+
+AI-facing documentation lives under [.github/](.github/) for workflows and
+automation-facing repo configuration.
 
 ## License
 
-This is a native port of Artificer and inherits Artificer's O.W.L. license.
+Artificer is licensed under O.W.L. 2.0. See [LICENSE](LICENSE).

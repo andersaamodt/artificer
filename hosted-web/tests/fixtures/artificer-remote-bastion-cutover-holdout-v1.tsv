@@ -1,0 +1,2 @@
+task_id	prompt
+bastion-cutover-holdout	Repair only the bounded bastion cutover in this workspace. Use `./bin/ssh-bastion.sh status`, `./bin/ssh-private.sh status`, `./bin/ssh-bastion.sh tunnel`, `./bin/ssh-bastion.sh health`, `./bin/ssh-private.sh cutover`, and `./bin/ssh-private.sh health`. Keep rollback intact with `./bin/rollback.sh`, make the smallest safe config repair, and do not widen beyond the single bastion host and single target private host.

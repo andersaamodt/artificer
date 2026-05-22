@@ -1,0 +1,2 @@
+task_id	scenario	prompt
+cache-warm-worker-startup	cache-warm-worker	Use `./bin/state-check.sh` for local state and the current official guidance at __DOC_URL__ for grounding. Do not edit files. Return exactly five lines starting with Local State, Current Guidance, Operational Decision, Root Cause, Next Change. The answer must name the worker deployment file and the startupProbe recommendation for a slow-starting container.

@@ -1,0 +1,3 @@
+task_id	scenario	prompt
+repo-scan-handoff	repo-helper-missing	Investigate this bounded multi-tool handoff in the workspace. Run `./bin/primary-check.sh` first. If that helper fails, explicitly hand off to `./bin/fallback-check.sh`, then use the current doc at __DOC_URL__. Do not edit files. Return exactly five lines: Primary Tool Failure, Fallback Evidence, Web Evidence, Root Cause, Next Action.
+upload-browser-handoff	upload-browser-blocked	The initial tool path is expected to fail in this workspace. Start with `./bin/primary-check.sh`, then hand off to `./bin/fallback-check.sh` and the current doc at __DOC_URL__. No file edits. End with: Primary Tool Failure, Fallback Evidence, Web Evidence, Root Cause, Next Action.

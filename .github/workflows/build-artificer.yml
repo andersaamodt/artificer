@@ -1,0 +1,75 @@
+name: Build Artificer
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - x86_64
+          - arm64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild generated runtime files
+        run: |
+          sh tools/build-artificer-app.sh
+          sh tools/release/run-release-tests.sh
+          git diff --exit-code
+      - name: Build Linux bundle (${{ matrix.arch }})
+        run: sh tools/release/build-release-bundle.sh dist
+        env:
+          ARTIFICER_TARGET_ARCH: ${{ matrix.arch }}
+      - name: Upload Linux artifact (${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: artificer-linux-${{ matrix.arch }}
+          path: dist/artificer-*-linux-${{ matrix.arch }}.tar.gz
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild generated runtime files
+        run: |
+          sh tools/build-artificer-app.sh
+          sh tools/release/run-release-tests.sh
+          git diff --exit-code
+      - name: Build macOS artifacts
+        run: sh tools/release/build-macos-app.sh dist
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artificer-macos
+          path: dist/artificer-*-macos.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - build-linux
+      - build-macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: docs/release-notes/${{ github.ref_name }}.md
+          files: |
+            release-artifacts/artificer-linux-x86_64/*
+            release-artifacts/artificer-linux-arm64/*
+            release-artifacts/artificer-macos/*

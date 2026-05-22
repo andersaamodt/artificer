@@ -1,0 +1,3 @@
+task_id	prompt
+release-pack-explicit	Use the provided local helpers to inspect ./bin/status-core.sh and ./bin/status-edge.sh, approve the bounded release pack in place, run ./bin/cutover-core.sh first, ./bin/cutover-edge.sh second, then ./bin/publish-release.sh and ./bin/verify-release.sh. Keep rollback intact and summarize the exact commands you ran.
+release-pack-helper-phrasing	Use the provided core and edge boundary status helpers, make the smallest safe shared release-pack fix in place, cut the core boundary over first, cut the edge boundary over second, publish the release helper, run the verify release helper, and preserve rollback evidence.

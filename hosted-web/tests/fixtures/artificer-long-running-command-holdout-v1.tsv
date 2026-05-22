@@ -1,0 +1,2 @@
+task_id	prompt
+polling-holdout	Repair only the bounded long-running job in this workspace. Use `./bin/poll.sh`, `./bin/checkpoint.sh`, `./bin/finalize.sh`, and `./bin/verify.sh`. Poll the job until it is ready, checkpoint before finalize, keep rollback ready with `./bin/rollback.sh`, make the smallest safe job-config fix, and do not widen beyond this one job.

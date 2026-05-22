@@ -1,0 +1,2 @@
+task_id	prompt
+filesystem-rename-move	Repair the bounded layout move in this workspace with `./bin/inventory.sh`, `./bin/apply.sh`, `./bin/verify.sh`, and `./bin/rollback.sh`. Keep it to one filesystem mutation pack: archive the current live config, promote the staged config file into the live path, update the current symlink, rerun verify, and keep rollback ready. End with Outcome, Verification Evidence, Risks, Next Improvement.

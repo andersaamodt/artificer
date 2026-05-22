@@ -1,0 +1,2 @@
+task_id	prompt
+current-docs-root-cause	Use `./bin/repo-scan.sh` and `./bin/runtime-check.sh`, then read the current migration notes at __DOC_URL__. Do not edit files. Return one bounded triage with sections: Repo Evidence, Runtime Evidence, Web Evidence, Root Cause, Next Change. The answer should name the legacy endpoint, the current endpoint, and the next concrete client change.

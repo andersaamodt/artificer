@@ -1,0 +1,2 @@
+task_id	prompt
+boundary-jump-host	Repair the bounded jump-host rollout in this workspace with `./bin/ssh-bastion.sh`, `./bin/ssh-private-canary.sh`, `./bin/ssh-private-fleet.sh`, and `./bin/rollback.sh`. Keep it to one multi-boundary rollout: tunnel through the bastion host first, deploy the private canary target second, deploy the private fleet target last, rerun the private health checks, and keep rollback ready. End with Outcome, Verification Evidence, Risks, Next Improvement.

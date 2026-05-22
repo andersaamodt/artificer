@@ -1,0 +1,2 @@
+task_id	scenario	prompt
+session-cache	session-cache-fallback	Investigate this bounded browser/runtime issue. Use the attached Safari screenshot as Image Evidence, use the browser snapshot below as Browser Evidence, and run `./bin/runtime-check.sh` for Runtime Evidence. Do not edit files. Respond in exactly five lines starting with `Browser Evidence:`, `Image Evidence:`, `Runtime Evidence:`, `Root Cause:`, and `Next Action:`.

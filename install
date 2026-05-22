@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
+exec "$ROOT_DIR/tools/release/install-artificer.sh" --root "$ROOT_DIR" "$@"

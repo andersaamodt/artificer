@@ -1,0 +1,135 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
+APP_ROOT=$SCRIPT_DIR
+
+usage() {
+  cat <<'USAGE'
+Usage: artificer [launch|url|ensure-site|automations]
+
+Commands:
+  launch       Ensure the site is ready, start the local server, print the URL, and open the browser.
+  url          Ensure the site is ready, start the local server if needed, and print the URL.
+  ensure-site  Prepare the served site without opening the browser.
+  automations  Background automation worker and daemon controls.
+USAGE
+}
+
+open_url() {
+  url=$1
+  if command -v open >/dev/null 2>&1; then
+    open "$url" >/dev/null 2>&1 || true
+    return 0
+  fi
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url" >/dev/null 2>&1 &
+    return 0
+  fi
+  return 1
+}
+
+require_backend() {
+  backend=$APP_ROOT/scripts/artificer-backend.sh
+  [ -x "$backend" ] || {
+    printf '%s\n' "artificer: missing backend script at $backend" >&2
+    exit 1
+  }
+}
+
+run_shell_script() {
+  script_path=$1
+  shift
+  exec_path=$script_path
+  [ -f "$exec_path" ] || {
+    printf '%s\n' "artificer: missing shell script at $exec_path" >&2
+    exit 1
+  }
+  sh "$exec_path" "$@"
+}
+
+ensure_site() {
+  require_backend
+  run_shell_script "$APP_ROOT/scripts/artificer-backend.sh" ensure-data-root "$APP_ROOT" >/dev/null
+  run_shell_script "$APP_ROOT/scripts/artificer-backend.sh" ensure-site "$APP_ROOT" >/dev/null
+}
+
+site_url() {
+  require_backend
+  ensure_site
+  port=$(run_shell_script "$APP_ROOT/scripts/artificer-backend.sh" start-serve "$APP_ROOT")
+  printf 'http://127.0.0.1:%s/pages/index.html\n' "$port"
+}
+
+cmd=${1-launch}
+case "$cmd" in
+  launch)
+    url=$(site_url)
+    printf '%s\n' "$url"
+    open_url "$url" || true
+    ;;
+  url)
+    site_url
+    ;;
+  ensure-site)
+    ensure_site
+    ;;
+  automations)
+    subcmd=${2-status}
+    automations_script="$APP_ROOT/scripts/artificer-automations.sh"
+    [ -x "$automations_script" ] || {
+      printf '%s\n' "artificer: missing automation script at $automations_script" >&2
+      exit 1
+    }
+    case "$subcmd" in
+      tick)
+        shift 2
+        exec sh "$automations_script" tick "$@"
+        ;;
+      loop)
+        shift 2
+        exec sh "$automations_script" loop "$@"
+        ;;
+      status)
+        shift 2
+        exec sh "$automations_script" status "$@"
+        ;;
+      status-json)
+        shift 2
+        exec sh "$automations_script" status-json "$@"
+        ;;
+      enable|enable-daemon|daemon-enable)
+        shift 2
+        exec sh "$automations_script" enable "$@"
+        ;;
+      disable|disable-daemon|daemon-disable)
+        shift 2
+        exec sh "$automations_script" disable "$@"
+        ;;
+      --help|-h|help)
+        cat <<'USAGE'
+Usage: artificer automations <command>
+
+Commands:
+  tick                Run one automation tick and drain queued runs.
+  loop [seconds]      Run ticks continuously.
+  status              Print daemon status.
+  status-json         Print daemon status JSON.
+  enable              Enable background daemon.
+  disable             Disable background daemon.
+USAGE
+        ;;
+      *)
+        printf '%s\n' "artificer automations: unknown subcommand: $subcmd" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  --help|-h|help)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

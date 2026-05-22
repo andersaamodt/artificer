@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+ARTIFICER_SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+. "$ARTIFICER_SCRIPT_DIR/artificer-api-lib.sh"
+
+action=$(param "action")
+if [ -z "$action" ]; then
+  emit_error "action is required"
+  exit 0
+fi
+
+if state_action_mutates_light_state "$action"; then
+  state_light_cache_invalidate
+fi
+
+action_file="$ARTIFICER_SCRIPT_DIR/actions/$action.sh"
+if [ -f "$action_file" ]; then
+  . "$action_file"
+  exit 0
+fi
+
+. "$ARTIFICER_SCRIPT_DIR/actions/_default.sh"

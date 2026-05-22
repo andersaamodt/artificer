@@ -1,0 +1,2 @@
+task_id	prompt
+rollback-private-targets	Diagnose the bounded cross-boundary partial release in this workspace. Use the provided bastion and private-target helpers, make the smallest safe rollback-state fix so the bastion tunnel opens first, the private canary target rolls back second, the private fleet target rolls back last, rerun health checks, keep rollback intact, and do not widen beyond this one boundary rollback. End with sections: Outcome, Verification Evidence, Risks, Next Improvement.
