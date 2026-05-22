@@ -1,5 +1,6 @@
 // Generated from templates/macos/App.swift.template. Regenerate with scripts/render-native-desktop.sh.
 import AppKit
+import Combine
 import Foundation
 import SwiftUI
 
@@ -8,8 +9,16 @@ private let appDisplayName = "Artificer"
 
 @main
 struct ArtificerNativeApp: App {
-  @StateObject private var model = ArtificerModel()
+  @StateObject private var model: ArtificerModel
+  private let statusItemController: ArtificerStatusItemController
   @Environment(\.openWindow) private var openWindow
+
+  init() {
+    let launchModel = ArtificerModel()
+    launchModel.loadDesktopPrefsForLaunch()
+    statusItemController = ArtificerStatusItemController(model: launchModel)
+    _model = StateObject(wrappedValue: launchModel)
+  }
 
   var body: some Scene {
     WindowGroup("Artificer") {
@@ -88,6 +97,118 @@ struct ArtificerNativeApp: App {
         .frame(width: 760, height: 540)
     }
     .windowResizability(.contentSize)
+  }
+}
+
+private func artificerMenuBarImage() -> NSImage? {
+  let candidates = [
+    Bundle.module.url(forResource: "menu-bar-icon", withExtension: "png"),
+    Bundle.main.resourceURL?.appendingPathComponent("menu-bar-icon.png"),
+    URL(fileURLWithPath: fallbackProjectDir).appendingPathComponent("assets/menu-bar-icon.png")
+  ]
+  for candidate in candidates {
+    guard let url = candidate, let image = NSImage(contentsOf: url) else {
+      continue
+    }
+    image.size = NSSize(width: 18, height: 18)
+    image.isTemplate = false
+    return image
+  }
+  return nil
+}
+
+@MainActor
+private final class ArtificerStatusItemController: NSObject {
+  private let model: ArtificerModel
+  private var statusItem: NSStatusItem?
+  private var cancellables: Set<AnyCancellable> = []
+
+  init(model: ArtificerModel) {
+    self.model = model
+    super.init()
+    model.$menuBarIconEnabled
+      .receive(on: RunLoop.main)
+      .sink { [weak self] enabled in
+        self?.setVisible(enabled)
+      }
+      .store(in: &cancellables)
+    model.objectWillChange
+      .receive(on: RunLoop.main)
+      .sink { [weak self] _ in
+        self?.refreshMenu()
+      }
+      .store(in: &cancellables)
+    DispatchQueue.main.async { [weak self] in
+      self?.setVisible(model.menuBarIconEnabled)
+    }
+  }
+
+  private func setVisible(_ visible: Bool) {
+    if visible {
+      installStatusItem()
+    } else if let item = statusItem {
+      NSStatusBar.system.removeStatusItem(item)
+      statusItem = nil
+    }
+  }
+
+  private func installStatusItem() {
+    if statusItem == nil {
+      let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+      item.button?.toolTip = "Artificer"
+      item.button?.imagePosition = .imageOnly
+      item.button?.image = artificerMenuBarImage()
+      item.button?.image?.isTemplate = false
+      statusItem = item
+    }
+    refreshMenu()
+  }
+
+  private func refreshMenu() {
+    guard let item = statusItem else { return }
+    let menu = NSMenu()
+    menu.addItem(NSMenuItem(title: "Open Artificer", action: #selector(openArtificer), keyEquivalent: ""))
+    menu.addItem(NSMenuItem(title: "Open Hosted Artificer", action: #selector(openHostedArtificer), keyEquivalent: ""))
+    menu.addItem(.separator())
+    let pauseTitle = (model.daemonStatus?.paused ?? false) ? "Resume Runtime" : "Pause Runtime"
+    let pauseItem = NSMenuItem(title: pauseTitle, action: #selector(toggleAutomationDaemonPaused), keyEquivalent: "")
+    pauseItem.isEnabled = model.daemonStatus?.enabled ?? false
+    menu.addItem(pauseItem)
+    let tickItem = NSMenuItem(title: "Run Tick Now", action: #selector(runAutomationTick), keyEquivalent: "")
+    tickItem.isEnabled = model.daemonStatus?.enabled ?? false
+    menu.addItem(tickItem)
+    menu.addItem(.separator())
+    menu.addItem(NSMenuItem(title: "Hide Menu Bar Icon", action: #selector(hideMenuBarIcon), keyEquivalent: ""))
+    menu.addItem(.separator())
+    menu.addItem(NSMenuItem(title: "Quit Artificer", action: #selector(quitArtificer), keyEquivalent: ""))
+    for item in menu.items {
+      item.target = self
+    }
+    item.menu = menu
+  }
+
+  @objc private func openArtificer() {
+    NSApp.activate(ignoringOtherApps: true)
+  }
+
+  @objc private func openHostedArtificer() {
+    Task { await model.openHostedArtificer() }
+  }
+
+  @objc private func toggleAutomationDaemonPaused() {
+    Task { await model.toggleAutomationDaemonPaused() }
+  }
+
+  @objc private func runAutomationTick() {
+    Task { await model.daemon("automation-daemon-tick") }
+  }
+
+  @objc private func hideMenuBarIcon() {
+    Task { await model.setMenuBarIconEnabled(false) }
+  }
+
+  @objc private func quitArtificer() {
+    NSApp.terminate(nil)
   }
 }
 
@@ -1449,6 +1570,36 @@ private final class ArtificerModel: ObservableObject {
     }
   }
 
+  func loadDesktopPrefsForLaunch() {
+    let environment = ProcessInfo.processInfo.environment
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let configRoot: URL
+    if let xdgConfigHome = environment["XDG_CONFIG_HOME"], !xdgConfigHome.isEmpty {
+      configRoot = URL(fileURLWithPath: xdgConfigHome, isDirectory: true)
+    } else {
+      configRoot = home.appendingPathComponent(".config", isDirectory: true)
+    }
+    let prefsURL = configRoot
+      .appendingPathComponent("artificer", isDirectory: true)
+      .appendingPathComponent("ui-prefs.env")
+    guard let content = try? String(contentsOf: prefsURL, encoding: .utf8) else {
+      return
+    }
+    let prefs = parseLaunchDesktopPrefs(content)
+    if let value = prefs["menu_bar_icon"] {
+      menuBarIconEnabled = desktopLaunchBool(value)
+    }
+    if let value = prefs["voice_automations"] {
+      voiceAutomationsEnabled = desktopLaunchBool(value)
+    }
+    if let value = prefs["voice_automation_llm_prompts"] {
+      voiceLlmPromptsEnabled = desktopLaunchBool(value)
+    }
+    if let value = prefs["voice_automation_llm_actions"] {
+      voiceLlmActionsEnabled = desktopLaunchBool(value)
+    }
+  }
+
   func setDesktopPref(_ key: String, enabled: Bool) async {
     let result = await runBackend("desktop-prefs-set", key, enabled ? "1" : "0")
     if let prefs = decode(DesktopPrefsResponse.self, from: result) {
@@ -2371,6 +2522,24 @@ private struct DictationLevelsResponse: Decodable {
     levels = (try? container.decode([Double].self, forKey: .levels)) ?? []
     sessionID = (try? container.decode(String.self, forKey: .sessionID)) ?? ""
   }
+}
+
+private func parseLaunchDesktopPrefs(_ content: String) -> [String: String] {
+  var prefs: [String: String] = [:]
+  for rawLine in content.components(separatedBy: .newlines) {
+    let line = rawLine.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
+    guard !line.isEmpty, let separator = line.firstIndex(of: "=") else {
+      continue
+    }
+    let key = String(line[..<separator])
+    let value = String(line[line.index(after: separator)...])
+    prefs[key] = value
+  }
+  return prefs
+}
+
+private func desktopLaunchBool(_ value: String) -> Bool {
+  ["1", "true", "yes", "on", "enabled"].contains(value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
 }
 
 private extension KeyedDecodingContainer {

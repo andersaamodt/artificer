@@ -39,6 +39,8 @@ render_template() {
 }
 
 mkdir -p "$macos_dir/Sources/App" "$linux_dir/src"
+mkdir -p "$macos_dir/Sources/App/Resources"
+cp "$project_dir/assets/menu-bar-icon.png" "$macos_dir/Sources/App/Resources/menu-bar-icon.png"
 
 cat > "$macos_dir/Package.swift" <<EOF
 // Generated from app-blueprint/app.ir.yaml. Regenerate with scripts/render-native-desktop.sh.
@@ -56,7 +58,10 @@ let package = Package(
   targets: [
     .executableTarget(
       name: "App",
-      path: "Sources/App"
+      path: "Sources/App",
+      resources: [
+        .process("Resources")
+      ]
     )
   ]
 )
