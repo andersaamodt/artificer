@@ -3,6 +3,7 @@
     objective_value=$keep_value
     competition_value=$keep_value
     challenger_value=$keep_value
+    codex_work_check_value=$keep_value
     source_papers_value=$keep_value
     source_web_value=$keep_value
     source_runtime_value=$keep_value
@@ -17,6 +18,9 @@
     fi
     if self_improve_param_present "challenger_model"; then
       challenger_value=$(param "challenger_model")
+    fi
+    if self_improve_param_present "codex_work_check_enabled"; then
+      codex_work_check_value=$(param "codex_work_check_enabled")
     fi
     if self_improve_param_present "source_papers"; then
       source_papers_value=$(param "source_papers")
@@ -38,6 +42,7 @@
       "$objective_value" \
       "$competition_value" \
       "$challenger_value" \
+      "$codex_work_check_value" \
       "$source_papers_value" \
       "$source_web_value" \
       "$source_runtime_value" \

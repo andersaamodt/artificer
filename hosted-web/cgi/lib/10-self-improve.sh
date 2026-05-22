@@ -35,6 +35,7 @@ defaults = {
     "objective": default_objective,
     "competition_enabled": True,
     "challenger_model": "",
+    "codex_work_check_enabled": False,
     "sources": {
         "papers": True,
         "web": True,
@@ -66,6 +67,7 @@ def normalize(payload):
         objective = defaults["objective"]
     competition_enabled = as_bool(payload.get("competition_enabled"), defaults["competition_enabled"])
     challenger_model = " ".join(str(payload.get("challenger_model", "")).split()).strip()
+    codex_work_check_enabled = as_bool(payload.get("codex_work_check_enabled"), defaults["codex_work_check_enabled"])
     raw_sources = payload.get("sources", {})
     if not isinstance(raw_sources, dict):
         raw_sources = {}
@@ -76,6 +78,7 @@ def normalize(payload):
         "objective": objective,
         "competition_enabled": competition_enabled,
         "challenger_model": challenger_model,
+        "codex_work_check_enabled": codex_work_check_enabled,
         "sources": sources,
     }
 
@@ -107,6 +110,7 @@ defaults = {
     "objective": default_objective,
     "competition_enabled": True,
     "challenger_model": "",
+    "codex_work_check_enabled": False,
     "sources": {
         "papers": True,
         "web": True,
@@ -138,6 +142,7 @@ def normalize(payload):
         objective = defaults["objective"]
     competition_enabled = as_bool(payload.get("competition_enabled"), defaults["competition_enabled"])
     challenger_model = " ".join(str(payload.get("challenger_model", "")).split()).strip()
+    codex_work_check_enabled = as_bool(payload.get("codex_work_check_enabled"), defaults["codex_work_check_enabled"])
     raw_sources = payload.get("sources", {})
     if not isinstance(raw_sources, dict):
         raw_sources = {}
@@ -148,6 +153,7 @@ def normalize(payload):
         "objective": objective,
         "competition_enabled": competition_enabled,
         "challenger_model": challenger_model,
+        "codex_work_check_enabled": codex_work_check_enabled,
         "sources": sources,
     }
 
@@ -167,19 +173,20 @@ self_improve_run_options_merge_json() {
   objective_value=$1
   competition_value=$2
   challenger_value=$3
-  source_papers_value=$4
-  source_web_value=$5
-  source_runtime_value=$6
-  source_repo_value=$7
-  source_platform_value=$8
+  codex_work_check_value=$4
+  source_papers_value=$5
+  source_web_value=$6
+  source_runtime_value=$7
+  source_repo_value=$8
+  source_platform_value=$9
 
   current_json=$(self_improve_run_options_json)
   default_objective=$(self_improve_default_objective)
-  python3 - "$current_json" "$objective_value" "$competition_value" "$challenger_value" "$source_papers_value" "$source_web_value" "$source_runtime_value" "$source_repo_value" "$source_platform_value" "$default_objective" <<'PY'
+  python3 - "$current_json" "$objective_value" "$competition_value" "$challenger_value" "$codex_work_check_value" "$source_papers_value" "$source_web_value" "$source_runtime_value" "$source_repo_value" "$source_platform_value" "$default_objective" <<'PY'
 import json
 import sys
 
-current_json, objective_value, competition_value, challenger_value, source_papers_value, source_web_value, source_runtime_value, source_repo_value, source_platform_value, default_objective = sys.argv[1:11]
+current_json, objective_value, competition_value, challenger_value, codex_work_check_value, source_papers_value, source_web_value, source_runtime_value, source_repo_value, source_platform_value, default_objective = sys.argv[1:12]
 keep = "__ARTIFICER_KEEP__"
 
 
@@ -201,6 +208,7 @@ def normalize(payload):
         "objective": default_objective,
         "competition_enabled": True,
         "challenger_model": "",
+        "codex_work_check_enabled": False,
         "sources": {
             "papers": True,
             "web": True,
@@ -216,6 +224,7 @@ def normalize(payload):
         objective = defaults["objective"]
     competition_enabled = as_bool(payload.get("competition_enabled"), defaults["competition_enabled"])
     challenger_model = " ".join(str(payload.get("challenger_model", "")).split()).strip()
+    codex_work_check_enabled = as_bool(payload.get("codex_work_check_enabled"), defaults["codex_work_check_enabled"])
     raw_sources = payload.get("sources", {})
     if not isinstance(raw_sources, dict):
         raw_sources = {}
@@ -226,6 +235,7 @@ def normalize(payload):
         "objective": objective,
         "competition_enabled": competition_enabled,
         "challenger_model": challenger_model,
+        "codex_work_check_enabled": codex_work_check_enabled,
         "sources": sources,
     }
 
@@ -243,6 +253,8 @@ if competition_value != keep:
     normalized["competition_enabled"] = as_bool(competition_value, normalized["competition_enabled"])
 if challenger_value != keep:
     normalized["challenger_model"] = " ".join(str(challenger_value).split()).strip()
+if codex_work_check_value != keep:
+    normalized["codex_work_check_enabled"] = as_bool(codex_work_check_value, normalized["codex_work_check_enabled"])
 if source_papers_value != keep:
     normalized["sources"]["papers"] = as_bool(source_papers_value, normalized["sources"]["papers"])
 if source_web_value != keep:

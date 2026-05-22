@@ -1530,7 +1530,7 @@ private struct AutomationsPreferencesTab: View {
             Task { await model.setDesktopPref("voice_automations", enabled: nextValue) }
           }
         ))
-        Text("Listens continuously for automation phrases. Audio is handled by the local dictation backend.")
+        Text("Listens continuously for automation phrases. Audio is handled locally by Artificer's voice-recognition system.")
           .font(.caption)
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
@@ -2900,7 +2900,7 @@ private final class ArtificerModel: ObservableObject {
       if response.installed {
         dictationInstallMessage = "Dictation ready: \(response.backendLabel)."
       } else if dictationInstallMessage.isEmpty {
-        dictationInstallMessage = "Install a local dictation backend before recording."
+        dictationInstallMessage = "Install Artificer's local voice-recognition system before recording."
       }
     }
   }
@@ -3128,7 +3128,7 @@ private final class ArtificerModel: ObservableObject {
   func startDictation() async {
     await loadDictationStatus()
     if let dictationStatus, !dictationStatus.installed {
-      lastError = "Dictation backend is not installed in Artificer."
+      lastError = "Artificer's local voice-recognition system is not installed."
       statusMessage = "Dictation unavailable."
       return
     }
