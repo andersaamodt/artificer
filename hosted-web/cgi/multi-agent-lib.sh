@@ -24,11 +24,11 @@ ma_escalation_class_is_valid() {
 }
 
 ma_target_type_enum_json() {
-  printf '[\"Action\",\"Charter\",\"Ontology\",\"Commitment\",\"Workspace\",\"Resident\",\"Interpretation\",\"Procedure\",\"Flow\"]'
+  printf '["Action","Charter","Ontology","Commitment","Workspace","Resident","Interpretation","Procedure","Flow"]'
 }
 
 ma_escalation_class_enum_json() {
-  printf '[\"PolicyTradeoff\",\"OntologicalMisfit\",\"EpistemicRisk\",\"LockInRisk\",\"CaptureRisk\",\"IdentityDrift\",\"DiversityRisk\",\"RestraintOpportunity\",\"SalienceExpansion\",\"StrategicPreemption\",\"StrategicFieldCreation\",\"CognitiveEnvironment\",\"SelectionEnvironment\"]'
+  printf '["PolicyTradeoff","OntologicalMisfit","EpistemicRisk","LockInRisk","CaptureRisk","IdentityDrift","DiversityRisk","RestraintOpportunity","SalienceExpansion","StrategicPreemption","StrategicFieldCreation","CognitiveEnvironment","SelectionEnvironment"]'
 }
 
 ma_curated_residents_tsv() {
