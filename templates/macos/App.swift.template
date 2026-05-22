@@ -966,7 +966,7 @@ private struct AutomationsPreferencesTab: View {
             Task { await model.setDesktopPref("voice_automations", enabled: nextValue) }
           }
         ))
-        Text("Listens continuously for local automation phrases. Audio is handled by the local dictation backend.")
+        Text("Listens continuously for automation phrases. Audio is handled by the local dictation backend.")
           .font(.caption)
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
