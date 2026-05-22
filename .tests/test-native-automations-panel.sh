@@ -125,6 +125,26 @@ grep -q 'play_recognition_sound' "$root/scripts/artificer-voice-automations.sh" 
   exit 1
 }
 
+grep -q 'syncVoiceAutomationLoop' "$template" || {
+  printf '%s\n' "Native app should host the voice automation loop for microphone permission" >&2
+  exit 1
+}
+
+grep -q 'AVAudioRecorder' "$template" || {
+  printf '%s\n' "Native app should capture voice automation audio itself" >&2
+  exit 1
+}
+
+grep -q 'dictation-transcribe-file' "$template" || {
+  printf '%s\n' "Native app should send captured voice automation audio to local transcription" >&2
+  exit 1
+}
+
+grep -q 'app-hosted' "$backend" || {
+  printf '%s\n' "Native backend should avoid launchd-hosted voice capture" >&2
+  exit 1
+}
+
 if grep -qi "$personal_display_pattern" "$backend" "$root/scripts/artificer-voice-automations.sh"; then
   printf '%s\n' "Native backend/listener must not hardcode personal display actions" >&2
   exit 1

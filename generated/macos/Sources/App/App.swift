@@ -1,5 +1,6 @@
 // Generated from templates/macos/App.swift.template. Regenerate with scripts/render-native-desktop.sh.
 import AppKit
+import AVFoundation
 import Combine
 import Foundation
 import SwiftUI
@@ -2074,6 +2075,8 @@ private final class ArtificerModel: ObservableObject {
   @Published var programmerReviewRounds = 2
   @Published var selfActuation = false
   @Published var reflexiveKnowledge = false
+  private var voiceAutomationLoopTask: Task<Void, Never>?
+  private var voiceAutomationRecorder: AVAudioRecorder?
 
   let runModes = ["auto", "programming", "assistant", "report", "teacher", "security-audit", "pentest", "gui-testing"]
   let computeBudgets = ["auto", "low", "medium", "high"]
@@ -2172,8 +2175,10 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func bootstrap() async {
+    syncVoiceAutomationLoop()
     await refreshDoctor()
     await refreshAll()
+    syncVoiceAutomationLoop()
   }
 
   func refreshAll() async {
@@ -2717,6 +2722,7 @@ private final class ArtificerModel: ObservableObject {
       mobileLanEnabled = prefs.mobileLan
       mobileAllowExecute = prefs.mobileAllowExecute
       mobileAllowSelfActuation = prefs.mobileAllowSelfActuation
+      syncVoiceAutomationLoop()
     }
   }
 
@@ -2788,8 +2794,317 @@ private final class ArtificerModel: ObservableObject {
       mobileLanEnabled = prefs.mobileLan
       mobileAllowExecute = prefs.mobileAllowExecute
       mobileAllowSelfActuation = prefs.mobileAllowSelfActuation
+      syncVoiceAutomationLoop()
       await loadVoiceAutomationStatus()
       await loadMobileStatus()
+    }
+  }
+
+  func syncVoiceAutomationLoop() {
+    if voiceAutomationsEnabled {
+      guard voiceAutomationLoopTask == nil else { return }
+      appendVoiceAutomationLog("native loop starting")
+      requestMicrophoneAccessForVoiceAutomations()
+      voiceAutomationLoopTask = Task.detached { [weak self] in
+        while !Task.isCancelled {
+          guard let self else { return }
+          self.appendVoiceAutomationLog("native loop tick")
+          await self.runVoiceAutomationLoopTickDetached()
+          try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+      }
+    } else {
+      appendVoiceAutomationLog("native loop stopping")
+      voiceAutomationLoopTask?.cancel()
+      voiceAutomationLoopTask = nil
+    }
+  }
+
+  func runVoiceAutomationLoopTick() async {
+    guard voiceAutomationsEnabled else {
+      syncVoiceAutomationLoop()
+      return
+    }
+    if isDictating {
+      return
+    }
+    guard let audioURL = await captureVoiceAutomationAudio(seconds: 3) else {
+      return
+    }
+    defer {
+      try? FileManager.default.removeItem(at: audioURL)
+    }
+    let transcribeResult = await runBackend("dictation-transcribe-file", audioURL.path, dictationLanguage, trackBusy: false)
+    guard let transcription = decode(DictationTranscribeResponse.self, from: transcribeResult), transcription.success else {
+      let handleResult = await runBackend("voice-automations-handle-text", "", trackBusy: false)
+      if let status = decode(VoiceAutomationStatus.self, from: handleResult) {
+        voiceAutomationStatus = status
+      }
+      return
+    }
+    let handleResult = await runBackend("voice-automations-handle-text", transcription.text, trackBusy: false)
+    if let status = decode(VoiceAutomationStatus.self, from: handleResult) {
+      voiceAutomationStatus = status
+    }
+  }
+
+  func requestMicrophoneAccessForVoiceAutomations() {
+    if #available(macOS 14.0, *) {
+      if AVAudioApplication.shared.recordPermission == .undetermined {
+        appendVoiceAutomationLog("native microphone authorization requesting on main actor")
+        AVAudioApplication.requestRecordPermission { [weak self] granted in
+          self?.appendVoiceAutomationLog("native microphone authorization result \(granted ? "granted" : "denied")")
+        }
+      }
+    }
+  }
+
+  nonisolated func runVoiceAutomationLoopTickDetached() async {
+    guard voiceAutomationEnabledFromDisk() else {
+      return
+    }
+    guard let audioURL = await captureVoiceAutomationAudioDetached(seconds: 3) else {
+      return
+    }
+    defer {
+      try? FileManager.default.removeItem(at: audioURL)
+    }
+    let transcribeResult = await Backend.run(action: "dictation-transcribe-file", arguments: [audioURL.path, "auto"])
+    guard
+      transcribeResult.exitCode == 0,
+      let transcribeData = transcribeResult.stdout.data(using: .utf8),
+      let transcription = try? JSONDecoder().decode(DictationTranscribeResponse.self, from: transcribeData),
+      transcription.success
+    else {
+      let handleResult = await Backend.run(action: "voice-automations-handle-text", arguments: [""])
+      if
+        handleResult.exitCode == 0,
+        let data = handleResult.stdout.data(using: .utf8),
+        let status = try? JSONDecoder().decode(VoiceAutomationStatus.self, from: data)
+      {
+        await MainActor.run {
+          voiceAutomationStatus = status
+        }
+      }
+      return
+    }
+
+    let handleResult = await Backend.run(action: "voice-automations-handle-text", arguments: [transcription.text])
+    if
+      handleResult.exitCode == 0,
+      let data = handleResult.stdout.data(using: .utf8),
+      let status = try? JSONDecoder().decode(VoiceAutomationStatus.self, from: data)
+    {
+      await MainActor.run {
+        voiceAutomationStatus = status
+      }
+    }
+  }
+
+  nonisolated func voiceAutomationEnabledFromDisk() -> Bool {
+    let prefsURL = FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent(".config", isDirectory: true)
+      .appendingPathComponent("artificer", isDirectory: true)
+      .appendingPathComponent("ui-prefs.env")
+    guard let content = try? String(contentsOf: prefsURL, encoding: .utf8) else {
+      return false
+    }
+    for rawLine in content.components(separatedBy: .newlines) {
+      let line = rawLine.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
+      guard line.hasPrefix("voice_automations=") else { continue }
+      let value = String(line.dropFirst("voice_automations=".count)).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      return ["1", "true", "yes", "on", "enabled"].contains(value)
+    }
+    return false
+  }
+
+  nonisolated func captureVoiceAutomationAudioDetached(seconds: TimeInterval) async -> URL? {
+    let allowed = await requestMicrophoneAccessDetached()
+    guard allowed else {
+      appendVoiceAutomationLog("native microphone access denied")
+      return nil
+    }
+
+    let captureDir = FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent(".local", isDirectory: true)
+      .appendingPathComponent("state", isDirectory: true)
+      .appendingPathComponent("artificer-native", isDirectory: true)
+      .appendingPathComponent("voice-automations", isDirectory: true)
+      .appendingPathComponent("native-capture", isDirectory: true)
+    do {
+      try FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
+    } catch {
+      appendVoiceAutomationLog("native capture directory failed: \(error.localizedDescription)")
+      return nil
+    }
+
+    let audioURL = captureDir.appendingPathComponent("voice-\(UUID().uuidString).wav")
+    let settings: [String: Any] = [
+      AVFormatIDKey: Int(kAudioFormatLinearPCM),
+      AVSampleRateKey: 16_000.0,
+      AVNumberOfChannelsKey: 1,
+      AVLinearPCMBitDepthKey: 16,
+      AVLinearPCMIsFloatKey: false,
+      AVLinearPCMIsBigEndianKey: false
+    ]
+
+    do {
+      let recorder = try AVAudioRecorder(url: audioURL, settings: settings)
+      recorder.prepareToRecord()
+      guard recorder.record() else {
+        appendVoiceAutomationLog("native recorder did not start")
+        return nil
+      }
+      appendVoiceAutomationLog("native recorder started")
+      try? await Task.sleep(nanoseconds: UInt64(max(1.0, seconds) * 1_000_000_000))
+      recorder.stop()
+      let size = ((try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? NSNumber)?.intValue) ?? 0
+      guard size > 44 else {
+        try? FileManager.default.removeItem(at: audioURL)
+        appendVoiceAutomationLog("native recorder captured no audio")
+        return nil
+      }
+      appendVoiceAutomationLog("native recorder captured \(size) bytes")
+      return audioURL
+    } catch {
+      try? FileManager.default.removeItem(at: audioURL)
+      appendVoiceAutomationLog("native recorder failed: \(error.localizedDescription)")
+      return nil
+    }
+  }
+
+  nonisolated func requestMicrophoneAccessDetached() async -> Bool {
+    appendVoiceAutomationLog("native microphone authorization check")
+    if #available(macOS 14.0, *) {
+      switch AVAudioApplication.shared.recordPermission {
+      case .granted:
+        appendVoiceAutomationLog("native microphone already authorized")
+        return true
+      case .undetermined:
+        appendVoiceAutomationLog("native microphone authorization pending")
+        return false
+      default:
+        appendVoiceAutomationLog("native microphone authorization not allowed")
+        return false
+      }
+    } else {
+      switch AVCaptureDevice.authorizationStatus(for: .audio) {
+      case .authorized:
+        appendVoiceAutomationLog("native microphone already authorized")
+        return true
+      case .notDetermined:
+        appendVoiceAutomationLog("native microphone authorization pending")
+        return false
+      default:
+        appendVoiceAutomationLog("native microphone authorization not allowed")
+        return false
+      }
+    }
+  }
+
+  func captureVoiceAutomationAudio(seconds: TimeInterval) async -> URL? {
+    let allowed = await requestMicrophoneAccess()
+    guard allowed else {
+      appendVoiceAutomationLog("native microphone access denied")
+      lastError = "Microphone access is required for voice automations."
+      statusMessage = "Voice automations need microphone access."
+      return nil
+    }
+
+    let captureDir = FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent(".local", isDirectory: true)
+      .appendingPathComponent("state", isDirectory: true)
+      .appendingPathComponent("artificer-native", isDirectory: true)
+      .appendingPathComponent("voice-automations", isDirectory: true)
+      .appendingPathComponent("native-capture", isDirectory: true)
+    do {
+      try FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
+    } catch {
+      appendVoiceAutomationLog("native capture directory failed: \(error.localizedDescription)")
+      lastError = "Could not create voice capture directory: \(error.localizedDescription)"
+      return nil
+    }
+
+    let audioURL = captureDir.appendingPathComponent("voice-\(UUID().uuidString).wav")
+    let settings: [String: Any] = [
+      AVFormatIDKey: Int(kAudioFormatLinearPCM),
+      AVSampleRateKey: 16_000.0,
+      AVNumberOfChannelsKey: 1,
+      AVLinearPCMBitDepthKey: 16,
+      AVLinearPCMIsFloatKey: false,
+      AVLinearPCMIsBigEndianKey: false
+    ]
+
+    do {
+      let recorder = try AVAudioRecorder(url: audioURL, settings: settings)
+      recorder.prepareToRecord()
+      voiceAutomationRecorder = recorder
+      guard recorder.record() else {
+        voiceAutomationRecorder = nil
+        appendVoiceAutomationLog("native recorder did not start")
+        lastError = "Voice automation recording did not start."
+        return nil
+      }
+      appendVoiceAutomationLog("native recorder started")
+      try? await Task.sleep(nanoseconds: UInt64(max(1.0, seconds) * 1_000_000_000))
+      recorder.stop()
+      voiceAutomationRecorder = nil
+      let size = ((try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? NSNumber)?.intValue) ?? 0
+      guard size > 44 else {
+        try? FileManager.default.removeItem(at: audioURL)
+        appendVoiceAutomationLog("native recorder captured no audio")
+        lastError = "Voice automation recording captured no audio."
+        return nil
+      }
+      appendVoiceAutomationLog("native recorder captured \(size) bytes")
+      return audioURL
+    } catch {
+      voiceAutomationRecorder = nil
+      try? FileManager.default.removeItem(at: audioURL)
+      appendVoiceAutomationLog("native recorder failed: \(error.localizedDescription)")
+      lastError = "Voice automation recording failed: \(error.localizedDescription)"
+      return nil
+    }
+  }
+
+  nonisolated func appendVoiceAutomationLog(_ message: String) {
+    let logURL = FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent(".local", isDirectory: true)
+      .appendingPathComponent("state", isDirectory: true)
+      .appendingPathComponent("artificer-native", isDirectory: true)
+      .appendingPathComponent("voice-automations", isDirectory: true)
+      .appendingPathComponent("voice-automations.log")
+    let timestamp = ISO8601DateFormatter().string(from: Date())
+    let line = "\(timestamp) \(message)\n"
+    do {
+      try FileManager.default.createDirectory(at: logURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+      if let data = line.data(using: .utf8) {
+        if FileManager.default.fileExists(atPath: logURL.path),
+           let handle = try? FileHandle(forWritingTo: logURL) {
+          try handle.seekToEnd()
+          try handle.write(contentsOf: data)
+          try handle.close()
+        } else {
+          try data.write(to: logURL)
+        }
+      }
+    } catch {
+      // Best-effort diagnostics only.
+    }
+  }
+
+  func requestMicrophoneAccess() async -> Bool {
+    switch AVCaptureDevice.authorizationStatus(for: .audio) {
+    case .authorized:
+      return true
+    case .notDetermined:
+      return await withCheckedContinuation { continuation in
+        AVCaptureDevice.requestAccess(for: .audio) { granted in
+          continuation.resume(returning: granted)
+        }
+      }
+    default:
+      return false
     }
   }
 
@@ -4370,6 +4685,12 @@ private struct DictationStopResponse: Decodable {
     case success, text, backend
     case sessionID = "session_id"
   }
+}
+
+private struct DictationTranscribeResponse: Decodable {
+  let success: Bool
+  let text: String
+  let backend: String
 }
 
 private struct DictationLevelsResponse: Decodable {

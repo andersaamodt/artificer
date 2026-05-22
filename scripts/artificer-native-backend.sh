@@ -45,6 +45,8 @@ Actions:
   dictation-start [LANGUAGE]
   dictation-levels [SESSION_ID]
   dictation-stop SESSION_ID
+  dictation-transcribe-file AUDIO_PATH [LANGUAGE]
+  voice-automations-handle-text TEXT
   self-improve-settings
   self-improve-codex-work-check-set ENABLED
   self-improve-run-options-set OBJECTIVE COMPETITION_ENABLED CHALLENGER_MODEL CODEX_WORK_CHECK SOURCE_PAPERS SOURCE_WEB SOURCE_RUNTIME SOURCE_REPO SOURCE_PLATFORM
@@ -596,9 +598,11 @@ case "$action" in
     enabled_value=${2-0}
     write_desktop_pref "$key" "$enabled_value"
     if [ "$key" = "voice_automations" ]; then
+      # Voice automation capture must run from the native app process so macOS
+      # microphone permission applies to Artificer, not to a launchd shell.
       normalized_enabled=$(bool_pref_value "$enabled_value")
       if [ "$normalized_enabled" = 1 ]; then
-        voice_automations_script enable >/dev/null
+        voice_automations_script app-hosted >/dev/null
       else
         voice_automations_script disable >/dev/null
       fi
@@ -660,6 +664,10 @@ case "$action" in
     ;;
   voice-automations-tick)
     voice_automations_script tick
+    ;;
+  voice-automations-handle-text)
+    text=${1-}
+    voice_automations_script handle-text "$text"
     ;;
   mobile-status)
     mobile_bridge_script status
@@ -812,6 +820,11 @@ case "$action" in
   dictation-stop)
     session_id=${1-}
     api_post dictate_stop session_id "$session_id"
+    ;;
+  dictation-transcribe-file)
+    audio_path=${1-}
+    language=${2:-auto}
+    api_post dictate_transcribe_file audio_path "$audio_path" language "$language"
     ;;
   self-improve-settings)
     api_get self_improve_settings_get

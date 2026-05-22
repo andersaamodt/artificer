@@ -107,6 +107,7 @@ APP
 <key>CFBundleName</key><string>Artificer</string>
 <key>CFBundleDisplayName</key><string>Artificer</string>
 <key>CFBundleIdentifier</key><string>com.artificer.app</string>
+<key>NSMicrophoneUsageDescription</key><string>Artificer uses the microphone for local dictation and voice automation commands.</string>
 <key>CFBundleVersion</key><string>$version</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleExecutable</key><string>Artificer</string>

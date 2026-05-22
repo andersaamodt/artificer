@@ -14,10 +14,13 @@ lock_dir="$daemon_dir/tick.lock"
 label="com.artificer.voice-automations"
 plist="$home/Library/LaunchAgents/$label.plist"
 log_file="$daemon_dir/voice-automations.log"
+spellbook_dir="$home/.spellbook"
+PATH="$spellbook_dir:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+export PATH
 
 usage() {
   cat <<'USAGE'
-Usage: artificer-voice-automations.sh status|enable|disable|daemon|tick
+Usage: artificer-voice-automations.sh status|enable|disable|app-hosted|daemon|tick|handle-text TEXT
 
 Runs Artificer's local voice automation listener.
 USAGE
@@ -99,6 +102,13 @@ ensure_dirs() {
   mkdir -p "$daemon_dir" "$config_root" "$home/Library/LaunchAgents"
 }
 
+log_event() {
+  ensure_dirs
+  message=$1
+  timestamp=$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || date)
+  printf '%s %s\n' "$timestamp" "$message" >> "$log_file"
+}
+
 read_pref_raw() {
   key=$1
   [ -f "$prefs_file" ] || return 1
@@ -148,6 +158,21 @@ play_recognition_sound() {
   if command -v afplay >/dev/null 2>&1; then
     afplay /System/Library/Sounds/Glass.aiff >/dev/null 2>&1 &
   fi
+}
+
+resolve_action_command() {
+  command_text=$1
+  case "$command_text" in
+    */*|*" "*|*"	"*|*\'*|*\"*|*\\*|*\;*|*\&*|*\|*|*\(*|*\)*)
+      printf '%s\n' "$command_text"
+      return 0
+      ;;
+  esac
+  if [ -x "$spellbook_dir/$command_text" ]; then
+    printf '%s\n' "$spellbook_dir/$command_text"
+    return 0
+  fi
+  printf '%s\n' "$command_text"
 }
 
 status_value() {
@@ -206,6 +231,11 @@ enable_launchd() {
   <string>$log_file</string>
   <key>StandardErrorPath</key>
   <string>$log_file</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>$PATH</string>
+  </dict>
 </dict>
 </plist>
 EOF
@@ -220,6 +250,12 @@ disable_launchd() {
   write_status disabled "Voice automations disabled." "" ""
 }
 
+app_hosted() {
+  launchctl unload "$plist" >/dev/null 2>&1 || true
+  rm -f "$plist"
+  write_status listening "Voice automations run from the Artificer app." "" ""
+}
+
 run_known_action() {
   phrase=$1
   for slot in 1 2; do
@@ -230,12 +266,15 @@ run_known_action() {
     [ -n "$phrases" ] || continue
     [ -n "$name" ] || name="Local action $slot"
     if phrase_in_list "$phrase" "$phrases"; then
-      if /bin/sh -c "$command_text" >/dev/null 2>&1; then
+      resolved_command=$(resolve_action_command "$command_text")
+      if /bin/sh -c "$resolved_command" >/dev/null 2>&1; then
         play_recognition_sound
-        write_status triggered "Ran local action: $name." "$phrase" "$command_text"
+        log_event "recognized phrase='$phrase' action='$resolved_command'"
+        write_status triggered "Ran local action: $name." "$phrase" "$resolved_command"
         return 0
       fi
-      write_status error "Local action failed: $name." "$phrase" "$command_text"
+      log_event "local action failed phrase='$phrase' action='$resolved_command'"
+      write_status error "Local action failed: $name." "$phrase" "$resolved_command"
       return 1
     fi
   done
@@ -307,15 +346,6 @@ tick_once_locked() {
     return 0
   fi
 
-  start_json=$("$backend_script" dictation-start auto 2>/dev/null || printf '{}')
-  session_id=$(json_get "$start_json" session.id)
-  if [ -z "$session_id" ]; then
-    message=$(json_get "$start_json" error)
-    [ -n "$message" ] || message="Dictation did not start."
-    write_status error "$message" "" ""
-    return 0
-  fi
-
   window_seconds=${ARTIFICER_VOICE_AUTOMATION_WINDOW_SECONDS:-3}
   case "$window_seconds" in
     ''|*[!0-9]*)
@@ -328,20 +358,47 @@ tick_once_locked() {
   if [ "$window_seconds" -gt 8 ]; then
     window_seconds=8
   fi
+
+  max_recording_seconds=$((window_seconds + 5))
+  start_json=$(DICTATION_MAX_RECORDING_SECONDS="$max_recording_seconds" "$backend_script" dictation-start auto 2>/dev/null || printf '{}')
+  session_id=$(json_get "$start_json" session.id)
+  if [ -z "$session_id" ]; then
+    message=$(json_get "$start_json" error)
+    [ -n "$message" ] || message="Dictation did not start."
+    log_event "dictation start failed: $message"
+    write_status error "$message" "" ""
+    return 0
+  fi
   sleep "$window_seconds"
 
   stop_json=$("$backend_script" dictation-stop "$session_id" 2>/dev/null || printf '{}')
+  stop_success=$(json_get "$stop_json" success)
+  if [ "$stop_success" != 1 ]; then
+    message=$(json_get "$stop_json" error)
+    [ -n "$message" ] || message="Dictation stop failed."
+    log_event "dictation stop failed: $message"
+    write_status error "$message" "" ""
+    return 0
+  fi
   text=$(json_get "$stop_json" text)
   if [ -z "$text" ]; then
+    log_event "dictation returned no text"
     write_status listening "Listening for voice automation phrases." "" ""
     return 0
   fi
 
   phrase=$(normalize_phrase "$text")
+  handle_phrase "$phrase"
+}
+
+handle_phrase() {
+  phrase=$1
   if [ -z "$phrase" ]; then
+    log_event "dictation text normalized to empty"
     write_status listening "Listening for voice automation phrases." "" ""
     return 0
   fi
+  log_event "heard phrase='$phrase'"
 
   if run_known_action "$phrase"; then
     return 0
@@ -360,6 +417,12 @@ tick_once_locked() {
   fi
 
   write_status listening "No voice automation phrase matched." "$phrase" ""
+}
+
+handle_text() {
+  text=${1-}
+  phrase=$(normalize_phrase "$text")
+  handle_phrase "$phrase"
 }
 
 daemon_loop() {
@@ -399,8 +462,17 @@ case "${1-}" in
     disable_launchd
     status_json
     ;;
+  app-hosted)
+    app_hosted
+    status_json
+    ;;
   tick)
     tick_once
+    status_json
+    ;;
+  handle-text)
+    shift
+    handle_text "${1-}"
     status_json
     ;;
   daemon)
