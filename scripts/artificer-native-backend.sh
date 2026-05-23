@@ -79,6 +79,10 @@ Actions:
   self-improve-codex-work-check-set ENABLED
   self-improve-run-options-set OBJECTIVE COMPETITION_ENABLED CHALLENGER_MODEL CODEX_WORK_CHECK SOURCE_PAPERS SOURCE_WEB SOURCE_RUNTIME SOURCE_REPO SOURCE_PLATFORM
   self-improve-run MODEL OBJECTIVE COMPETITION_ENABLED CHALLENGER_MODEL CODEX_WORK_CHECK SOURCE_PAPERS SOURCE_WEB SOURCE_RUNTIME SOURCE_REPO SOURCE_PLATFORM
+  self-improve-plugin-set PLUGIN_ID ENABLED OPERATOR_POLICY OPERATOR_LOCK
+  self-improve-plugin-delete PLUGIN_ID
+  self-improve-archived-plugin-restore ARCHIVE_ENTRY_ID
+  self-improve-archived-plugin-delete ARCHIVE_ENTRY_ID
   automations
   automation-upsert WORKSPACE_ID CONVERSATION_ID NAME PROMPT SCHEDULE_KIND SCHEDULE_VALUE ENABLED ALLOW_SELF_RESCHEDULE RUN_MODE COMPUTE_BUDGET COMMAND_EXEC_MODE PERMISSION_MODE PROGRAMMER_REVIEW PROGRAMMER_REVIEW_ROUNDS NEXT_RUN [AUTOMATION_ID]
   automation-run AUTOMATION_ID
@@ -93,6 +97,13 @@ Actions:
   multi-agent-workspace-update WORKSPACE_ID CONTEXT_SHARING DILEMMA_SURFACING AMENDMENTS INTERPRETATION_LOG COMMITMENTS ATTENTION_POLICIES
   multi-agent-resident-spawn WORKSPACE_ID RESIDENT_ID VISIBLE BACKGROUND RESERVE_COMPUTE MODEL
   multi-agent-resident-update WORKSPACE_ID RESIDENT_ID ENABLED VISIBLE BACKGROUND RESERVE_COMPUTE MODEL
+  mode-runtime-state
+  mode-runtime-tick [WORKSPACE_ID] [CONVERSATION_ID]
+  mode-runtime-generate-proposals
+  improvement-proposal-decide PROPOSAL_ID DECISION NOTE
+  controller-variant-promote VARIANT_ID
+  controller-variant-rollback
+  failure-taxonomy-query CATEGORY SEVERITY SURFACE MODE LIMIT
   models
   model-catalog
   model-install-start MODEL
@@ -1106,6 +1117,29 @@ case "$action" in
       source_repo "$source_repo" \
       source_platform "$source_platform"
     ;;
+  self-improve-plugin-set)
+    plugin_id=${1-}
+    enabled=${2:-1}
+    operator_policy=${3:-auto}
+    operator_lock=${4:-0}
+    api_post self_improve_plugin_set \
+      plugin_id "$plugin_id" \
+      enabled "$enabled" \
+      operator_policy "$operator_policy" \
+      operator_lock "$operator_lock"
+    ;;
+  self-improve-plugin-delete)
+    plugin_id=${1-}
+    api_post self_improve_plugin_delete plugin_id "$plugin_id"
+    ;;
+  self-improve-archived-plugin-restore)
+    archive_entry_id=${1-}
+    api_post self_improve_archived_plugin_restore archive_entry_id "$archive_entry_id"
+    ;;
+  self-improve-archived-plugin-delete)
+    archive_entry_id=${1-}
+    api_post self_improve_archived_plugin_delete archive_entry_id "$archive_entry_id"
+    ;;
   automations)
     runtime_client automation list
     ;;
@@ -1249,6 +1283,44 @@ case "$action" in
       reserve_compute "$reserve_compute" \
       model_present "1" \
       model "$model_name"
+    ;;
+  mode-runtime-state)
+    api_get mode_runtime_state
+    ;;
+  mode-runtime-tick)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    api_post mode_runtime_tick workspace_id "$workspace_id" conversation_id "$conversation_id"
+    ;;
+  mode-runtime-generate-proposals)
+    api_post improvement_proposal_generate
+    ;;
+  improvement-proposal-decide)
+    proposal_id=${1-}
+    decision=${2:-accept}
+    note=${3-}
+    manual_confirm=0
+    [ "$decision" = "apply" ] && manual_confirm=1
+    api_post improvement_proposal_decide \
+      proposal_id "$proposal_id" \
+      decision "$decision" \
+      note "$note" \
+      manual_confirm "$manual_confirm"
+    ;;
+  controller-variant-promote)
+    variant_id=${1-}
+    api_post controller_variant_promote variant_id "$variant_id" manual_confirm "1"
+    ;;
+  controller-variant-rollback)
+    api_post controller_variant_rollback manual_confirm "1"
+    ;;
+  failure-taxonomy-query)
+    category=${1-}
+    severity=${2-}
+    surface=${3-}
+    mode=${4-}
+    limit=${5:-20}
+    api_get failure_taxonomy_query category "$category" severity "$severity" surface "$surface" mode "$mode" limit "$limit"
     ;;
   automation-daemon-status)
     daemon_fast_status_json

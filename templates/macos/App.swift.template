@@ -4229,7 +4229,119 @@ private struct SelfImprovePreferencesTab: View {
           set: { nextValue in Task { await model.saveSelfImproveOptions(sourcePlatform: nextValue) } }
         ))
       }
+      PreferencesSection("Plugins") {
+        if model.selfImprovePlugins.isEmpty {
+          Text("No self-improve plugins have been generated.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        } else {
+          ForEach(model.selfImprovePlugins) { plugin in
+            SelfImprovePluginRow(model: model, plugin: plugin)
+          }
+        }
+        if !model.selfImproveArchivedPlugins.isEmpty {
+          Divider()
+          Text("Archived")
+            .font(.subheadline.weight(.semibold))
+          ForEach(model.selfImproveArchivedPlugins) { plugin in
+            SelfImproveArchivedPluginRow(model: model, plugin: plugin)
+          }
+        }
+      }
     }
+  }
+}
+
+private struct SelfImprovePluginRow: View {
+  @ObservedObject var model: ArtificerModel
+  let plugin: SelfImprovePlugin
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(alignment: .top, spacing: 10) {
+        VStack(alignment: .leading, spacing: 3) {
+          Text(plugin.name)
+            .font(.callout.weight(.semibold))
+          Text(plugin.description.isEmpty ? plugin.rationale : plugin.description)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(3)
+        }
+        Spacer()
+        Toggle("Enabled", isOn: Binding(
+          get: { plugin.enabled },
+          set: { nextValue in Task { await model.setSelfImprovePlugin(plugin, enabled: nextValue) } }
+        ))
+        .toggleStyle(.switch)
+        .fixedSize()
+      }
+      FlowHStack(items: plugin.metadataChips) { chip in
+        Text(chip)
+          .font(.caption)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 4)
+          .background(Color(nsColor: .controlBackgroundColor))
+          .clipShape(Capsule())
+      }
+      HStack(spacing: 8) {
+        Picker("Policy", selection: Binding(
+          get: { plugin.operatorPolicy },
+          set: { nextValue in Task { await model.setSelfImprovePlugin(plugin, operatorPolicy: nextValue) } }
+        )) {
+          Text("Automatic").tag("auto")
+          Text("Force adopted").tag("force-adopted")
+          Text("Force trial").tag("force-trial")
+          Text("Force review").tag("force-review")
+          Text("Force rejected").tag("force-rejected")
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 220, alignment: .leading)
+        Toggle("Lock", isOn: Binding(
+          get: { plugin.operatorLock },
+          set: { nextValue in Task { await model.setSelfImprovePlugin(plugin, operatorLock: nextValue) } }
+        ))
+        .toggleStyle(.switch)
+        .fixedSize()
+        .disabled(plugin.operatorPolicy == "auto")
+        Spacer()
+        Button(role: .destructive) {
+          Task { await model.deleteSelfImprovePlugin(plugin) }
+        } label: {
+          Image(systemName: "archivebox")
+        }
+        .help("Archive plugin")
+      }
+    }
+    .padding(.vertical, 6)
+  }
+}
+
+private struct SelfImproveArchivedPluginRow: View {
+  @ObservedObject var model: ArtificerModel
+  let plugin: SelfImproveArchivedPlugin
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 10) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(plugin.name)
+          .font(.callout)
+        Text(plugin.description)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(2)
+      }
+      Spacer()
+      Button("Restore") {
+        Task { await model.restoreSelfImproveArchivedPlugin(plugin) }
+      }
+      Button(role: .destructive) {
+        Task { await model.deleteSelfImproveArchivedPlugin(plugin) }
+      } label: {
+        Image(systemName: "trash")
+      }
+      .help("Remove archive")
+    }
+    .buttonStyle(.bordered)
   }
 }
 
@@ -4265,6 +4377,140 @@ private struct RuntimePreferencesTab: View {
           SettingsInfoRow(title: "State root", value: daemon.stateRoot)
           SettingsInfoRow(title: "Log", value: daemon.logPath)
         }
+      }
+      PreferencesSection("Mode Runtime") {
+        HStack(spacing: 8) {
+          Button("Refresh") { Task { await model.loadModeRuntime() } }
+          Button("Tick Now") { Task { await model.tickModeRuntime() } }
+          Button("Generate Proposals") { Task { await model.generateModeRuntimeProposals() } }
+          Button("Rollback Controller") { Task { await model.rollbackControllerVariant() } }
+        }
+        .buttonStyle(.bordered)
+        .disabled(model.modeRuntimeLoading)
+        if !model.modeRuntimeMessage.isEmpty {
+          Text(model.modeRuntimeMessage)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        if let runtime = model.modeRuntime {
+          RuntimeSummaryGrid(runtime: runtime)
+          RuntimeProposalList(model: model, proposals: runtime.improvementProposals.items)
+          RuntimeControllerVariantList(model: model, variants: runtime.controllerVariants.items, activeID: runtime.controllerVariants.activeVariantID)
+          RuntimeFailureTaxonomyView(taxonomy: runtime.failureTaxonomy)
+        } else {
+          Text("Mode runtime state is unavailable.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+      }
+    }
+    .task {
+      await model.loadModeRuntime()
+    }
+  }
+}
+
+private struct RuntimeSummaryGrid: View {
+  let runtime: ModeRuntimeState
+
+  var body: some View {
+    FlowHStack(items: runtime.summaryChips) { chip in
+      Text(chip)
+        .font(.caption)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(Capsule())
+    }
+  }
+}
+
+private struct RuntimeProposalList: View {
+  @ObservedObject var model: ArtificerModel
+  let proposals: [ModeRuntimeProposal]
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Improvement Proposals")
+        .font(.subheadline.weight(.semibold))
+      if proposals.isEmpty {
+        Text("No pending proposals.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      } else {
+        ForEach(Array(proposals.prefix(5))) { proposal in
+          HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+              Text(proposal.title)
+                .font(.callout.weight(.semibold))
+              Text(proposal.rationale.isEmpty ? proposal.proposedChange : proposal.rationale)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            }
+            Spacer()
+            Button("Accept") { Task { await model.decideModeRuntimeProposal(proposal, decision: "accept") } }
+            Button("Apply") { Task { await model.decideModeRuntimeProposal(proposal, decision: "apply") } }
+            Button("Reject") { Task { await model.decideModeRuntimeProposal(proposal, decision: "reject") } }
+          }
+          .buttonStyle(.bordered)
+        }
+      }
+    }
+  }
+}
+
+private struct RuntimeControllerVariantList: View {
+  @ObservedObject var model: ArtificerModel
+  let variants: [ControllerVariant]
+  let activeID: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Controller Variants")
+        .font(.subheadline.weight(.semibold))
+      if variants.isEmpty {
+        Text(activeID.isEmpty ? "No sampled variants." : "Active: \(activeID)")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      } else {
+        ForEach(Array(variants.prefix(4))) { variant in
+          HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(variant.name)
+              .font(.callout)
+            Text(variant.status)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+            Spacer()
+            if variant.id == activeID {
+              Text("Active")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } else {
+              Button("Promote") { Task { await model.promoteControllerVariant(variant) } }
+                .buttonStyle(.bordered)
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+private struct RuntimeFailureTaxonomyView: View {
+  let taxonomy: FailureTaxonomyState
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Failure Taxonomy")
+        .font(.subheadline.weight(.semibold))
+      FlowHStack(items: taxonomy.categoryChips) { chip in
+        Text(chip)
+          .font(.caption)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 4)
+          .background(Color(nsColor: .controlBackgroundColor))
+          .clipShape(Capsule())
       }
     }
   }
@@ -4530,7 +4776,12 @@ private final class ArtificerModel: ObservableObject {
   @Published var selfImproveStatus = ""
   @Published var selfImproveSummary = ""
   @Published var selfImprovePluginCount = 0
+  @Published var selfImprovePlugins: [SelfImprovePlugin] = []
+  @Published var selfImproveArchivedPlugins: [SelfImproveArchivedPlugin] = []
   @Published var isSelfImproveRunning = false
+  @Published var modeRuntime: ModeRuntimeState?
+  @Published var modeRuntimeLoading = false
+  @Published var modeRuntimeMessage = ""
   @Published var menuBarIconEnabled = false
   @Published var voiceAutomationsEnabled = false
   @Published var voiceRecognitionSoundEnabled = false
@@ -5745,6 +5996,7 @@ private final class ArtificerModel: ObservableObject {
     await loadDictationStatus()
     await loadDictationPreferences()
     await loadSelfImproveSettings()
+    await loadModeRuntime()
     await loadGitRuntimeSettings()
     await loadGitStatusAndBranches()
   }
@@ -5760,6 +6012,7 @@ private final class ArtificerModel: ObservableObject {
     await loadDictationStatus()
     await loadDictationPreferences()
     await loadSelfImproveSettings()
+    await loadModeRuntime()
     await loadGitRuntimeSettings()
     await loadGitStatusAndBranches()
   }
@@ -7317,6 +7570,8 @@ private final class ArtificerModel: ObservableObject {
     applySelfImproveOptions(response.runOptions)
     selfImproveSummary = response.lastRun.summary
     selfImprovePluginCount = response.pluginInventory.activeCount
+    selfImprovePlugins = response.plugins
+    selfImproveArchivedPlugins = response.archivedPlugins
     if !response.lastRun.generatedAt.isEmpty {
       selfImproveStatus = "Last run: \(response.lastRun.generatedAt)"
     }
@@ -7327,8 +7582,100 @@ private final class ArtificerModel: ObservableObject {
     applySelfImproveOptions(response.runOptions)
     selfImproveSummary = response.lastRun.summary
     selfImprovePluginCount = response.pluginInventory.activeCount
+    selfImprovePlugins = response.plugins
+    selfImproveArchivedPlugins = response.archivedPlugins
     if !response.lastRun.generatedAt.isEmpty {
       selfImproveStatus = "Last run: \(response.lastRun.generatedAt)"
+    }
+  }
+
+  func setSelfImprovePlugin(_ plugin: SelfImprovePlugin, enabled: Bool? = nil, operatorPolicy: String? = nil, operatorLock: Bool? = nil) async {
+    let nextPolicy = operatorPolicy ?? plugin.operatorPolicy
+    let nextLock = nextPolicy == "auto" ? false : (operatorLock ?? plugin.operatorLock)
+    let result = await runBackend(
+      "self-improve-plugin-set",
+      plugin.id,
+      (enabled ?? plugin.enabled) ? "1" : "0",
+      nextPolicy,
+      nextLock ? "1" : "0"
+    )
+    if decode(GenericSuccessResponse.self, from: result) != nil {
+      await loadSelfImproveSettings()
+      selfImproveStatus = "Plugin updated."
+    }
+  }
+
+  func deleteSelfImprovePlugin(_ plugin: SelfImprovePlugin) async {
+    let result = await runBackend("self-improve-plugin-delete", plugin.id)
+    if decode(GenericSuccessResponse.self, from: result) != nil {
+      await loadSelfImproveSettings()
+      selfImproveStatus = "Plugin archived."
+    }
+  }
+
+  func restoreSelfImproveArchivedPlugin(_ plugin: SelfImproveArchivedPlugin) async {
+    let result = await runBackend("self-improve-archived-plugin-restore", plugin.archiveEntryID)
+    if decode(GenericSuccessResponse.self, from: result) != nil {
+      await loadSelfImproveSettings()
+      selfImproveStatus = "Archived plugin restored."
+    }
+  }
+
+  func deleteSelfImproveArchivedPlugin(_ plugin: SelfImproveArchivedPlugin) async {
+    let result = await runBackend("self-improve-archived-plugin-delete", plugin.archiveEntryID)
+    if decode(GenericSuccessResponse.self, from: result) != nil {
+      await loadSelfImproveSettings()
+      selfImproveStatus = "Archived plugin removed."
+    }
+  }
+
+  func loadModeRuntime() async {
+    let result = await runBackend("mode-runtime-state", trackBusy: false)
+    guard let response = decode(ModeRuntimeResponse.self, from: result) else { return }
+    modeRuntime = response.modeRuntime
+  }
+
+  func tickModeRuntime() async {
+    modeRuntimeLoading = true
+    let result = await runBackend("mode-runtime-tick", selectedProjectID ?? "", selectedSessionID ?? "")
+    modeRuntimeLoading = false
+    if let response = decode(ModeRuntimeResponse.self, from: result) {
+      modeRuntime = response.modeRuntime
+      modeRuntimeMessage = "Runtime tick complete."
+    }
+  }
+
+  func generateModeRuntimeProposals() async {
+    modeRuntimeLoading = true
+    let result = await runBackend("mode-runtime-generate-proposals")
+    modeRuntimeLoading = false
+    if let response = decode(ModeRuntimeResponse.self, from: result) {
+      modeRuntime = response.modeRuntime
+      modeRuntimeMessage = "Improvement proposals generated."
+    }
+  }
+
+  func decideModeRuntimeProposal(_ proposal: ModeRuntimeProposal, decision: String) async {
+    let result = await runBackend("improvement-proposal-decide", proposal.id, decision, "")
+    if let response = decode(ModeRuntimeResponse.self, from: result) {
+      modeRuntime = response.modeRuntime
+      modeRuntimeMessage = "Proposal \(decision)."
+    }
+  }
+
+  func promoteControllerVariant(_ variant: ControllerVariant) async {
+    let result = await runBackend("controller-variant-promote", variant.id)
+    if let response = decode(ModeRuntimeResponse.self, from: result) {
+      modeRuntime = response.modeRuntime
+      modeRuntimeMessage = "Controller variant promoted."
+    }
+  }
+
+  func rollbackControllerVariant() async {
+    let result = await runBackend("controller-variant-rollback")
+    if let response = decode(ModeRuntimeResponse.self, from: result) {
+      modeRuntime = response.modeRuntime
+      modeRuntimeMessage = "Controller variant rolled back."
     }
   }
 
@@ -9417,6 +9764,8 @@ private struct SelfImproveSettingsResponse: Decodable {
   let runOptions: SelfImproveRunOptions
   let lastRun: SelfImproveLastRun
   let pluginInventory: SelfImprovePluginInventory
+  let plugins: [SelfImprovePlugin]
+  let archivedPlugins: [SelfImproveArchivedPlugin]
 
   enum CodingKeys: String, CodingKey {
     case success
@@ -9424,6 +9773,8 @@ private struct SelfImproveSettingsResponse: Decodable {
     case runOptions = "run_options"
     case lastRun = "last_run"
     case pluginInventory = "plugin_inventory"
+    case plugins
+    case archivedPlugins = "archived_plugins"
   }
 
   init(from decoder: Decoder) throws {
@@ -9433,6 +9784,8 @@ private struct SelfImproveSettingsResponse: Decodable {
     runOptions = (try? container.decode(SelfImproveRunOptions.self, forKey: .runOptions)) ?? SelfImproveRunOptions()
     lastRun = (try? container.decode(SelfImproveLastRun.self, forKey: .lastRun)) ?? SelfImproveLastRun()
     pluginInventory = (try? container.decode(SelfImprovePluginInventory.self, forKey: .pluginInventory)) ?? SelfImprovePluginInventory()
+    plugins = (try? container.decode([SelfImprovePlugin].self, forKey: .plugins)) ?? []
+    archivedPlugins = (try? container.decode([SelfImproveArchivedPlugin].self, forKey: .archivedPlugins)) ?? []
   }
 }
 
@@ -9442,6 +9795,8 @@ private struct SelfImproveRunResponse: Decodable {
   let runOptions: SelfImproveRunOptions
   let lastRun: SelfImproveLastRun
   let pluginInventory: SelfImprovePluginInventory
+  let plugins: [SelfImprovePlugin]
+  let archivedPlugins: [SelfImproveArchivedPlugin]
 
   enum CodingKeys: String, CodingKey {
     case success
@@ -9449,6 +9804,8 @@ private struct SelfImproveRunResponse: Decodable {
     case runOptions = "run_options"
     case lastRun = "last_run"
     case pluginInventory = "plugin_inventory"
+    case plugins
+    case archivedPlugins = "archived_plugins"
   }
 
   init(from decoder: Decoder) throws {
@@ -9458,6 +9815,8 @@ private struct SelfImproveRunResponse: Decodable {
     runOptions = (try? container.decode(SelfImproveRunOptions.self, forKey: .runOptions)) ?? SelfImproveRunOptions()
     lastRun = (try? container.decode(SelfImproveLastRun.self, forKey: .lastRun)) ?? SelfImproveLastRun()
     pluginInventory = (try? container.decode(SelfImprovePluginInventory.self, forKey: .pluginInventory)) ?? SelfImprovePluginInventory()
+    plugins = (try? container.decode([SelfImprovePlugin].self, forKey: .plugins)) ?? []
+    archivedPlugins = (try? container.decode([SelfImproveArchivedPlugin].self, forKey: .archivedPlugins)) ?? []
   }
 }
 
@@ -9560,6 +9919,89 @@ private struct SelfImproveLastRun: Decodable {
   }
 }
 
+private struct SelfImprovePlugin: Identifiable, Decodable, Hashable {
+  let id: String
+  let name: String
+  let description: String
+  let rationale: String
+  let enabled: Bool
+  let riskLevel: String
+  let promotionState: String
+  let adoptionState: String
+  let operatorPolicy: String
+  let operatorLock: Bool
+  let sourceModel: String
+  let sourceLane: String
+  let domainTags: [String]
+  let benchmarkFamilyTargets: [String]
+  let targetedCapabilityGaps: [String]
+
+  var metadataChips: [String] {
+    ([adoptionState, promotionState, riskLevel, sourceModel, sourceLane] + Array(domainTags.prefix(4)) + Array(benchmarkFamilyTargets.prefix(3)) + Array(targetedCapabilityGaps.prefix(3)))
+      .map { String($0) }
+      .filter { !$0.isEmpty }
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, description, rationale, enabled
+    case riskLevel = "risk_level"
+    case promotionState = "promotion_state"
+    case adoptionState = "adoption_state"
+    case operatorPolicy = "operator_policy"
+    case operatorLock = "operator_lock"
+    case sourceModel = "source_model"
+    case sourceLane = "source_lane"
+    case domainTags = "domain_tags"
+    case benchmarkFamilyTargets = "benchmark_family_targets"
+    case targetedCapabilityGaps = "targeted_capability_gaps"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    name = (try? container.decode(String.self, forKey: .name)) ?? id
+    description = (try? container.decode(String.self, forKey: .description)) ?? ""
+    rationale = (try? container.decode(String.self, forKey: .rationale)) ?? ""
+    if let decodedEnabled = try? container.decode(Bool.self, forKey: .enabled) {
+      enabled = decodedEnabled
+    } else if let enabledString = try? container.decode(String.self, forKey: .enabled) {
+      enabled = enabledString != "0" && enabledString.lowercased() != "false"
+    } else {
+      enabled = true
+    }
+    riskLevel = (try? container.decode(String.self, forKey: .riskLevel)) ?? "medium"
+    promotionState = (try? container.decode(String.self, forKey: .promotionState)) ?? "candidate"
+    adoptionState = (try? container.decode(String.self, forKey: .adoptionState)) ?? (enabled ? "trial" : "rejected")
+    operatorPolicy = (try? container.decode(String.self, forKey: .operatorPolicy)) ?? "auto"
+    operatorLock = container.decodeFlexibleBool(forKey: .operatorLock)
+    sourceModel = (try? container.decode(String.self, forKey: .sourceModel)) ?? ""
+    sourceLane = (try? container.decode(String.self, forKey: .sourceLane)) ?? ""
+    domainTags = (try? container.decode([String].self, forKey: .domainTags)) ?? []
+    benchmarkFamilyTargets = (try? container.decode([String].self, forKey: .benchmarkFamilyTargets)) ?? []
+    targetedCapabilityGaps = (try? container.decode([String].self, forKey: .targetedCapabilityGaps)) ?? []
+  }
+}
+
+private struct SelfImproveArchivedPlugin: Identifiable, Decodable, Hashable {
+  let archiveEntryID: String
+  let id: String
+  let name: String
+  let description: String
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, description
+    case archiveEntryID = "archive_entry_id"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    archiveEntryID = (try? container.decode(String.self, forKey: .archiveEntryID)) ?? UUID().uuidString
+    id = (try? container.decode(String.self, forKey: .id)) ?? archiveEntryID
+    name = (try? container.decode(String.self, forKey: .name)) ?? id
+    description = (try? container.decode(String.self, forKey: .description)) ?? ""
+  }
+}
+
 private struct SelfImprovePluginInventory: Decodable {
   let activeCount: Int
 
@@ -9574,6 +10016,223 @@ private struct SelfImprovePluginInventory: Decodable {
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     activeCount = container.decodeFlexibleInt(forKey: .activeCount)
+  }
+}
+
+private struct ModeRuntimeResponse: Decodable {
+  let success: Bool
+  let modeRuntime: ModeRuntimeState
+
+  enum CodingKeys: String, CodingKey {
+    case success
+    case modeRuntime = "mode_runtime"
+  }
+}
+
+private struct ModeRuntimeState: Decodable, Hashable {
+  let modes: [ModeRuntimeMode]
+  let panels: [ModeRuntimePanel]
+  let failureTaxonomy: FailureTaxonomyState
+  let improvementProposals: ImprovementProposalState
+  let controllerVariants: ControllerVariantsState
+
+  var summaryChips: [String] {
+    [
+      "\(modes.filter { $0.enabled }.count)/\(modes.count) modes enabled",
+      "\(panels.count) panels",
+      "\(failureTaxonomy.total) failures",
+      "\(improvementProposals.counts.proposed) proposals",
+      controllerVariants.activeVariantID.isEmpty ? "" : "active \(controllerVariants.activeVariantID)"
+    ].filter { !$0.isEmpty }
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case modes, panels
+    case failureTaxonomy = "failure_taxonomy"
+    case improvementProposals = "improvement_proposals"
+    case controllerVariants = "controller_variants"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    modes = (try? container.decode([ModeRuntimeMode].self, forKey: .modes)) ?? []
+    panels = (try? container.decode([ModeRuntimePanel].self, forKey: .panels)) ?? []
+    failureTaxonomy = (try? container.decode(FailureTaxonomyState.self, forKey: .failureTaxonomy)) ?? FailureTaxonomyState()
+    improvementProposals = (try? container.decode(ImprovementProposalState.self, forKey: .improvementProposals)) ?? ImprovementProposalState()
+    controllerVariants = (try? container.decode(ControllerVariantsState.self, forKey: .controllerVariants)) ?? ControllerVariantsState()
+  }
+}
+
+private struct ModeRuntimeMode: Identifiable, Decodable, Hashable {
+  let id: String
+  let name: String
+  let enabled: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, enabled
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    name = (try? container.decode(String.self, forKey: .name)) ?? id
+    enabled = container.decodeFlexibleBool(forKey: .enabled)
+  }
+}
+
+private struct ModeRuntimePanel: Identifiable, Decodable, Hashable {
+  let id: String
+  let title: String
+
+  enum CodingKeys: String, CodingKey {
+    case id, title
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    title = (try? container.decode(String.self, forKey: .title)) ?? id
+  }
+}
+
+private struct FailureTaxonomyState: Decodable, Hashable {
+  let total: String
+  let categories: [FailureCategory]
+
+  var categoryChips: [String] {
+    if categories.isEmpty {
+      return total == "0" ? ["0 failures"] : ["\(total) failures"]
+    }
+    return Array(categories.prefix(8)).map { "\($0.label) \($0.count)" }
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case total, categories
+  }
+
+  init(total: String = "0", categories: [FailureCategory] = []) {
+    self.total = total
+    self.categories = categories
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    total = (try? container.decode(String.self, forKey: .total)) ?? "\(container.decodeFlexibleInt(forKey: .total))"
+    categories = (try? container.decode([FailureCategory].self, forKey: .categories)) ?? []
+  }
+}
+
+private struct FailureCategory: Identifiable, Decodable, Hashable {
+  let id: String
+  let label: String
+  let count: String
+
+  enum CodingKeys: String, CodingKey {
+    case id, label, count
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    label = (try? container.decode(String.self, forKey: .label)) ?? id
+    count = (try? container.decode(String.self, forKey: .count)) ?? "\(container.decodeFlexibleInt(forKey: .count))"
+  }
+}
+
+private struct ImprovementProposalState: Decodable, Hashable {
+  let counts: ImprovementProposalCounts
+  let items: [ModeRuntimeProposal]
+
+  enum CodingKeys: String, CodingKey {
+    case counts, items
+  }
+
+  init(counts: ImprovementProposalCounts = ImprovementProposalCounts(), items: [ModeRuntimeProposal] = []) {
+    self.counts = counts
+    self.items = items
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    counts = (try? container.decode(ImprovementProposalCounts.self, forKey: .counts)) ?? ImprovementProposalCounts()
+    items = (try? container.decode([ModeRuntimeProposal].self, forKey: .items)) ?? []
+  }
+}
+
+private struct ImprovementProposalCounts: Decodable, Hashable {
+  let proposed: String
+
+  enum CodingKeys: String, CodingKey {
+    case proposed
+  }
+
+  init(proposed: String = "0") {
+    self.proposed = proposed
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    proposed = (try? container.decode(String.self, forKey: .proposed)) ?? "\(container.decodeFlexibleInt(forKey: .proposed))"
+  }
+}
+
+private struct ModeRuntimeProposal: Identifiable, Decodable, Hashable {
+  let id: String
+  let title: String
+  let status: String
+  let rationale: String
+  let proposedChange: String
+
+  enum CodingKeys: String, CodingKey {
+    case id, title, status, rationale
+    case proposedChange = "proposed_change"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    title = (try? container.decode(String.self, forKey: .title)) ?? id
+    status = (try? container.decode(String.self, forKey: .status)) ?? "proposed"
+    rationale = (try? container.decode(String.self, forKey: .rationale)) ?? ""
+    proposedChange = (try? container.decode(String.self, forKey: .proposedChange)) ?? ""
+  }
+}
+
+private struct ControllerVariantsState: Decodable, Hashable {
+  let activeVariantID: String
+  let items: [ControllerVariant]
+
+  enum CodingKeys: String, CodingKey {
+    case activeVariantID = "active_variant_id"
+    case items
+  }
+
+  init(activeVariantID: String = "", items: [ControllerVariant] = []) {
+    self.activeVariantID = activeVariantID
+    self.items = items
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    activeVariantID = (try? container.decode(String.self, forKey: .activeVariantID)) ?? ""
+    items = (try? container.decode([ControllerVariant].self, forKey: .items)) ?? []
+  }
+}
+
+private struct ControllerVariant: Identifiable, Decodable, Hashable {
+  let id: String
+  let name: String
+  let status: String
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, status
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    name = (try? container.decode(String.self, forKey: .name)) ?? id
+    status = (try? container.decode(String.self, forKey: .status)) ?? ""
   }
 }
 
