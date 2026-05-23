@@ -49,6 +49,7 @@ Actions:
   queue-list WORKSPACE_ID CONVERSATION_ID [LIMIT]
   queue-update WORKSPACE_ID CONVERSATION_ID ITEM_ID PROMPT
   queue-reorder WORKSPACE_ID CONVERSATION_ID ITEM_IDS
+  queue-steer WORKSPACE_ID CONVERSATION_ID ITEM_ID
   queue-cancel WORKSPACE_ID CONVERSATION_ID [ITEM_ID]
   queue-stop WORKSPACE_ID CONVERSATION_ID
   approval-answer WORKSPACE_ID CONVERSATION_ID DECISION SCOPE MATCH_MODE [PATTERN] [COMMAND]
@@ -944,6 +945,12 @@ case "$action" in
     item_ids=${3-}
     reject_line_breaks "$item_ids" "queue item ids"
     api_post queue_reorder workspace_id "$workspace_id" conversation_id "$conversation_id" item_ids "$item_ids"
+    ;;
+  queue-steer)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    item_id=${3-}
+    api_post queue_steer workspace_id "$workspace_id" conversation_id "$conversation_id" item_id "$item_id"
     ;;
   queue-cancel)
     workspace_id=${1-}

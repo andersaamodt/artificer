@@ -2390,14 +2390,18 @@ private struct QueueTraySheet: View {
       } else {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(model.queueItems.enumerated()), id: \.element.id) { index, item in
-              QueueItemEditor(model: model, item: item, canMoveUp: index > 0, canMoveDown: index < model.queueItems.count - 1, text: Binding(
-                get: { drafts[item.id] ?? item.prompt },
-                set: { drafts[item.id] = $0 }
-              ))
-            }
-          }
-        }
+	            ForEach(Array(model.queueItems.enumerated()), id: \.element.id) { index, item in
+	              QueueItemEditor(model: model, item: item, canMoveUp: index > 0, canMoveDown: index < model.queueItems.count - 1, text: Binding(
+	                get: { drafts[item.id] ?? item.prompt },
+	                set: { drafts[item.id] = $0 }
+	              ))
+	              .onDrag {
+	                model.queueDragProvider(itemID: item.id)
+	              }
+	              .onDrop(of: [UTType.plainText], delegate: QueueItemDropDelegate(model: model, targetItemID: item.id))
+	            }
+	          }
+	        }
       }
     }
     .padding(16)
@@ -2433,17 +2437,20 @@ private struct QueueItemEditor: View {
           RoundedRectangle(cornerRadius: 7)
             .stroke(Color.secondary.opacity(0.14))
         )
-      HStack {
-        FloatingIconButton(title: "Move earlier", systemImage: "arrow.up", disabled: !canMoveUp || model.isBusy, size: 26) {
-          Task { await model.moveQueueItem(item.id, direction: -1) }
-        }
-        FloatingIconButton(title: "Move later", systemImage: "arrow.down", disabled: !canMoveDown || model.isBusy, size: 26) {
-          Task { await model.moveQueueItem(item.id, direction: 1) }
-        }
-        Spacer()
-        Button {
-          Task { await model.updateQueueItem(item.id, prompt: text) }
-        } label: {
+	      HStack {
+	        FloatingIconButton(title: "Move earlier", systemImage: "arrow.up", disabled: !canMoveUp || model.isBusy, size: 26) {
+	          Task { await model.moveQueueItem(item.id, direction: -1) }
+	        }
+	        FloatingIconButton(title: "Move later", systemImage: "arrow.down", disabled: !canMoveDown || model.isBusy, size: 26) {
+	          Task { await model.moveQueueItem(item.id, direction: 1) }
+	        }
+	        FloatingIconButton(title: "Steer to front", systemImage: "arrow.up.to.line", disabled: !canMoveUp || model.isBusy, size: 26) {
+	          Task { await model.steerQueueItem(item.id) }
+	        }
+	        Spacer()
+	        Button {
+	          Task { await model.updateQueueItem(item.id, prompt: text) }
+	        } label: {
           Label("Save", systemImage: "checkmark")
         }
         .buttonStyle(.bordered)
@@ -2453,14 +2460,31 @@ private struct QueueItemEditor: View {
         } label: {
           Label("Cancel item", systemImage: "xmark")
         }
-        .buttonStyle(.bordered)
-        .fixedSize()
-      }
-    }
-    .padding(10)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(Color(nsColor: .controlBackgroundColor).opacity(0.56))
+	        .buttonStyle(.bordered)
+	        .fixedSize()
+	      }
+	    }
+	    .padding(10)
+	    .frame(maxWidth: .infinity, alignment: .leading)
+	    .background(Color(nsColor: .controlBackgroundColor).opacity(0.56))
     .clipShape(RoundedRectangle(cornerRadius: 8))
+	  }
+	}
+
+private struct QueueItemDropDelegate: DropDelegate {
+  let model: ArtificerModel
+  let targetItemID: String
+
+  func validateDrop(info: DropInfo) -> Bool {
+    info.hasItemsConforming(to: [UTType.plainText])
+  }
+
+  func performDrop(info: DropInfo) -> Bool {
+    let providers = info.itemProviders(for: [UTType.plainText])
+    Task { @MainActor in
+      _ = model.handleQueueDrop(providers: providers, targetItemID: targetItemID)
+    }
+    return true
   }
 }
 
@@ -5726,6 +5750,60 @@ private final class ArtificerModel: ObservableObject {
       await loadSelectedSession(status: nil, trackBusy: false)
     } else {
       await loadQueueItems()
+    }
+  }
+
+  func queueDragProvider(itemID: String) -> NSItemProvider {
+    NSItemProvider(object: "artificer-queue:\(itemID)" as NSString)
+  }
+
+  func handleQueueDrop(providers: [NSItemProvider], targetItemID: String) -> Bool {
+    guard let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) }) else {
+      return false
+    }
+    provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { item, _ in
+      guard let text = plainText(from: item) else { return }
+      Task { @MainActor in
+        await self.applyQueueDropPayload(text, targetItemID: targetItemID)
+      }
+    }
+    return true
+  }
+
+  private func applyQueueDropPayload(_ payload: String, targetItemID: String) async {
+    let parts = payload.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+    guard parts.count == 2, parts[0] == "artificer-queue" else { return }
+    await moveQueueItem(parts[1], before: targetItemID)
+  }
+
+  func moveQueueItem(_ itemID: String, before targetItemID: String) async {
+    guard let projectID = selectedProjectID, let sessionID = selectedSessionID else { return }
+    guard itemID != targetItemID,
+          let currentIndex = queueItems.firstIndex(where: { $0.id == itemID }),
+          let targetIndex = queueItems.firstIndex(where: { $0.id == targetItemID }) else { return }
+    var reorderedItems = queueItems
+    let item = reorderedItems.remove(at: currentIndex)
+    let adjustedTarget = reorderedItems.firstIndex(where: { $0.id == targetItemID }) ?? targetIndex
+    reorderedItems.insert(item, at: adjustedTarget)
+    queueItems = reorderedItems
+    let itemIDs = reorderedItems.map(\.id).joined(separator: ",")
+    let result = await runBackend("queue-reorder", projectID, sessionID, itemIDs)
+    if let response = decode(GenericSuccessResponse.self, from: result), response.success {
+      statusMessage = "Queue reordered."
+      await loadQueueItems()
+      await loadSelectedSession(status: nil, trackBusy: false)
+    } else {
+      await loadQueueItems()
+    }
+  }
+
+  func steerQueueItem(_ itemID: String) async {
+    guard let projectID = selectedProjectID, let sessionID = selectedSessionID else { return }
+    let result = await runBackend("queue-steer", projectID, sessionID, itemID)
+    if let response = decode(GenericSuccessResponse.self, from: result), response.success {
+      statusMessage = "Queued item steered to the front."
+      await loadQueueItems()
+      await loadSelectedSession(status: nil, trackBusy: false)
     }
   }
 
