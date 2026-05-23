@@ -401,16 +401,19 @@ private struct RootView: View {
       QueueTraySheet(model: model)
         .frame(minWidth: 620, minHeight: 430)
     }
-    .sheet(isPresented: $model.showingTerminalPanel) {
-      TerminalPanelSheet(model: model)
-        .frame(minWidth: 720, minHeight: 460)
-    }
     .sheet(isPresented: $model.showingModelsPanel) {
       ModelQuickPanel(model: model)
         .frame(minWidth: 620, minHeight: 460)
     }
     .safeAreaInset(edge: .bottom) {
-      StatusBar(model: model)
+      VStack(spacing: 0) {
+        if model.showingTerminalPanel {
+          TerminalDockView(model: model)
+            .frame(minHeight: 210, idealHeight: 260, maxHeight: 310)
+          Divider()
+        }
+        StatusBar(model: model)
+      }
     }
   }
 }
@@ -439,7 +442,10 @@ private struct ProjectPathToolbarItem: View {
           .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help("Click to copy path: \(project.path)")
+        .simultaneousGesture(TapGesture(count: 2).onEnded {
+          Task { await model.openProjectTarget("finder") }
+        })
+        .help("Click to copy path, double-click to open: \(project.path)")
         .accessibilityLabel(Text("Project path \(project.path)"))
 
         OpenProjectToolbarMenu(model: model, compact: true)
@@ -739,13 +745,41 @@ private struct AppTheme: Identifiable {
   let accent: Color
   let contrast: Color
 
-  static let available: [AppTheme] = [
-    AppTheme(id: "system", name: "System", accent: Color.accentColor, contrast: accentContrastColor()),
-    AppTheme(id: "artificer", name: "Artificer", accent: Color(red: 0.19, green: 0.41, blue: 0.86), contrast: .white),
-    AppTheme(id: "ink", name: "Ink", accent: Color(red: 0.08, green: 0.09, blue: 0.11), contrast: .white),
-    AppTheme(id: "moss", name: "Moss", accent: Color(red: 0.18, green: 0.48, blue: 0.36), contrast: .white),
-    AppTheme(id: "ember", name: "Ember", accent: Color(red: 0.76, green: 0.24, blue: 0.16), contrast: .white)
-  ]
+	  static let available: [AppTheme] = [
+	    AppTheme(id: "system", name: "System", accent: Color.accentColor, contrast: accentContrastColor()),
+	    AppTheme(id: "artificer", name: "Artificer", accent: Color(red: 0.19, green: 0.41, blue: 0.86), contrast: .white),
+	    AppTheme(id: "ink", name: "Ink", accent: Color(red: 0.08, green: 0.09, blue: 0.11), contrast: .white),
+	    AppTheme(id: "moss", name: "Moss", accent: Color(red: 0.18, green: 0.48, blue: 0.36), contrast: .white),
+	    AppTheme(id: "ember", name: "Ember", accent: Color(red: 0.76, green: 0.24, blue: 0.16), contrast: .white),
+	    AppTheme(id: "adept", name: "Adept", accent: Color(red: 0.20, green: 0.52, blue: 0.78), contrast: .white),
+	    AppTheme(id: "alchemist", name: "Alchemist", accent: Color(red: 0.75, green: 0.52, blue: 0.13), contrast: .black),
+	    AppTheme(id: "archmage", name: "Archmage", accent: Color(red: 0.42, green: 0.30, blue: 0.76), contrast: .white),
+	    AppTheme(id: "athenian", name: "Athenian", accent: Color(red: 0.22, green: 0.42, blue: 0.64), contrast: .white),
+	    AppTheme(id: "chronomancer", name: "Chronomancer", accent: Color(red: 0.10, green: 0.52, blue: 0.60), contrast: .white),
+	    AppTheme(id: "conjurer", name: "Conjurer", accent: Color(red: 0.67, green: 0.36, blue: 0.18), contrast: .white),
+	    AppTheme(id: "druid", name: "Druid", accent: Color(red: 0.22, green: 0.48, blue: 0.25), contrast: .white),
+	    AppTheme(id: "empath", name: "Empath", accent: Color(red: 0.77, green: 0.34, blue: 0.48), contrast: .white),
+	    AppTheme(id: "enchanter", name: "Enchanter", accent: Color(red: 0.58, green: 0.33, blue: 0.69), contrast: .white),
+	    AppTheme(id: "geomancer", name: "Geomancer", accent: Color(red: 0.42, green: 0.50, blue: 0.24), contrast: .white),
+	    AppTheme(id: "hermeticist", name: "Hermeticist", accent: Color(red: 0.63, green: 0.47, blue: 0.20), contrast: .white),
+	    AppTheme(id: "hierophant", name: "Hierophant", accent: Color(red: 0.18, green: 0.42, blue: 0.54), contrast: .white),
+	    AppTheme(id: "illusionist", name: "Illusionist", accent: Color(red: 0.35, green: 0.39, blue: 0.84), contrast: .white),
+	    AppTheme(id: "lich", name: "Lich", accent: Color(red: 0.36, green: 0.43, blue: 0.45), contrast: .white),
+	    AppTheme(id: "necromancer", name: "Necromancer", accent: Color(red: 0.25, green: 0.40, blue: 0.34), contrast: .white),
+	    AppTheme(id: "psionic", name: "Psionic", accent: Color(red: 0.45, green: 0.30, blue: 0.78), contrast: .white),
+	    AppTheme(id: "pyromancer", name: "Pyromancer", accent: Color(red: 0.86, green: 0.30, blue: 0.12), contrast: .white),
+	    AppTheme(id: "seer", name: "Seer", accent: Color(red: 0.16, green: 0.50, blue: 0.70), contrast: .white),
+	    AppTheme(id: "shaman", name: "Shaman", accent: Color(red: 0.30, green: 0.50, blue: 0.32), contrast: .white),
+	    AppTheme(id: "sorcerer", name: "Sorcerer", accent: Color(red: 0.50, green: 0.31, blue: 0.76), contrast: .white),
+	    AppTheme(id: "sorceress", name: "Sorceress", accent: Color(red: 0.68, green: 0.28, blue: 0.58), contrast: .white),
+	    AppTheme(id: "technomancer", name: "Technomancer", accent: Color(red: 0.05, green: 0.54, blue: 0.72), contrast: .white),
+	    AppTheme(id: "thaumaturge", name: "Thaumaturge", accent: Color(red: 0.54, green: 0.42, blue: 0.16), contrast: .white),
+	    AppTheme(id: "thelemite", name: "Thelemite", accent: Color(red: 0.62, green: 0.22, blue: 0.32), contrast: .white),
+	    AppTheme(id: "theurgist", name: "Theurgist", accent: Color(red: 0.24, green: 0.46, blue: 0.74), contrast: .white),
+	    AppTheme(id: "wadjet", name: "Wadjet", accent: Color(red: 0.08, green: 0.58, blue: 0.45), contrast: .white),
+	    AppTheme(id: "warlock", name: "Warlock", accent: Color(red: 0.40, green: 0.30, blue: 0.62), contrast: .white),
+	    AppTheme(id: "wizard", name: "Wizard", accent: Color(red: 0.28, green: 0.43, blue: 0.84), contrast: .white)
+	  ]
 
   static func resolved(_ id: String) -> AppTheme {
     available.first { $0.id == id } ?? available[0]
@@ -1435,8 +1469,8 @@ private struct SessionDetailView: View {
   @ObservedObject var model: ArtificerModel
 
   var body: some View {
-    VStack(spacing: 0) {
-      DetailHeader(model: model)
+	    VStack(spacing: 0) {
+	      DetailHeader(model: model)
       Divider()
 
       if model.selectedSession == nil && model.activeDraftProjectID == nil {
@@ -1488,11 +1522,29 @@ private struct SessionDetailView: View {
           }
         }
         Divider()
-        ComposerView(model: model)
-      }
-    }
-  }
-}
+	        ComposerView(model: model)
+	      }
+	    }
+	    .overlay {
+	      if model.isSelectedSessionLoading {
+	        ZStack {
+	          Color(nsColor: .windowBackgroundColor).opacity(0.42)
+	          VStack(spacing: 8) {
+	            ProgressView()
+	              .controlSize(.regular)
+	            Text("Opening thread...")
+	              .font(.footnote)
+	              .foregroundStyle(.secondary)
+	          }
+	          .padding(14)
+	          .background(.regularMaterial)
+	          .clipShape(RoundedRectangle(cornerRadius: 8))
+	        }
+	        .allowsHitTesting(false)
+	      }
+	    }
+	  }
+	}
 
 private struct DetailHeader: View {
   @ObservedObject var model: ArtificerModel
@@ -2551,6 +2603,66 @@ private struct TerminalPanelSheet: View {
       }
     }
     .padding(16)
+    .task {
+      if model.terminalSessionID.isEmpty {
+        await model.startTerminalSession()
+      }
+    }
+  }
+}
+
+private struct TerminalDockView: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 8) {
+        Label(model.terminalRunning ? "Terminal running" : "Terminal", systemImage: "terminal")
+          .font(.subheadline.weight(.semibold))
+        Spacer()
+        FloatingIconButton(title: "Start terminal", systemImage: "play.fill", size: 26) {
+          Task { await model.startTerminalSession() }
+        }
+        FloatingIconButton(title: "Poll terminal", systemImage: "arrow.clockwise", size: 26) {
+          Task { await model.pollTerminalSession() }
+        }
+        FloatingIconButton(title: "Stop terminal", systemImage: "stop.fill", disabled: model.terminalSessionID.isEmpty, size: 26) {
+          Task { await model.stopTerminalSession() }
+        }
+        FloatingIconButton(title: "Close terminal", systemImage: "xmark", size: 26) {
+          model.showingTerminalPanel = false
+        }
+      }
+      ScrollView {
+        Text(model.terminalOutput.isEmpty ? "No terminal output yet." : model.terminalOutput)
+          .font(.system(size: 11, design: .monospaced))
+          .foregroundStyle(model.terminalOutput.isEmpty ? .secondary : .primary)
+          .textSelection(.enabled)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(8)
+      }
+      .background(Color(nsColor: .textBackgroundColor))
+      .clipShape(RoundedRectangle(cornerRadius: 7))
+      HStack(spacing: 8) {
+        TextField("Command", text: $model.terminalInput)
+          .textFieldStyle(.roundedBorder)
+          .onSubmit {
+            Task { await model.sendTerminalInput() }
+          }
+          .disabled(model.terminalSessionID.isEmpty || !model.terminalRunning)
+        FloatingIconButton(
+          title: "Send terminal input",
+          systemImage: "arrow.turn.down.left",
+          disabled: model.terminalSessionID.isEmpty || !model.terminalRunning || model.terminalInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+          prominence: .accent
+        ) {
+          Task { await model.sendTerminalInput() }
+        }
+      }
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 10)
+    .background(.bar)
     .task {
       if model.terminalSessionID.isEmpty {
         await model.startTerminalSession()
