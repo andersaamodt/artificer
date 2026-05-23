@@ -17,6 +17,7 @@ struct ArtificerNativeApp: App {
   init() {
     let launchModel = ArtificerModel()
     launchModel.loadDesktopPrefsForLaunch()
+    launchModel.syncVoiceAutomationLoop()
     statusItemController = ArtificerStatusItemController(model: launchModel)
     _model = StateObject(wrappedValue: launchModel)
   }
@@ -2810,7 +2811,7 @@ private final class ArtificerModel: ObservableObject {
           guard let self else { return }
           self.appendVoiceAutomationLog("native loop tick")
           await self.runVoiceAutomationLoopTickDetached()
-          try? await Task.sleep(nanoseconds: 2_000_000_000)
+          try? await Task.sleep(nanoseconds: 250_000_000)
         }
       }
     } else {
@@ -2831,11 +2832,18 @@ private final class ArtificerModel: ObservableObject {
     guard let audioURL = await captureVoiceAutomationAudio(seconds: 3) else {
       return
     }
-    defer {
-      try? FileManager.default.removeItem(at: audioURL)
-    }
+    defer { try? FileManager.default.removeItem(at: audioURL) }
     let transcribeResult = await runBackend("dictation-transcribe-file", audioURL.path, dictationLanguage, trackBusy: false)
     guard let transcription = decode(DictationTranscribeResponse.self, from: transcribeResult), transcription.success else {
+      if let data = transcribeResult.stdout.data(using: .utf8),
+         let apiError = try? JSONDecoder().decode(APIErrorResponse.self, from: data),
+         !apiError.error.isEmpty {
+        appendVoiceAutomationLog("native transcription failed: \(apiError.error)")
+      } else if !transcribeResult.stderr.isEmpty {
+        appendVoiceAutomationLog("native transcription failed: \(transcribeResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines))")
+      } else {
+        appendVoiceAutomationLog("native transcription failed")
+      }
       let handleResult = await runBackend("voice-automations-handle-text", "", trackBusy: false)
       if let status = decode(VoiceAutomationStatus.self, from: handleResult) {
         voiceAutomationStatus = status
@@ -2866,6 +2874,12 @@ private final class ArtificerModel: ObservableObject {
     guard let audioURL = await captureVoiceAutomationAudioDetached(seconds: 3) else {
       return
     }
+    Task.detached { [weak self] in
+      await self?.processVoiceAutomationAudioDetached(audioURL)
+    }
+  }
+
+  nonisolated func processVoiceAutomationAudioDetached(_ audioURL: URL) async {
     defer {
       try? FileManager.default.removeItem(at: audioURL)
     }
@@ -2876,6 +2890,17 @@ private final class ArtificerModel: ObservableObject {
       let transcription = try? JSONDecoder().decode(DictationTranscribeResponse.self, from: transcribeData),
       transcription.success
     else {
+      if
+        let data = transcribeResult.stdout.data(using: .utf8),
+        let apiError = try? JSONDecoder().decode(APIErrorResponse.self, from: data),
+        !apiError.error.isEmpty
+      {
+        appendVoiceAutomationLog("native transcription failed: \(apiError.error)")
+      } else if !transcribeResult.stderr.isEmpty {
+        appendVoiceAutomationLog("native transcription failed: \(transcribeResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines))")
+      } else {
+        appendVoiceAutomationLog("native transcription failed")
+      }
       let handleResult = await Backend.run(action: "voice-automations-handle-text", arguments: [""])
       if
         handleResult.exitCode == 0,
@@ -2981,8 +3006,13 @@ private final class ArtificerModel: ObservableObject {
         appendVoiceAutomationLog("native microphone already authorized")
         return true
       case .undetermined:
-        appendVoiceAutomationLog("native microphone authorization pending")
-        return false
+        appendVoiceAutomationLog("native microphone authorization requesting")
+        return await withCheckedContinuation { continuation in
+          AVAudioApplication.requestRecordPermission { granted in
+            self.appendVoiceAutomationLog("native microphone authorization result \(granted ? "granted" : "denied")")
+            continuation.resume(returning: granted)
+          }
+        }
       default:
         appendVoiceAutomationLog("native microphone authorization not allowed")
         return false
@@ -2993,8 +3023,13 @@ private final class ArtificerModel: ObservableObject {
         appendVoiceAutomationLog("native microphone already authorized")
         return true
       case .notDetermined:
-        appendVoiceAutomationLog("native microphone authorization pending")
-        return false
+        appendVoiceAutomationLog("native microphone authorization requesting")
+        return await withCheckedContinuation { continuation in
+          AVCaptureDevice.requestAccess(for: .audio) { granted in
+            self.appendVoiceAutomationLog("native microphone authorization result \(granted ? "granted" : "denied")")
+            continuation.resume(returning: granted)
+          }
+        }
       default:
         appendVoiceAutomationLog("native microphone authorization not allowed")
         return false

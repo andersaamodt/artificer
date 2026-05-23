@@ -130,6 +130,11 @@ grep -q 'syncVoiceAutomationLoop' "$template" || {
   exit 1
 }
 
+grep -A3 'launchModel.loadDesktopPrefsForLaunch()' "$template" | grep -q 'launchModel.syncVoiceAutomationLoop()' || {
+  printf '%s\n' "Native app should start voice automations during app launch, not only after a window opens" >&2
+  exit 1
+}
+
 grep -q 'AVAudioRecorder' "$template" || {
   printf '%s\n' "Native app should capture voice automation audio itself" >&2
   exit 1
@@ -140,8 +145,30 @@ grep -q 'dictation-transcribe-file' "$template" || {
   exit 1
 }
 
+grep -q 'processVoiceAutomationAudioDetached' "$template" || {
+  printf '%s\n' "Native voice loop should process transcription without blocking the next capture" >&2
+  exit 1
+}
+
+grep -q 'native transcription failed:' "$template" || {
+  printf '%s\n' "Native voice loop should log transcription failures" >&2
+  exit 1
+}
+
 grep -q 'app-hosted' "$backend" || {
   printf '%s\n' "Native backend should avoid launchd-hosted voice capture" >&2
+  exit 1
+}
+
+empty_audio=$(mktemp "${TMPDIR:-/tmp}/artificer-empty-audio.XXXXXX")
+transcribe_empty_out=$("$backend" dictation-transcribe-file "$empty_audio" auto)
+rm -f "$empty_audio"
+printf '%s\n' "$transcribe_empty_out" | grep -q '"success":false' || {
+  printf '%s\n' "dictation-transcribe-file should return JSON for empty audio" >&2
+  exit 1
+}
+printf '%s\n' "$transcribe_empty_out" | grep -q 'No audio was captured' || {
+  printf '%s\n' "dictation-transcribe-file should report empty audio precisely" >&2
   exit 1
 }
 

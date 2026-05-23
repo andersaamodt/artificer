@@ -397,7 +397,8 @@ api_get() {
     query="${query}&$(url_encode_arg "$key")=$(url_encode_arg "$value")"
   done
   voice_root=$(voice_recognition_root_dir)
-  VOICE_RECOGNITION_ROOT_DIR="$voice_root" WIZARDRY_VOICE_RECOGNITION_DIR="$voice_root" REQUEST_METHOD=GET QUERY_STRING="$query" "$(api_script)" 2>&1 | strip_cgi_headers
+  voice_hf_home="$voice_root/huggingface"
+  VOICE_RECOGNITION_ROOT_DIR="$voice_root" WIZARDRY_VOICE_RECOGNITION_DIR="$voice_root" WIZARDRY_VOICE_RECOGNITION_HF_HOME="$voice_hf_home" REQUEST_METHOD=GET QUERY_STRING="$query" "$(api_script)" 2>&1 | strip_cgi_headers
 }
 
 api_post() {
@@ -412,7 +413,8 @@ api_post() {
   done
   content_length=$(printf '%s' "$body" | wc -c | tr -d ' ')
   voice_root=$(voice_recognition_root_dir)
-  printf '%s' "$body" | VOICE_RECOGNITION_ROOT_DIR="$voice_root" WIZARDRY_VOICE_RECOGNITION_DIR="$voice_root" REQUEST_METHOD=POST CONTENT_TYPE='application/x-www-form-urlencoded' CONTENT_LENGTH="$content_length" "$(api_script)" 2>&1 | strip_cgi_headers
+  voice_hf_home="$voice_root/huggingface"
+  printf '%s' "$body" | VOICE_RECOGNITION_ROOT_DIR="$voice_root" WIZARDRY_VOICE_RECOGNITION_DIR="$voice_root" WIZARDRY_VOICE_RECOGNITION_HF_HOME="$voice_hf_home" REQUEST_METHOD=POST CONTENT_TYPE='application/x-www-form-urlencoded' CONTENT_LENGTH="$content_length" "$(api_script)" 2>&1 | strip_cgi_headers
 }
 
 upload_attachment_file() {

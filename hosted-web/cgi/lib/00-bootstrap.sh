@@ -2,6 +2,9 @@
 set -eu
 
 WIZARDRY_DIR=${WIZARDRY_DIR:-$HOME/.wizardry}
+nl='
+'
+cr=$(printf '\r')
 PATH="$WIZARDRY_DIR/spells/.imps/cgi:$PATH:/usr/local/bin:/opt/homebrew/bin:$HOME/.local/bin:/usr/bin"
 ARTIFICER_SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 ARTIFICER_TOOLS_DIR="$ARTIFICER_SCRIPT_DIR/../../scripts"

@@ -98,6 +98,11 @@ grep -q 'VOICE_RECOGNITION_ROOT_DIR="$voice_root"' "$backend" || {
   exit 1
 }
 
+grep -q 'WIZARDRY_VOICE_RECOGNITION_HF_HOME="$voice_hf_home"' "$backend" || {
+  printf '%s\n' "Native backend should pass the voice-recognition model cache into Artificer CGI actions" >&2
+  exit 1
+}
+
 grep -q '"$home/git/artificer-nonnative"' "$backend" || {
   printf '%s\n' "Native backend should prefer the current nonnative Artificer runtime checkout" >&2
   exit 1
