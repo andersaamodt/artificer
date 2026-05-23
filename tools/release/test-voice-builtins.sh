@@ -98,6 +98,14 @@ run_voice() {
   sh "$repo_root/scripts/artificer-voice-automations.sh" handle-text "$1"
 }
 
+dictation_active() {
+  HOME="$home_dir" \
+  XDG_CONFIG_HOME="$home_dir/.config" \
+  ARTIFICER_NATIVE_STATE_ROOT="$tmp_dir/state" \
+  PATH="$bin_dir:/usr/bin:/bin" \
+  sh "$repo_root/scripts/artificer-voice-builtins.sh" dictation-active >/dev/null 2>&1
+}
+
 run_voice "switch to Safari" | grep -q '"status":"triggered"' || {
   printf '%s\n' "switch-to app phrase should trigger a built-in command" >&2
   exit 1
@@ -128,6 +136,34 @@ run_voice "hello comma world" >/dev/null
 run_voice "stop dictation" >/dev/null
 grep -q 'pbcopy hello, world' "$log_file" || {
   printf '%s\n' "dictation mode should type normalized dictated text" >&2
+  exit 1
+}
+
+run_voice "start listening" >/dev/null
+run_voice "listening phrase period" >/dev/null
+run_voice "stop listening" >/dev/null
+grep -q 'pbcopy listening phrase.' "$log_file" || {
+  printf '%s\n' "start listening should enter dictation mode until stop listening" >&2
+  exit 1
+}
+
+run_voice "dictate here is a sentence" >/dev/null
+dictation_active || {
+  printf '%s\n' "dictate with inline text should leave dictation mode active" >&2
+  exit 1
+}
+run_voice "and it continues period" >/dev/null
+run_voice "stop dictating" >/dev/null
+if dictation_active; then
+  printf '%s\n' "stop dictating should leave dictation mode" >&2
+  exit 1
+fi
+grep -q 'pbcopy here is a sentence' "$log_file" || {
+  printf '%s\n' "dictate with inline text should type the inline phrase immediately" >&2
+  exit 1
+}
+grep -q 'pbcopy and it continues.' "$log_file" || {
+  printf '%s\n' "dictate with inline text should keep dictating follow-on phrases" >&2
   exit 1
 }
 

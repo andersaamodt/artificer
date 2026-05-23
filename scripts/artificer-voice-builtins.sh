@@ -376,8 +376,12 @@ handle_dictation_phrase() {
     return 1
   }
   case "$phrase" in
-    "stop dictation"|"end dictation"|"command mode"|"cancel dictation")
+    "stop dictation"|"stop dictating"|"end dictation"|"command mode"|"cancel dictation"|"stop listening")
       stop_dictation
+      return 0
+      ;;
+    "start dictation"|"start listening"|"dictation mode"|"begin dictation")
+      message "Dictation mode already on."
       return 0
       ;;
     "new line")
@@ -711,20 +715,21 @@ handle_phrase() {
       read_notification
       return 0
       ;;
-    "start dictation"|"dictation mode"|"begin dictation")
+    "start dictation"|"start listening"|"dictation mode"|"begin dictation")
       dictation_allowed || return 2
       start_dictation
       return 0
       ;;
-    "stop dictation"|"end dictation"|"command mode")
+    "stop dictation"|"stop dictating"|"stop listening"|"end dictation"|"command mode")
       stop_dictation
       return 0
       ;;
     "dictate "*)
       dictation_allowed || return 2
+      start_dictation >/dev/null
       text=$(dictation_text_from_phrase "${phrase#dictate }")
       type_text "$text"
-      message "Dictated text."
+      message "Dictation mode on. Dictated text."
       return 0
       ;;
     "show numbers"|"show names")
