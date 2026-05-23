@@ -37,6 +37,8 @@ require_text "$template" "handleDroppedAttachments" "native composer file drop h
 require_text "$template" "copyToPasteboard(message.content)" "native message copy affordance"
 require_text "$template" "Close queue" "native queue sheet close affordance"
 require_text "$template" "Close terminal" "native terminal sheet close affordance"
+require_text "$template" "Close diff" "native diff sheet close affordance"
+require_text "$template" "Close models" "native models sheet close affordance"
 require_text "$template" "ComposerToggleIconButton(title: \"Network access\"" "native network option"
 require_text "$template" "ComposerToggleIconButton(title: \"Web access\"" "native web option"
 require_text "$template" "ComposerContextBadge" "native context window badge"

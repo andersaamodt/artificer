@@ -1414,6 +1414,9 @@ private struct GitDiffSheet: View {
         Text("+\(model.gitDiff.added) -\(model.gitDiff.deleted)")
           .font(.system(.callout, design: .monospaced))
           .foregroundStyle(.secondary)
+        FloatingIconButton(title: "Close diff", systemImage: "xmark", size: 26) {
+          model.showingGitDiff = false
+        }
         Button {
           Task { await model.loadGitDiff() }
         } label: {
@@ -1743,6 +1746,9 @@ private struct ModelQuickPanel: View {
         Label("Models", systemImage: "shippingbox")
           .font(.headline)
         Spacer()
+        FloatingIconButton(title: "Close models", systemImage: "xmark", size: 26) {
+          model.showingModelsPanel = false
+        }
         Button {
           Task { await model.loadModelData() }
         } label: {
