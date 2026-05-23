@@ -4,6 +4,7 @@ import AVFoundation
 import Combine
 import Foundation
 import SwiftUI
+import UniformTypeIdentifiers
 
 private let fallbackProjectDir = "__PROJECT_DIR__"
 private let appDisplayName = "__APP_NAME__"
@@ -128,7 +129,7 @@ struct ArtificerNativeApp: App {
 
     Window("Preferences", id: "preferences") {
       SettingsView(model: model)
-        .frame(width: 760, height: 540)
+        .frame(width: 780, height: 560)
     }
     .windowResizability(.contentSize)
   }
@@ -675,6 +676,11 @@ private func accentContrastColor() -> Color {
     + 0.7152 * Double(nsColor.greenComponent)
     + 0.0722 * Double(nsColor.blueComponent)
   return luminance > 0.58 ? .black : .white
+}
+
+private func copyToPasteboard(_ text: String) {
+  NSPasteboard.general.clearContents()
+  NSPasteboard.general.setString(text, forType: .string)
 }
 
 private struct AppTheme: Identifiable {
@@ -1312,13 +1318,20 @@ private struct MessageView: View {
       Text(message.role.capitalized)
         .font(.footnote)
         .foregroundStyle(.secondary)
-      Text(message.content)
-        .textSelection(.enabled)
-        .font(message.role == "tool" ? .system(.body, design: .monospaced) : .body)
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(message.role == "user" ? Color.accentColor.opacity(0.10) : Color(nsColor: .textBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+      ZStack(alignment: .topTrailing) {
+        Text(message.content)
+          .textSelection(.enabled)
+          .font(message.role == "tool" ? .system(.body, design: .monospaced) : .body)
+          .padding(10)
+          .padding(.trailing, 30)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        FloatingIconButton(title: "Copy message", systemImage: "doc.on.doc", size: 26) {
+          copyToPasteboard(message.content)
+        }
+        .padding(5)
+      }
+      .background(message.role == "user" ? Color.accentColor.opacity(0.10) : Color(nsColor: .textBackgroundColor))
+      .clipShape(RoundedRectangle(cornerRadius: 8))
     }
   }
 }
@@ -1499,6 +1512,9 @@ private struct QueueTraySheet: View {
         Label("Queue", systemImage: "tray.full")
           .font(.headline)
         Spacer()
+        FloatingIconButton(title: "Close queue", systemImage: "xmark", size: 26) {
+          model.showingQueueTray = false
+        }
         Button {
           Task { await model.loadQueueItems() }
         } label: {
@@ -1521,8 +1537,8 @@ private struct QueueTraySheet: View {
       } else {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 10) {
-            ForEach(model.queueItems) { item in
-              QueueItemEditor(model: model, item: item, text: Binding(
+            ForEach(Array(model.queueItems.enumerated()), id: \.element.id) { index, item in
+              QueueItemEditor(model: model, item: item, canMoveUp: index > 0, canMoveDown: index < model.queueItems.count - 1, text: Binding(
                 get: { drafts[item.id] ?? item.prompt },
                 set: { drafts[item.id] = $0 }
               ))
@@ -1541,6 +1557,8 @@ private struct QueueTraySheet: View {
 private struct QueueItemEditor: View {
   @ObservedObject var model: ArtificerModel
   let item: QueueItem
+  let canMoveUp: Bool
+  let canMoveDown: Bool
   @Binding var text: String
 
   var body: some View {
@@ -1563,6 +1581,12 @@ private struct QueueItemEditor: View {
             .stroke(Color.secondary.opacity(0.14))
         )
       HStack {
+        FloatingIconButton(title: "Move earlier", systemImage: "arrow.up", disabled: !canMoveUp || model.isBusy, size: 26) {
+          Task { await model.moveQueueItem(item.id, direction: -1) }
+        }
+        FloatingIconButton(title: "Move later", systemImage: "arrow.down", disabled: !canMoveDown || model.isBusy, size: 26) {
+          Task { await model.moveQueueItem(item.id, direction: 1) }
+        }
         Spacer()
         Button {
           Task { await model.updateQueueItem(item.id, prompt: text) }
@@ -1596,6 +1620,9 @@ private struct TerminalPanelSheet: View {
         Label(model.terminalRunning ? "Terminal running" : "Terminal", systemImage: "terminal")
           .font(.headline)
         Spacer()
+        FloatingIconButton(title: "Close terminal", systemImage: "xmark", size: 26) {
+          model.showingTerminalPanel = false
+        }
         Button {
           Task { await model.startTerminalSession() }
         } label: {
@@ -1629,6 +1656,22 @@ private struct TerminalPanelSheet: View {
       }
       .background(Color(nsColor: .textBackgroundColor))
       .clipShape(RoundedRectangle(cornerRadius: 8))
+      HStack(spacing: 8) {
+        TextField("Command", text: $model.terminalInput)
+          .textFieldStyle(.roundedBorder)
+          .onSubmit {
+            Task { await model.sendTerminalInput() }
+          }
+          .disabled(model.terminalSessionID.isEmpty || !model.terminalRunning)
+        FloatingIconButton(
+          title: "Send terminal input",
+          systemImage: "arrow.turn.down.left",
+          disabled: model.terminalSessionID.isEmpty || !model.terminalRunning || model.terminalInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+          prominence: .accent
+        ) {
+          Task { await model.sendTerminalInput() }
+        }
+      }
     }
     .padding(16)
     .task {
@@ -2009,11 +2052,14 @@ private struct ComposerView: View {
             .allowsHitTesting(false)
         }
       }
-      .background(Color(nsColor: .textBackgroundColor))
+      .background(model.isComposerDropTargeted ? Color.accentColor.opacity(0.06) : Color(nsColor: .textBackgroundColor))
       .clipShape(RoundedRectangle(cornerRadius: 14))
       .overlay {
         RoundedRectangle(cornerRadius: 14)
-          .stroke(Color.secondary.opacity(0.20), lineWidth: 1)
+          .stroke(model.isComposerDropTargeted ? Color.accentColor.opacity(0.75) : Color.secondary.opacity(0.20), lineWidth: model.isComposerDropTargeted ? 2 : 1)
+      }
+      .onDrop(of: [UTType.fileURL], isTargeted: $model.isComposerDropTargeted) { providers in
+        model.handleDroppedAttachments(providers)
       }
 
       if !model.pendingAttachments.isEmpty {
@@ -2369,6 +2415,19 @@ private struct StatusBar: View {
         Text(model.lastError)
           .foregroundStyle(.red)
           .lineLimit(1)
+        Button {
+          copyToPasteboard(model.lastError)
+          model.statusMessage = "Error copied."
+        } label: {
+          Image(systemName: "doc.on.doc")
+            .font(.system(size: 11, weight: .semibold))
+            .frame(width: 22, height: 22)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .help("Copy error")
+        .accessibilityLabel(Text("Copy error"))
       }
     }
     .font(.footnote)
@@ -2382,33 +2441,96 @@ private struct SettingsView: View {
   @ObservedObject var model: ArtificerModel
 
   var body: some View {
-    TabView(selection: $model.preferencesTab) {
-      GeneralPreferencesTab(model: model)
-        .tabItem { Label("General", systemImage: "gearshape") }
-        .tag("general")
-      VoiceControlPreferencesTab(model: model)
-        .tabItem { Label("Voice Control", systemImage: "waveform.circle") }
-        .tag("voice-control")
-      AutomationsPreferencesTab(model: model)
-        .tabItem { Label("Automations", systemImage: "clock.arrow.circlepath") }
-        .tag("automations")
-      SelfImprovePreferencesTab(model: model)
-        .tabItem { Label("Self-improve", systemImage: "wand.and.stars") }
-        .tag("self-improve")
-      RuntimePreferencesTab(model: model)
-        .tabItem { Label("Runtime", systemImage: "slider.horizontal.3") }
-        .tag("runtime")
-      MobilePreferencesTab(model: model)
-        .tabItem { Label("Mobile", systemImage: "iphone") }
-        .tag("mobile")
-      GitPreferencesTab(model: model)
-        .tabItem { Label("Git", systemImage: "arrow.triangle.branch") }
-        .tag("git")
+    VStack(spacing: 0) {
+      PreferencesTabStrip(selection: $model.preferencesTab)
+      Divider()
+      selectedPane
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
-    .padding(20)
+    .background(Color(nsColor: .windowBackgroundColor))
+    .onAppear {
+      if !preferencesTabs.contains(where: { $0.id == model.preferencesTab }) {
+        model.preferencesTab = "general"
+      }
+    }
     .task {
       await model.loadPreferences()
     }
+  }
+
+  @ViewBuilder
+  private var selectedPane: some View {
+    switch model.preferencesTab {
+    case "voice-control":
+      VoiceControlPreferencesTab(model: model)
+    case "automations":
+      AutomationsPreferencesTab(model: model)
+    case "self-improve":
+      SelfImprovePreferencesTab(model: model)
+    case "runtime":
+      RuntimePreferencesTab(model: model)
+    case "mobile":
+      MobilePreferencesTab(model: model)
+    case "git":
+      GitPreferencesTab(model: model)
+    default:
+      GeneralPreferencesTab(model: model)
+    }
+  }
+}
+
+private struct PreferencesTabDescriptor: Identifiable {
+  let id: String
+  let title: String
+  let systemImage: String
+}
+
+private let preferencesTabs = [
+  PreferencesTabDescriptor(id: "general", title: "General", systemImage: "gearshape"),
+  PreferencesTabDescriptor(id: "voice-control", title: "Voice Control", systemImage: "waveform.circle"),
+  PreferencesTabDescriptor(id: "automations", title: "Automations", systemImage: "clock.arrow.circlepath"),
+  PreferencesTabDescriptor(id: "self-improve", title: "Self-improve", systemImage: "wand.and.stars"),
+  PreferencesTabDescriptor(id: "runtime", title: "Runtime", systemImage: "slider.horizontal.3"),
+  PreferencesTabDescriptor(id: "mobile", title: "Mobile", systemImage: "iphone"),
+  PreferencesTabDescriptor(id: "git", title: "Git", systemImage: "arrow.triangle.branch")
+]
+
+private struct PreferencesTabStrip: View {
+  @Binding var selection: String
+
+  var body: some View {
+    HStack(alignment: .center, spacing: 6) {
+      ForEach(preferencesTabs) { tab in
+        Button {
+          selection = tab.id
+        } label: {
+          VStack(spacing: 4) {
+            Image(systemName: tab.systemImage)
+              .font(.system(size: 17, weight: .medium))
+              .frame(height: 20)
+            Text(tab.title)
+              .font(.caption)
+              .lineLimit(1)
+          }
+          .foregroundStyle(selection == tab.id ? Color.accentColor : Color.primary)
+          .frame(minWidth: 74)
+          .padding(.horizontal, 6)
+          .padding(.vertical, 7)
+          .background(
+            RoundedRectangle(cornerRadius: 8)
+              .fill(selection == tab.id ? Color.accentColor.opacity(0.14) : Color.clear)
+          )
+          .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .help(tab.title)
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, 14)
+    .padding(.top, 10)
+    .padding(.bottom, 8)
+    .background(.bar)
   }
 }
 
@@ -3108,9 +3230,10 @@ private struct PreferencesPane<Content: View>: View {
       VStack(alignment: .leading, spacing: 18) {
         content
       }
-      .frame(maxWidth: 620, alignment: .leading)
-      .padding(.top, 4)
-      .padding(.horizontal, 8)
+      .frame(maxWidth: 640, alignment: .leading)
+      .padding(.top, 14)
+      .padding(.bottom, 18)
+      .padding(.horizontal, 18)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
@@ -3177,6 +3300,7 @@ private final class ArtificerModel: ObservableObject {
   @Published var coreRootDraft = ""
   @Published var resolvedCoreRoot = ""
   @Published var coreReady = false
+  @Published var isComposerDropTargeted = false
   @Published var pendingAttachments: [PendingAttachment] = []
   @Published var dictationStatus: DictationStatus?
   @Published var isDictating = false
@@ -3252,6 +3376,7 @@ private final class ArtificerModel: ObservableObject {
   @Published var queueItems: [QueueItem] = []
   @Published var terminalSessionID = ""
   @Published var terminalOutput = ""
+  @Published var terminalInput = ""
   @Published var terminalOffset = 0
   @Published var terminalRunning = false
   @Published var networkAccessEnabled = false
@@ -3410,8 +3535,7 @@ private final class ArtificerModel: ObservableObject {
 
   func copySelectedProjectPath() {
     guard let path = selectedProject?.path, !path.isEmpty else { return }
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(path, forType: .string)
+    copyToPasteboard(path)
     statusMessage = "Project path copied."
   }
 
@@ -3542,6 +3666,28 @@ private final class ArtificerModel: ObservableObject {
     }
   }
 
+  func moveQueueItem(_ itemID: String, direction: Int) async {
+    guard let projectID = selectedProjectID, let sessionID = selectedSessionID else { return }
+    guard let currentIndex = queueItems.firstIndex(where: { $0.id == itemID }) else { return }
+    let targetIndex = max(0, min(queueItems.count - 1, currentIndex + direction))
+    guard currentIndex != targetIndex else { return }
+
+    var reorderedItems = queueItems
+    let item = reorderedItems.remove(at: currentIndex)
+    reorderedItems.insert(item, at: targetIndex)
+    queueItems = reorderedItems
+
+    let itemIDs = reorderedItems.map(\.id).joined(separator: ",")
+    let result = await runBackend("queue-reorder", projectID, sessionID, itemIDs)
+    if let response = decode(GenericSuccessResponse.self, from: result), response.success {
+      statusMessage = "Queue reordered."
+      await loadQueueItems()
+      await loadSelectedSession(status: nil, trackBusy: false)
+    } else {
+      await loadQueueItems()
+    }
+  }
+
   func stopQueueRun() async {
     guard let projectID = selectedProjectID, let sessionID = selectedSessionID else { return }
     let result = await runBackend("queue-stop", projectID, sessionID)
@@ -3604,11 +3750,25 @@ private final class ArtificerModel: ObservableObject {
     }
   }
 
-  func stopTerminalSession() async {
-    guard let projectID = selectedProjectID else { return }
-    let result = await runBackend("terminal-session-stop", projectID)
+  func sendTerminalInput() async {
+    guard let projectID = selectedProjectID, !terminalSessionID.isEmpty else { return }
+    let command = terminalInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !command.isEmpty else { return }
+    let result = await runBackend("terminal-session-input", projectID, terminalSessionID, "\(command)\n")
     if let response = decode(GenericSuccessResponse.self, from: result), response.success {
+      terminalInput = ""
+      statusMessage = "Terminal input sent."
+      await pollTerminalSession()
+    }
+  }
+
+  func stopTerminalSession() async {
+    guard let projectID = selectedProjectID, !terminalSessionID.isEmpty else { return }
+    let result = await runBackend("terminal-session-stop", projectID, terminalSessionID)
+    if let response = decode(GenericSuccessResponse.self, from: result), response.success {
+      terminalSessionID = ""
       terminalRunning = false
+      terminalInput = ""
       statusMessage = "Terminal stopped."
     }
   }
@@ -5109,6 +5269,36 @@ private final class ArtificerModel: ObservableObject {
         }
       }
     }
+  }
+
+  func handleDroppedAttachments(_ providers: [NSItemProvider]) -> Bool {
+    guard selectedSessionID != nil else { return false }
+    let fileProviders = providers.filter { provider in
+      provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+    }
+    guard !fileProviders.isEmpty else { return false }
+
+    for provider in fileProviders {
+      provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+        let url: URL?
+        if let data = item as? Data {
+          url = URL(dataRepresentation: data, relativeTo: nil)
+        } else if let droppedURL = item as? URL {
+          url = droppedURL
+        } else if let droppedURL = item as? NSURL {
+          url = droppedURL as URL
+        } else if let string = item as? String, let parsedURL = URL(string: string), parsedURL.isFileURL {
+          url = parsedURL
+        } else {
+          url = nil
+        }
+        guard let url else { return }
+        Task {
+          await self.uploadAttachment(url)
+        }
+      }
+    }
+    return true
   }
 
   func uploadAttachment(_ url: URL) async {

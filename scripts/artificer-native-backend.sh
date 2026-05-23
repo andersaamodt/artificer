@@ -42,13 +42,15 @@ Actions:
   open-project-target WORKSPACE_ID TARGET
   queue-list WORKSPACE_ID CONVERSATION_ID [LIMIT]
   queue-update WORKSPACE_ID CONVERSATION_ID ITEM_ID PROMPT
+  queue-reorder WORKSPACE_ID CONVERSATION_ID ITEM_IDS
   queue-cancel WORKSPACE_ID CONVERSATION_ID [ITEM_ID]
   queue-stop WORKSPACE_ID CONVERSATION_ID
   approval-answer WORKSPACE_ID CONVERSATION_ID DECISION SCOPE MATCH_MODE [PATTERN] [COMMAND]
   decision-answer WORKSPACE_ID CONVERSATION_ID ANSWER
   terminal-session-start WORKSPACE_ID
   terminal-session-poll WORKSPACE_ID SESSION_ID [OFFSET]
-  terminal-session-stop WORKSPACE_ID
+  terminal-session-input WORKSPACE_ID SESSION_ID INPUT
+  terminal-session-stop WORKSPACE_ID SESSION_ID
   dictation-status
   dictation-language-get
   dictation-language-set LANGUAGE
@@ -857,6 +859,13 @@ case "$action" in
     prompt_text=${4-}
     api_post queue_update workspace_id "$workspace_id" conversation_id "$conversation_id" item_id "$item_id" prompt "$prompt_text"
     ;;
+  queue-reorder)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    item_ids=${3-}
+    reject_line_breaks "$item_ids" "queue item ids"
+    api_post queue_reorder workspace_id "$workspace_id" conversation_id "$conversation_id" item_ids "$item_ids"
+    ;;
   queue-cancel)
     workspace_id=${1-}
     conversation_id=${2-}
@@ -894,9 +903,16 @@ case "$action" in
     offset=${3:-0}
     api_get terminal_session_poll workspace_id "$workspace_id" session_id "$session_id" offset "$offset"
     ;;
+  terminal-session-input)
+    workspace_id=${1-}
+    session_id=${2-}
+    input_text=${3-}
+    api_post terminal_session_input workspace_id "$workspace_id" session_id "$session_id" input "$input_text"
+    ;;
   terminal-session-stop)
     workspace_id=${1-}
-    api_post terminal_session_stop workspace_id "$workspace_id"
+    session_id=${2-}
+    api_post terminal_session_stop workspace_id "$workspace_id" session_id "$session_id"
     ;;
   dictation-status)
     api_get dictation_status

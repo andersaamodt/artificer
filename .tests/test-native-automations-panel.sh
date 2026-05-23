@@ -38,7 +38,7 @@ for file in "$template" "$generated"; do
     printf '%s\n' "Preferences should expose a dedicated Voice Control tab: $file" >&2
     exit 1
   }
-  grep -q 'Label("Voice Control", systemImage: "waveform.circle")' "$file" || {
+  grep -q 'PreferencesTabDescriptor(id: "voice-control", title: "Voice Control", systemImage: "waveform.circle")' "$file" || {
     printf '%s\n' "Preferences should label the dedicated voice settings tab clearly: $file" >&2
     exit 1
   }
