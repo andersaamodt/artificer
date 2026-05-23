@@ -393,6 +393,10 @@ private struct RootView: View {
       ProjectRemoveSheet(model: model)
         .frame(minWidth: 430, minHeight: 190)
     }
+    .sheet(isPresented: $model.showingMultiAgentPanel) {
+      MultiAgentSheet(model: model)
+        .frame(minWidth: 720, minHeight: 540)
+    }
     .sheet(isPresented: $model.showingQueueTray) {
       QueueTraySheet(model: model)
         .frame(minWidth: 620, minHeight: 430)
@@ -925,6 +929,11 @@ private struct WorkspaceProjectMenu: View {
   var body: some View {
     Menu {
       Button {
+        model.openMultiAgentPanel(project)
+      } label: {
+        Label("Manage agents...", systemImage: "person.2.wave.2")
+      }
+      Button {
         model.prepareProjectApprovals(project.id)
         openWindow(id: "preferences")
         Task { await model.loadCommandRules(workspaceID: project.id) }
@@ -1130,6 +1139,7 @@ private struct WorkspaceTreeGroup: View {
           .lineLimit(1)
           .truncationMode(.tail)
         Spacer(minLength: 6)
+        ProjectMultiAgentBadge(project: project)
         ZStack {
           Text("\(model.visibleSessionsForSidebar(project).count)")
             .font(.caption2)
@@ -1189,6 +1199,32 @@ private struct WorkspaceTreeGroup: View {
         }
       }
     }
+  }
+}
+
+private struct ProjectMultiAgentBadge: View {
+  let project: Project
+
+  var body: some View {
+    HStack(spacing: 3) {
+      if project.multiAgentBackgroundResidents > 0 {
+        Label("\(project.multiAgentBackgroundResidents)", systemImage: "person.2.wave.2")
+          .labelStyle(.iconOnly)
+          .overlay(alignment: .topTrailing) {
+            Text("\(project.multiAgentBackgroundResidents)")
+              .font(.system(size: 8, weight: .bold))
+              .foregroundStyle(.secondary)
+              .offset(x: 7, y: -5)
+          }
+      }
+      if !project.multiAgentUnratifiedAmendments.isEmpty {
+        Image(systemName: "scroll.badge.exclamationmark")
+      }
+    }
+    .font(.system(size: 11, weight: .semibold))
+    .foregroundStyle(.secondary)
+    .frame(minWidth: project.multiAgentBackgroundResidents > 0 || !project.multiAgentUnratifiedAmendments.isEmpty ? 20 : 0, minHeight: 18)
+    .help(project.multiAgentBadgeLabel)
   }
 }
 
@@ -2116,6 +2152,206 @@ private struct ProjectRemoveSheet: View {
       }
     }
     .padding(16)
+  }
+}
+
+private struct MultiAgentSheet: View {
+  @ObservedObject var model: ArtificerModel
+
+  private var project: Project? {
+    model.projects.first { $0.id == model.projectActionProjectID }
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(spacing: 10) {
+        Label(project?.name ?? "Agents", systemImage: "person.2.wave.2")
+          .font(.headline)
+        Spacer()
+        Button {
+          Task { await model.loadWorkspaceMultiAgent(workspaceID: model.projectActionProjectID) }
+        } label: {
+          Label("Refresh", systemImage: "arrow.clockwise")
+        }
+        .fixedSize()
+        .disabled(model.projectActionProjectID.isEmpty || model.multiAgentLoading)
+      }
+
+      if model.multiAgentLoading && model.workspaceMultiAgent == nil {
+        ProgressView("Loading agent settings...")
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        ScrollView {
+          VStack(alignment: .leading, spacing: 14) {
+            if let state = model.workspaceMultiAgent {
+              MultiAgentGovernancePane(model: model, state: state)
+              MultiAgentResidentsPane(model: model, state: state)
+              MultiAgentLogsPane(state: state)
+            } else {
+              EmptyStateView(title: "No Agent State", systemImage: "person.2.slash", detail: "Agent settings are unavailable for this project.")
+                .frame(minHeight: 260)
+            }
+          }
+          .padding(.vertical, 2)
+        }
+      }
+    }
+    .padding(16)
+    .task {
+      await model.loadWorkspaceMultiAgent(workspaceID: model.projectActionProjectID)
+    }
+  }
+}
+
+private struct MultiAgentGovernancePane: View {
+  @ObservedObject var model: ArtificerModel
+  let state: WorkspaceMultiAgentState
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text("Governance")
+        .font(.subheadline.weight(.semibold))
+      FlowHStack(items: state.toggleChips) { chip in
+        Text(chip)
+          .font(.caption)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 4)
+          .background(Color(nsColor: .controlBackgroundColor))
+          .clipShape(Capsule())
+      }
+      HStack(spacing: 14) {
+        MultiAgentToggleButton(model: model, title: "Context", key: "context_sharing", isOn: state.toggles.contextSharing)
+        MultiAgentToggleButton(model: model, title: "Dilemmas", key: "dilemma_surfacing", isOn: state.toggles.dilemmaSurfacing)
+        MultiAgentToggleButton(model: model, title: "Amendments", key: "amendments", isOn: state.toggles.amendments)
+        MultiAgentToggleButton(model: model, title: "Logs", key: "interpretation_log", isOn: state.toggles.interpretationLog)
+        MultiAgentToggleButton(model: model, title: "Commitments", key: "commitments", isOn: state.toggles.commitments)
+      }
+      .toggleStyle(.switch)
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color(nsColor: .textBackgroundColor))
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+}
+
+private struct MultiAgentToggleButton: View {
+  @ObservedObject var model: ArtificerModel
+  let title: String
+  let key: String
+  let isOn: Bool
+
+  var body: some View {
+    Toggle(title, isOn: Binding(
+      get: { isOn },
+      set: { enabled in Task { await model.setMultiAgentToggle(key, enabled: enabled) } }
+    ))
+    .fixedSize()
+    .disabled(model.multiAgentLoading || model.projectActionProjectID.isEmpty)
+  }
+}
+
+private struct MultiAgentResidentsPane: View {
+  @ObservedObject var model: ArtificerModel
+  let state: WorkspaceMultiAgentState
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack {
+        Text("Residents")
+          .font(.subheadline.weight(.semibold))
+        Spacer()
+        Text("\(state.backgroundResidentCount) background")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+      ForEach(model.multiAgentCatalog.curatedResidents) { resident in
+        MultiAgentResidentRow(model: model, catalogResident: resident, resident: state.resident(id: resident.id))
+      }
+      if model.multiAgentCatalog.curatedResidents.isEmpty {
+        Text("No curated residents are available from the runtime.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color(nsColor: .textBackgroundColor))
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+}
+
+private struct MultiAgentResidentRow: View {
+  @ObservedObject var model: ArtificerModel
+  let catalogResident: MultiAgentCatalogResident
+  let resident: MultiAgentResident?
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: (resident?.enabled ?? false) ? "person.crop.circle.badge.checkmark" : "person.crop.circle")
+        .foregroundStyle((resident?.enabled ?? false) ? Color.accentColor : Color.secondary)
+        .frame(width: 24)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(catalogResident.name)
+          .font(.callout.weight(.semibold))
+        Text(catalogResident.mandate)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(2)
+      }
+      Spacer()
+      Toggle("Enabled", isOn: Binding(
+        get: { resident?.enabled ?? false },
+        set: { enabled in
+          Task { await model.setMultiAgentResident(catalogResident, enabled: enabled, visible: nil, background: nil, reserveCompute: nil) }
+        }
+      ))
+      Toggle("Visible", isOn: Binding(
+        get: { resident?.visible ?? false },
+        set: { enabled in
+          Task { await model.setMultiAgentResident(catalogResident, enabled: nil, visible: enabled, background: nil, reserveCompute: nil) }
+        }
+      ))
+      Toggle("Background", isOn: Binding(
+        get: { resident?.background ?? false },
+        set: { enabled in
+          Task { await model.setMultiAgentResident(catalogResident, enabled: nil, visible: nil, background: enabled, reserveCompute: nil) }
+        }
+      ))
+    }
+    .toggleStyle(.switch)
+    .disabled(model.multiAgentLoading)
+  }
+}
+
+private struct MultiAgentLogsPane: View {
+  let state: WorkspaceMultiAgentState
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Signals")
+        .font(.subheadline.weight(.semibold))
+      FlowHStack(items: state.signalChips) { chip in
+        Text(chip)
+          .font(.caption)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 4)
+          .background(Color(nsColor: .controlBackgroundColor))
+          .clipShape(Capsule())
+      }
+      if !state.unratifiedAmendments.isEmpty {
+        ForEach(Array(state.unratifiedAmendments.prefix(3))) { entry in
+          Text(entry.statement)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+        }
+      }
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color(nsColor: .textBackgroundColor))
+    .clipShape(RoundedRectangle(cornerRadius: 8))
   }
 }
 
@@ -4343,6 +4579,7 @@ private final class ArtificerModel: ObservableObject {
   @Published var showingBranchDialog = false
   @Published var showingProjectRenameDialog = false
   @Published var showingProjectRemoveDialog = false
+  @Published var showingMultiAgentPanel = false
   @Published var showingQueueTray = false
   @Published var showingTerminalPanel = false
   @Published var showingModelsPanel = false
@@ -4355,6 +4592,9 @@ private final class ArtificerModel: ObservableObject {
   @Published var branchNameDraft = ""
   @Published var projectActionProjectID = ""
   @Published var projectRenameDraft = ""
+  @Published var multiAgentCatalog = MultiAgentCatalog()
+  @Published var workspaceMultiAgent: WorkspaceMultiAgentState?
+  @Published var multiAgentLoading = false
   @Published var queueItems: [QueueItem] = []
   @Published var terminalSessionID = ""
   @Published var terminalOutput = ""
@@ -5029,6 +5269,94 @@ private final class ArtificerModel: ObservableObject {
     showingProjectRemoveDialog = true
   }
 
+  func openMultiAgentPanel(_ project: Project) {
+    projectActionProjectID = project.id
+    workspaceMultiAgent = nil
+    showingMultiAgentPanel = true
+    Task { await loadWorkspaceMultiAgent(workspaceID: project.id) }
+  }
+
+  func loadMultiAgentCatalog() async {
+    let result = await runBackend("multi-agent-state", trackBusy: false)
+    guard let response = decode(MultiAgentStateResponse.self, from: result) else { return }
+    multiAgentCatalog = response.multiAgentCatalog
+  }
+
+  func loadWorkspaceMultiAgent(workspaceID: String) async {
+    guard !workspaceID.isEmpty else { return }
+    multiAgentLoading = true
+    await loadMultiAgentCatalog()
+    let result = await runBackend("multi-agent-get", workspaceID, trackBusy: false)
+    if let response = decode(WorkspaceMultiAgentResponse.self, from: result) {
+      workspaceMultiAgent = response.workspaceMultiAgent
+    }
+    multiAgentLoading = false
+  }
+
+  func setMultiAgentToggle(_ key: String, enabled: Bool) async {
+    guard let state = workspaceMultiAgent else { return }
+    var toggles = state.toggles
+    toggles.set(key: key, enabled: enabled)
+    let result = await runBackend(
+      "multi-agent-workspace-update",
+      state.workspaceID,
+      toggles.contextSharing ? "1" : "0",
+      toggles.dilemmaSurfacing ? "1" : "0",
+      toggles.amendments ? "1" : "0",
+      toggles.interpretationLog ? "1" : "0",
+      toggles.commitments ? "1" : "0",
+      toggles.attentionPolicies ? "1" : "0"
+    )
+    if let response = decode(WorkspaceMultiAgentResponse.self, from: result) {
+      workspaceMultiAgent = response.workspaceMultiAgent
+      statusMessage = "Agent governance saved."
+      await loadProjects()
+    }
+  }
+
+  func setMultiAgentResident(_ catalogResident: MultiAgentCatalogResident, enabled: Bool?, visible: Bool?, background: Bool?, reserveCompute: Bool?) async {
+    guard let state = workspaceMultiAgent else { return }
+    let current = state.resident(id: catalogResident.id)
+    let nextEnabled = enabled ?? current?.enabled ?? true
+    let nextVisible = visible ?? current?.visible ?? true
+    let nextBackground = background ?? current?.background ?? true
+    let nextReserve = reserveCompute ?? current?.reserveCompute ?? false
+    let nextModel = current?.model ?? ""
+    if current == nil && !nextEnabled {
+      return
+    }
+    let action = current == nil ? "multi-agent-resident-spawn" : "multi-agent-resident-update"
+    let result: CommandResult
+    if action == "multi-agent-resident-spawn" {
+      result = await runBackend(
+        action,
+        state.workspaceID,
+        catalogResident.id,
+        nextVisible ? "1" : "0",
+        nextBackground ? "1" : "0",
+        nextReserve ? "1" : "0",
+        nextModel
+      )
+    } else {
+      result = await runBackend(
+        action,
+        state.workspaceID,
+        catalogResident.id,
+        nextEnabled ? "1" : "0",
+        nextVisible ? "1" : "0",
+        nextBackground ? "1" : "0",
+        nextReserve ? "1" : "0",
+        nextModel
+      )
+    }
+    if let response = decode(WorkspaceMultiAgentResponse.self, from: result) {
+      workspaceMultiAgent = response.workspaceMultiAgent
+      statusMessage = nextEnabled ? "Resident updated." : "Resident disabled."
+      await loadProjects()
+      await loadTriage()
+    }
+  }
+
   func renameProjectFromDialog() async {
     let projectID = projectActionProjectID
     let name = projectRenameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -5569,8 +5897,16 @@ private final class ArtificerModel: ObservableObject {
 
   func loadProjects() async {
     let prior = selectedProjectID
-    let result = await runBackend("projects", trackBusy: false)
-    guard let response = decode(ProjectsResponse.self, from: result) else { return }
+    let stateResult = await runBackend("projects-state", trackBusy: false)
+    var response = decode(ProjectsResponse.self, from: stateResult)
+    if let stateResponse = decode(MultiAgentStateResponse.self, from: stateResult) {
+      multiAgentCatalog = stateResponse.multiAgentCatalog
+    }
+    if response == nil {
+      let result = await runBackend("projects", trackBusy: false)
+      response = decode(ProjectsResponse.self, from: result)
+    }
+    guard let response else { return }
     projects = response.projects.filter { $0.pathExists }.sorted { left, right in
       left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
     }
@@ -7535,6 +7871,18 @@ private struct RuntimeHealth: Decodable {
 private struct ProjectsResponse: Decodable {
   let success: Bool
   let projects: [Project]
+
+  enum CodingKeys: String, CodingKey {
+    case success, projects, workspaces
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    projects = (try? container.decode([Project].self, forKey: .projects))
+      ?? (try? container.decode([Project].self, forKey: .workspaces))
+      ?? []
+  }
 }
 
 private struct ProjectMutationResponse: Decodable {
@@ -7835,6 +8183,232 @@ private struct TerminalSessionResponse: Decodable {
   }
 }
 
+private struct MultiAgentStateResponse: Decodable {
+  let success: Bool
+  let multiAgentCatalog: MultiAgentCatalog
+
+  enum CodingKeys: String, CodingKey {
+    case success
+    case multiAgentCatalog = "multi_agent_catalog"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    multiAgentCatalog = (try? container.decode(MultiAgentCatalog.self, forKey: .multiAgentCatalog)) ?? MultiAgentCatalog()
+  }
+}
+
+private struct MultiAgentCatalog: Decodable, Hashable {
+  let curatedResidents: [MultiAgentCatalogResident]
+  let targetTypes: [String]
+  let escalationClasses: [String]
+
+  enum CodingKeys: String, CodingKey {
+    case curatedResidents = "curated_residents"
+    case targetTypes = "target_types"
+    case escalationClasses = "escalation_classes"
+  }
+
+  init(curatedResidents: [MultiAgentCatalogResident] = [], targetTypes: [String] = [], escalationClasses: [String] = []) {
+    self.curatedResidents = curatedResidents
+    self.targetTypes = targetTypes
+    self.escalationClasses = escalationClasses
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    curatedResidents = (try? container.decode([MultiAgentCatalogResident].self, forKey: .curatedResidents)) ?? []
+    targetTypes = (try? container.decode([String].self, forKey: .targetTypes)) ?? []
+    escalationClasses = (try? container.decode([String].self, forKey: .escalationClasses)) ?? []
+  }
+}
+
+private struct MultiAgentCatalogResident: Identifiable, Decodable, Hashable {
+  let id: String
+  let name: String
+  let mandate: String
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, mandate
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    name = (try? container.decode(String.self, forKey: .name)) ?? id
+    mandate = (try? container.decode(String.self, forKey: .mandate)) ?? ""
+  }
+}
+
+private struct WorkspaceMultiAgentResponse: Decodable {
+  let success: Bool
+  let workspaceMultiAgent: WorkspaceMultiAgentState
+
+  enum CodingKeys: String, CodingKey {
+    case success
+    case workspaceMultiAgent = "workspace_multi_agent"
+  }
+}
+
+private struct WorkspaceMultiAgentState: Decodable, Hashable {
+  let workspaceID: String
+  let charter: String
+  let toggles: MultiAgentToggles
+  let residents: [MultiAgentResident]
+  let backgroundResidentCount: Int
+  let unratifiedAmendments: [MultiAgentLogEntry]
+  let interpretationLog: [MultiAgentLogEntry]
+  let commitmentsLog: [MultiAgentLogEntry]
+  let attentionPolicies: [MultiAgentLogEntry]
+
+  var toggleChips: [String] {
+    [
+      toggles.contextSharing ? "context sharing" : "",
+      toggles.dilemmaSurfacing ? "dilemma surfacing" : "",
+      toggles.amendments ? "amendments" : "",
+      toggles.interpretationLog ? "interpretation log" : "",
+      toggles.commitments ? "commitments" : "",
+      toggles.attentionPolicies ? "attention policies" : ""
+    ].filter { !$0.isEmpty }
+  }
+
+  var signalChips: [String] {
+    [
+      "\(unratifiedAmendments.count) amendments",
+      "\(interpretationLog.count) interpretations",
+      "\(commitmentsLog.count) commitments",
+      "\(attentionPolicies.count) policies"
+    ]
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case charter, toggles, residents
+    case workspaceID = "workspace_id"
+    case backgroundResidentCount = "background_resident_count"
+    case unratifiedAmendments = "unratified_amendments"
+    case interpretationLog = "interpretation_log"
+    case commitmentsLog = "commitments_log"
+    case attentionPolicies = "attention_policies"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    workspaceID = (try? container.decode(String.self, forKey: .workspaceID)) ?? ""
+    charter = (try? container.decode(String.self, forKey: .charter)) ?? ""
+    toggles = (try? container.decode(MultiAgentToggles.self, forKey: .toggles)) ?? MultiAgentToggles()
+    residents = (try? container.decode([MultiAgentResident].self, forKey: .residents)) ?? []
+    backgroundResidentCount = container.decodeFlexibleInt(forKey: .backgroundResidentCount)
+    unratifiedAmendments = (try? container.decode([MultiAgentLogEntry].self, forKey: .unratifiedAmendments)) ?? []
+    interpretationLog = (try? container.decode([MultiAgentLogEntry].self, forKey: .interpretationLog)) ?? []
+    commitmentsLog = (try? container.decode([MultiAgentLogEntry].self, forKey: .commitmentsLog)) ?? []
+    attentionPolicies = (try? container.decode([MultiAgentLogEntry].self, forKey: .attentionPolicies)) ?? []
+  }
+
+  func resident(id: String) -> MultiAgentResident? {
+    residents.first { $0.id == id }
+  }
+}
+
+private struct MultiAgentToggles: Decodable, Hashable {
+  var contextSharing: Bool
+  var dilemmaSurfacing: Bool
+  var amendments: Bool
+  var interpretationLog: Bool
+  var commitments: Bool
+  var attentionPolicies: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case contextSharing = "context_sharing"
+    case dilemmaSurfacing = "dilemma_surfacing"
+    case amendments
+    case interpretationLog = "interpretation_log"
+    case commitments
+    case attentionPolicies = "attention_policies"
+  }
+
+  init(contextSharing: Bool = true, dilemmaSurfacing: Bool = true, amendments: Bool = true, interpretationLog: Bool = true, commitments: Bool = true, attentionPolicies: Bool = true) {
+    self.contextSharing = contextSharing
+    self.dilemmaSurfacing = dilemmaSurfacing
+    self.amendments = amendments
+    self.interpretationLog = interpretationLog
+    self.commitments = commitments
+    self.attentionPolicies = attentionPolicies
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    contextSharing = container.decodeFlexibleBool(forKey: .contextSharing)
+    dilemmaSurfacing = container.decodeFlexibleBool(forKey: .dilemmaSurfacing)
+    amendments = container.decodeFlexibleBool(forKey: .amendments)
+    interpretationLog = container.decodeFlexibleBool(forKey: .interpretationLog)
+    commitments = container.decodeFlexibleBool(forKey: .commitments)
+    attentionPolicies = container.decodeFlexibleBool(forKey: .attentionPolicies)
+  }
+
+  mutating func set(key: String, enabled: Bool) {
+    switch key {
+    case "context_sharing": contextSharing = enabled
+    case "dilemma_surfacing": dilemmaSurfacing = enabled
+    case "amendments": amendments = enabled
+    case "interpretation_log": interpretationLog = enabled
+    case "commitments": commitments = enabled
+    case "attention_policies": attentionPolicies = enabled
+    default: break
+    }
+  }
+}
+
+private struct MultiAgentResident: Identifiable, Decodable, Hashable {
+  let id: String
+  let name: String
+  let mandate: String
+  let enabled: Bool
+  let visible: Bool
+  let background: Bool
+  let reserveCompute: Bool
+  let model: String
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, mandate, enabled, visible, background, model
+    case reserveCompute = "reserve_compute"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    name = (try? container.decode(String.self, forKey: .name)) ?? id
+    mandate = (try? container.decode(String.self, forKey: .mandate)) ?? ""
+    enabled = container.decodeFlexibleBool(forKey: .enabled)
+    visible = container.decodeFlexibleBool(forKey: .visible)
+    background = container.decodeFlexibleBool(forKey: .background)
+    reserveCompute = container.decodeFlexibleBool(forKey: .reserveCompute)
+    model = (try? container.decode(String.self, forKey: .model)) ?? ""
+  }
+}
+
+private struct MultiAgentLogEntry: Identifiable, Decodable, Hashable {
+  let id: String
+  let statement: String
+  let status: String
+  let created: Int
+
+  enum CodingKeys: String, CodingKey {
+    case id, statement, summary, target, status, created
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    statement = (try? container.decode(String.self, forKey: .statement))
+      ?? (try? container.decode(String.self, forKey: .summary))
+      ?? (try? container.decode(String.self, forKey: .target))
+      ?? ""
+    status = (try? container.decode(String.self, forKey: .status)) ?? ""
+    created = container.decodeFlexibleInt(forKey: .created)
+  }
+}
+
 private struct Project: Identifiable, Decodable, Hashable {
   let id: String
   let name: String
@@ -7842,12 +8416,26 @@ private struct Project: Identifiable, Decodable, Hashable {
   let pathExists: Bool
   let draftExists: Bool
   let sessionCount: Int
+  let multiAgentBackgroundResidents: Int
+  let multiAgentResidents: [MultiAgentResident]
+  let multiAgentUnratifiedAmendments: [MultiAgentLogEntry]
+  let multiAgentToggles: MultiAgentToggles
+
+  var multiAgentBadgeLabel: String {
+    let residents = multiAgentBackgroundResidents == 1 ? "1 background resident" : "\(multiAgentBackgroundResidents) background residents"
+    let amendments = multiAgentUnratifiedAmendments.isEmpty ? "" : ", \(multiAgentUnratifiedAmendments.count) unratified amendment\(multiAgentUnratifiedAmendments.count == 1 ? "" : "s")"
+    return residents + amendments
+  }
 
   enum CodingKeys: String, CodingKey {
     case id, name, path
     case pathExists = "path_exists"
     case draftExists = "draft_exists"
     case sessionCount = "session_count"
+    case multiAgentBackgroundResidents = "multi_agent_background_residents"
+    case multiAgentResidents = "multi_agent_residents"
+    case multiAgentUnratifiedAmendments = "multi_agent_unratified_amendments"
+    case multiAgentToggles = "multi_agent_toggles"
   }
 
   init(from decoder: Decoder) throws {
@@ -7858,6 +8446,10 @@ private struct Project: Identifiable, Decodable, Hashable {
     pathExists = container.decodeFlexibleBool(forKey: .pathExists)
     draftExists = container.decodeFlexibleBool(forKey: .draftExists)
     sessionCount = container.decodeFlexibleInt(forKey: .sessionCount)
+    multiAgentBackgroundResidents = container.decodeFlexibleInt(forKey: .multiAgentBackgroundResidents)
+    multiAgentResidents = (try? container.decode([MultiAgentResident].self, forKey: .multiAgentResidents)) ?? []
+    multiAgentUnratifiedAmendments = (try? container.decode([MultiAgentLogEntry].self, forKey: .multiAgentUnratifiedAmendments)) ?? []
+    multiAgentToggles = (try? container.decode(MultiAgentToggles.self, forKey: .multiAgentToggles)) ?? MultiAgentToggles()
   }
 }
 

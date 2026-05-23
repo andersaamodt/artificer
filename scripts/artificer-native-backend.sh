@@ -23,6 +23,7 @@ Actions:
   mobile-set KEY VALUE
   health
   projects
+  projects-state
   project-add PATH NAME [COMMAND_EXEC_MODE]
   project-rename WORKSPACE_ID NAME
   project-delete WORKSPACE_ID
@@ -87,6 +88,11 @@ Actions:
   triage-decide PROPOSAL_ID DECISION
   triage-suppress PROPOSAL_ID SCOPE
   triage-cleanup DIRECTIVE
+  multi-agent-state
+  multi-agent-get WORKSPACE_ID
+  multi-agent-workspace-update WORKSPACE_ID CONTEXT_SHARING DILEMMA_SURFACING AMENDMENTS INTERPRETATION_LOG COMMITMENTS ATTENTION_POLICIES
+  multi-agent-resident-spawn WORKSPACE_ID RESIDENT_ID VISIBLE BACKGROUND RESERVE_COMPUTE MODEL
+  multi-agent-resident-update WORKSPACE_ID RESIDENT_ID ENABLED VISIBLE BACKGROUND RESERVE_COMPUTE MODEL
   models
   model-catalog
   model-install-start MODEL
@@ -752,6 +758,9 @@ case "$action" in
   projects)
     runtime_client project list
     ;;
+  projects-state)
+    api_get state
+    ;;
   project-add)
     path_value=${1-}
     name_value=${2-}
@@ -1183,6 +1192,63 @@ case "$action" in
   triage-cleanup)
     directive=${1-}
     api_post triage_cleanup directive "$directive"
+    ;;
+  multi-agent-state)
+    api_get state
+    ;;
+  multi-agent-get)
+    workspace_id=${1-}
+    api_get multi_agent_workspace_get workspace_id "$workspace_id"
+    ;;
+  multi-agent-workspace-update)
+    workspace_id=${1-}
+    context_sharing=${2:-1}
+    dilemma_surfacing=${3:-1}
+    amendments=${4:-1}
+    interpretation_log=${5:-1}
+    commitments=${6:-1}
+    attention_policies=${7:-1}
+    api_post multi_agent_workspace_update \
+      workspace_id "$workspace_id" \
+      context_sharing "$context_sharing" \
+      dilemma_surfacing "$dilemma_surfacing" \
+      amendments "$amendments" \
+      interpretation_log "$interpretation_log" \
+      commitments "$commitments" \
+      attention_policies "$attention_policies"
+    ;;
+  multi-agent-resident-spawn)
+    workspace_id=${1-}
+    resident_id=${2-}
+    visible=${3:-1}
+    background=${4:-1}
+    reserve_compute=${5:-0}
+    model_name=${6-}
+    api_post multi_agent_resident_spawn \
+      workspace_id "$workspace_id" \
+      resident_id "$resident_id" \
+      visible "$visible" \
+      background "$background" \
+      reserve_compute "$reserve_compute" \
+      model "$model_name"
+    ;;
+  multi-agent-resident-update)
+    workspace_id=${1-}
+    resident_id=${2-}
+    enabled=${3:-1}
+    visible=${4:-1}
+    background=${5:-1}
+    reserve_compute=${6:-0}
+    model_name=${7-}
+    api_post multi_agent_resident_update \
+      workspace_id "$workspace_id" \
+      resident_id "$resident_id" \
+      enabled "$enabled" \
+      visible "$visible" \
+      background "$background" \
+      reserve_compute "$reserve_compute" \
+      model_present "1" \
+      model "$model_name"
     ;;
   automation-daemon-status)
     daemon_fast_status_json
