@@ -261,7 +261,11 @@ type_text() {
     clip_file=$(mktemp "${TMPDIR:-/tmp}/artificer-voice-clip.XXXXXX")
     pbpaste > "$clip_file" 2>/dev/null || :
     printf '%s' "$text" | pbcopy
-    perform_key v command
+    if command -v cliclick >/dev/null 2>&1; then
+      cliclick kd:cmd t:v ku:cmd >/dev/null
+    else
+      perform_key v command
+    fi
     sleep 0.08
     pbcopy < "$clip_file" 2>/dev/null || :
     rm -f "$clip_file"

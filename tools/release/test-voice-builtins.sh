@@ -138,6 +138,10 @@ grep -q 'pbcopy hello, world' "$log_file" || {
   printf '%s\n' "dictation mode should type normalized dictated text" >&2
   exit 1
 }
+grep -q 'cliclick kd:cmd t:v ku:cmd' "$log_file" || {
+  printf '%s\n' "dictation mode should paste through cliclick when it is available" >&2
+  exit 1
+}
 
 run_voice "start listening" >/dev/null
 run_voice "listening phrase period" >/dev/null
