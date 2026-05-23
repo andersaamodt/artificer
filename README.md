@@ -231,4 +231,4 @@ automation-facing repo configuration.
 
 ## License
 
-Artificer is licensed under O.W.L. 2.0. See [LICENSE](LICENSE).
+Artificer is licensed under O.W.L. 3.0. See [LICENSE](LICENSE).

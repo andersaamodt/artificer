@@ -16,6 +16,7 @@
 
 - release workflow now builds macOS app artifacts directly and publishes both Linux architecture bundles
 - self-improvement plugin metadata now stores lane/model provenance, domain tags, evidence refs, admin actions, and risk level
+- project license updated from O.W.L. 2.0 to O.W.L. 3.0
 
 ## 0.1.0 - 2026-03-23
 
