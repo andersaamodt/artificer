@@ -33,6 +33,22 @@ Actions:
   attachment-upload WORKSPACE_ID CONVERSATION_ID FILE_PATH [MIME]
   session-run-next WORKSPACE_ID CONVERSATION_ID
   session-events WORKSPACE_ID CONVERSATION_ID [STREAM_SESSION] [OFFSET]
+  git-status WORKSPACE_ID
+  git-diff WORKSPACE_ID
+  git-branches WORKSPACE_ID
+  git-checkout-branch WORKSPACE_ID BRANCH [CREATE]
+  git-commit WORKSPACE_ID INCLUDE_UNSTAGED MESSAGE [PUSH]
+  git-push WORKSPACE_ID
+  open-project-target WORKSPACE_ID TARGET
+  queue-list WORKSPACE_ID CONVERSATION_ID [LIMIT]
+  queue-update WORKSPACE_ID CONVERSATION_ID ITEM_ID PROMPT
+  queue-cancel WORKSPACE_ID CONVERSATION_ID [ITEM_ID]
+  queue-stop WORKSPACE_ID CONVERSATION_ID
+  approval-answer WORKSPACE_ID CONVERSATION_ID DECISION SCOPE MATCH_MODE [PATTERN] [COMMAND]
+  decision-answer WORKSPACE_ID CONVERSATION_ID ANSWER
+  terminal-session-start WORKSPACE_ID
+  terminal-session-poll WORKSPACE_ID SESSION_ID [OFFSET]
+  terminal-session-stop WORKSPACE_ID
   dictation-status
   dictation-language-get
   dictation-language-set LANGUAGE
@@ -192,7 +208,7 @@ canonical_desktop_value_key() {
   key=$1
   reject_line_breaks "$key" "desktop preference key"
   case "$key" in
-    selected_workspace_id|selected_conversation_id|voice_local_action_1_name|voice_local_action_1_command|voice_local_action_1_phrases|voice_local_action_2_name|voice_local_action_2_command|voice_local_action_2_phrases)
+    selected_workspace_id|selected_conversation_id|theme_id|voice_local_action_1_name|voice_local_action_1_command|voice_local_action_1_phrases|voice_local_action_2_name|voice_local_action_2_command|voice_local_action_2_phrases)
       printf '%s\n' "$key"
       ;;
     *)
@@ -271,6 +287,7 @@ desktop_prefs_json() {
   voice_local_action_2_name=$(read_desktop_value voice_local_action_2_name 2>/dev/null || printf '')
   voice_local_action_2_command=$(read_desktop_value voice_local_action_2_command 2>/dev/null || printf '')
   voice_local_action_2_phrases=$(read_desktop_value voice_local_action_2_phrases 2>/dev/null || printf '')
+  theme_id=$(read_desktop_value theme_id 2>/dev/null || printf 'system')
   mobile_bridge=$(read_desktop_pref mobile_bridge 2>/dev/null || printf '%s\n' 0)
   mobile_tor=$(read_desktop_pref mobile_tor 2>/dev/null || printf '%s\n' 0)
   mobile_lan=$(read_desktop_pref mobile_lan 2>/dev/null || printf '%s\n' 0)
@@ -289,7 +306,7 @@ desktop_prefs_json() {
   mobile_lan=$(bool_pref_value "$mobile_lan" 2>/dev/null || printf '%s\n' 0)
   mobile_allow_execute=$(bool_pref_value "$mobile_allow_execute" 2>/dev/null || printf '%s\n' 0)
   mobile_allow_self_actuation=$(bool_pref_value "$mobile_allow_self_actuation" 2>/dev/null || printf '%s\n' 0)
-  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_sound":%s,"voice_builtin_commands":%s,"voice_dictation_commands":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s,"voice_local_action_1_name":%s,"voice_local_action_1_command":%s,"voice_local_action_1_phrases":%s,"voice_local_action_2_name":%s,"voice_local_action_2_command":%s,"voice_local_action_2_phrases":%s,"mobile_bridge":%s,"mobile_tor":%s,"mobile_lan":%s,"mobile_allow_execute":%s,"mobile_allow_self_actuation":%s}\n' \
+  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_sound":%s,"voice_builtin_commands":%s,"voice_dictation_commands":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s,"voice_local_action_1_name":%s,"voice_local_action_1_command":%s,"voice_local_action_1_phrases":%s,"voice_local_action_2_name":%s,"voice_local_action_2_command":%s,"voice_local_action_2_phrases":%s,"theme_id":%s,"mobile_bridge":%s,"mobile_tor":%s,"mobile_lan":%s,"mobile_allow_execute":%s,"mobile_allow_self_actuation":%s}\n' \
     "$([ "$background_mode" = 1 ] && printf true || printf false)" \
     "$([ "$menu_bar_icon" = 1 ] && printf true || printf false)" \
     "$([ "$voice_automations" = 1 ] && printf true || printf false)" \
@@ -304,6 +321,7 @@ desktop_prefs_json() {
     "$(json_escape "$voice_local_action_2_name")" \
     "$(json_escape "$voice_local_action_2_command")" \
     "$(json_escape "$voice_local_action_2_phrases")" \
+    "$(json_escape "$theme_id")" \
     "$([ "$mobile_bridge" = 1 ] && printf true || printf false)" \
     "$([ "$mobile_tor" = 1 ] && printf true || printf false)" \
     "$([ "$mobile_lan" = 1 ] && printf true || printf false)" \
@@ -789,6 +807,96 @@ case "$action" in
     stream_session=${3-}
     offset=${4:-0}
     runtime_client session events --workspace-id "$workspace_id" --conversation-id "$conversation_id" --stream-session "$stream_session" --offset "$offset"
+    ;;
+  git-status)
+    workspace_id=${1-}
+    api_get git_status workspace_id "$workspace_id"
+    ;;
+  git-diff)
+    workspace_id=${1-}
+    api_get git_diff workspace_id "$workspace_id"
+    ;;
+  git-branches)
+    workspace_id=${1-}
+    api_get git_branches workspace_id "$workspace_id"
+    ;;
+  git-checkout-branch)
+    workspace_id=${1-}
+    branch_name=${2-}
+    create_branch=${3:-0}
+    reject_line_breaks "$branch_name" "branch"
+    api_post git_checkout_branch workspace_id "$workspace_id" branch "$branch_name" create "$create_branch"
+    ;;
+  git-commit)
+    workspace_id=${1-}
+    include_unstaged=${2:-1}
+    message=${3-}
+    push_after=${4:-0}
+    api_post git_commit workspace_id "$workspace_id" include_unstaged "$include_unstaged" message "$message" push "$push_after"
+    ;;
+  git-push)
+    workspace_id=${1-}
+    api_post git_push workspace_id "$workspace_id"
+    ;;
+  open-project-target)
+    workspace_id=${1-}
+    target=${2:-finder}
+    reject_line_breaks "$target" "open target"
+    api_post open_in workspace_id "$workspace_id" target "$target"
+    ;;
+  queue-list)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    limit_value=${3:-20}
+    api_get queue_list workspace_id "$workspace_id" conversation_id "$conversation_id" limit "$limit_value"
+    ;;
+  queue-update)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    item_id=${3-}
+    prompt_text=${4-}
+    api_post queue_update workspace_id "$workspace_id" conversation_id "$conversation_id" item_id "$item_id" prompt "$prompt_text"
+    ;;
+  queue-cancel)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    item_id=${3-}
+    api_post queue_cancel workspace_id "$workspace_id" conversation_id "$conversation_id" item_id "$item_id"
+    ;;
+  queue-stop)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    api_post queue_stop workspace_id "$workspace_id" conversation_id "$conversation_id"
+    ;;
+  approval-answer)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    decision=${3:-deny}
+    scope_value=${4:-once}
+    match_mode=${5:-exact}
+    pattern_value=${6-}
+    command_value=${7-}
+    api_post approval_answer workspace_id "$workspace_id" conversation_id "$conversation_id" decision "$decision" scope "$scope_value" match_mode "$match_mode" pattern "$pattern_value" command "$command_value"
+    ;;
+  decision-answer)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    answer=${3-}
+    api_post decision_answer workspace_id "$workspace_id" conversation_id "$conversation_id" answer "$answer"
+    ;;
+  terminal-session-start)
+    workspace_id=${1-}
+    api_post terminal_session_start workspace_id "$workspace_id"
+    ;;
+  terminal-session-poll)
+    workspace_id=${1-}
+    session_id=${2-}
+    offset=${3:-0}
+    api_get terminal_session_poll workspace_id "$workspace_id" session_id "$session_id" offset "$offset"
+    ;;
+  terminal-session-stop)
+    workspace_id=${1-}
+    api_post terminal_session_stop workspace_id "$workspace_id"
     ;;
   dictation-status)
     api_get dictation_status
