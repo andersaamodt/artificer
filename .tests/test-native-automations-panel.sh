@@ -26,10 +26,18 @@ for file in "$template" "$generated"; do
     printf '%s\n' "Automations panel should include the automation list: $file" >&2
     exit 1
   }
-  grep -q 'func createAutomationFromDraft() async' "$file" || {
-    printf '%s\n' "Automations panel should create automations through the model: $file" >&2
-    exit 1
-  }
+	  grep -q 'func createAutomationFromDraft() async' "$file" || {
+	    printf '%s\n' "Automations panel should create automations through the model: $file" >&2
+	    exit 1
+	  }
+	  grep -q 'func beginEditingAutomation(_ automation: AutomationItem)' "$file" || {
+	    printf '%s\n' "Automations panel should let existing automations populate the edit form: $file" >&2
+	    exit 1
+	  }
+	  grep -q 'func deleteAutomationConfirmed() async' "$file" || {
+	    printf '%s\n' "Automations panel should delete automations through the model: $file" >&2
+	    exit 1
+	  }
   if sed -n '/private struct AutomationsDetailView: View/,/private struct AutomationCreatePane: View/p' "$file" | grep -q 'Voice Commands\|Edit Voice Commands\|VoiceCommandsOverviewPane'; then
     printf '%s\n' "Automations panel should not expose voice command editing: $file" >&2
     exit 1
@@ -117,6 +125,21 @@ grep -q 'automation-upsert WORKSPACE_ID CONVERSATION_ID NAME PROMPT SCHEDULE_KIN
 
 grep -q 'runtime_client automation upsert' "$backend" || {
   printf '%s\n' "Native backend should call runtime automation upsert" >&2
+  exit 1
+}
+
+grep -q -- '--automation-id "$automation_id"' "$backend" || {
+  printf '%s\n' "Native backend should pass automation ids for edit/delete actions" >&2
+  exit 1
+}
+
+grep -q 'automation-delete AUTOMATION_ID' "$backend" || {
+  printf '%s\n' "Native backend should expose automation-delete" >&2
+  exit 1
+}
+
+grep -q 'runtime_client automation delete' "$backend" || {
+  printf '%s\n' "Native backend should call runtime automation delete" >&2
   exit 1
 }
 

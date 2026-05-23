@@ -2415,6 +2415,16 @@ private struct AutomationsDetailView: View {
       await model.loadDesktopPrefs()
       await model.loadVoiceAutomationStatus()
     }
+    .confirmationDialog("Delete automation?", isPresented: $model.showingAutomationDeleteDialog, titleVisibility: .visible) {
+      Button("Delete", role: .destructive) {
+        Task { await model.deleteAutomationConfirmed() }
+      }
+      Button("Cancel", role: .cancel) {
+        model.clearPendingAutomationDelete()
+      }
+    } message: {
+      Text(model.automationDeleteName.isEmpty ? "This automation will be removed." : "Delete \(model.automationDeleteName)?")
+    }
   }
 
   private var automationSubtitle: String {
@@ -2430,7 +2440,7 @@ private struct AutomationCreatePane: View {
 
   var body: some View {
     Form {
-      Section("Add Automation") {
+      Section(model.automationEditingID.isEmpty ? "Add Automation" : "Edit Automation") {
         TextField("Name", text: $model.automationDraftName)
         Picker("Project", selection: Binding(
           get: { model.automationDraftProjectID.isEmpty ? (model.selectedProjectID ?? "") : model.automationDraftProjectID },
@@ -2504,9 +2514,17 @@ private struct AutomationCreatePane: View {
         Button {
           Task { await model.createAutomationFromDraft() }
         } label: {
-          Label("Add Automation", systemImage: "plus.circle")
+          Label(model.automationEditingID.isEmpty ? "Add Automation" : "Save Automation", systemImage: model.automationEditingID.isEmpty ? "plus.circle" : "checkmark.circle")
         }
         .disabled(!model.canCreateAutomation || model.isBusy)
+        if !model.automationEditingID.isEmpty {
+          Button(role: .cancel) {
+            model.cancelAutomationEditing()
+          } label: {
+            Label("Cancel Editing", systemImage: "xmark.circle")
+          }
+          .disabled(model.isBusy)
+        }
       }
     }
     .formStyle(.grouped)
@@ -2585,12 +2603,18 @@ private struct AutomationListRow: View {
           .lineLimit(3)
       }
       HStack {
+        FloatingIconButton(title: "Edit automation", systemImage: "pencil", disabled: model.isBusy) {
+          model.beginEditingAutomation(automation)
+        }
         Button {
           Task { await model.runAutomationNow(automation) }
         } label: {
           Label("Run Now", systemImage: "play.fill")
         }
         .disabled(model.isBusy)
+        FloatingIconButton(title: "Delete automation", systemImage: "trash", disabled: model.isBusy) {
+          model.requestDeleteAutomation(automation)
+        }
         Spacer()
         if !automation.lastStatus.isEmpty {
           Text(automation.lastStatus)
@@ -4161,6 +4185,10 @@ private final class ArtificerModel: ObservableObject {
   @Published var automationDraftPermissionMode = "default"
   @Published var automationDraftProgrammerReview = true
   @Published var automationDraftProgrammerReviewRounds = 2
+  @Published var automationEditingID = ""
+  @Published var showingAutomationDeleteDialog = false
+  @Published var automationDeleteID = ""
+  @Published var automationDeleteName = ""
 
   @Published var runMode = "auto"
   @Published var reasoningEffort = "medium"
@@ -5852,6 +5880,7 @@ private final class ArtificerModel: ObservableObject {
     let promptText = automationDraftPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
     let scheduleValue = automationDraftScheduleValue.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !projectID.isEmpty, !sessionID.isEmpty, !name.isEmpty, !promptText.isEmpty, !scheduleValue.isEmpty else { return }
+    let editingID = automationEditingID
     let result = await runBackend(
       "automation-upsert",
       projectID,
@@ -5868,14 +5897,69 @@ private final class ArtificerModel: ObservableObject {
       automationDraftPermissionMode,
       automationDraftProgrammerReview ? "1" : "0",
       "\(automationDraftProgrammerReviewRounds)",
-      automationDraftUsesNextRun ? "\(Int(automationDraftNextRunDate.timeIntervalSince1970))" : ""
+      automationDraftUsesNextRun ? "\(Int(automationDraftNextRunDate.timeIntervalSince1970))" : "",
+      editingID
     )
     if decode(GenericSuccessResponse.self, from: result) != nil || decode(AutomationMutationResponse.self, from: result) != nil {
-      automationDraftName = ""
-      automationDraftPrompt = ""
-      automationDraftUsesNextRun = false
-      statusMessage = "Automation added."
+      resetAutomationDraft(keepProjectAndSession: true)
+      statusMessage = editingID.isEmpty ? "Automation added." : "Automation saved."
       await loadAutomations()
+    }
+  }
+
+  func beginEditingAutomation(_ automation: AutomationItem) {
+    automationEditingID = automation.id
+    automationDraftName = automation.name
+    automationDraftPrompt = automation.prompt
+    automationDraftScheduleKind = automation.scheduleKind.isEmpty ? "interval" : automation.scheduleKind
+    automationDraftScheduleValue = automation.scheduleValue.isEmpty ? "1h" : automation.scheduleValue
+    automationDraftProjectID = automation.workspaceID
+    automationDraftSessionID = automation.conversationID
+    automationDraftEnabled = automation.enabled
+    automationDraftAllowSelfReschedule = automation.allowSelfReschedule
+    automationDraftRunMode = automation.runMode.isEmpty ? "assistant" : automation.runMode
+    automationDraftComputeBudget = automation.computeBudget.isEmpty ? "auto" : automation.computeBudget
+    automationDraftCommandExecMode = automation.commandExecMode.isEmpty ? "ask-some" : automation.commandExecMode
+    automationDraftPermissionMode = automation.permissionMode.isEmpty ? "default" : automation.permissionMode
+    automationDraftProgrammerReview = automation.programmerReview
+    automationDraftProgrammerReviewRounds = automation.programmerReviewRounds == 0 ? 2 : automation.programmerReviewRounds
+    automationDraftUsesNextRun = automation.nextRunEpoch > 0
+    if automation.nextRunEpoch > 0 {
+      automationDraftNextRunDate = Date(timeIntervalSince1970: TimeInterval(automation.nextRunEpoch))
+    }
+    statusMessage = "Editing automation."
+    Task { await loadAutomationDraftSessions(projectID: automation.workspaceID) }
+  }
+
+  func cancelAutomationEditing() {
+    resetAutomationDraft(keepProjectAndSession: true)
+    statusMessage = "Automation edit cancelled."
+  }
+
+  private func resetAutomationDraft(keepProjectAndSession: Bool) {
+    let currentProject = automationDraftProjectID
+    let currentSession = automationDraftSessionID
+    automationEditingID = ""
+    automationDraftName = ""
+    automationDraftPrompt = ""
+    automationDraftScheduleKind = "interval"
+    automationDraftScheduleValue = "1h"
+    automationDraftEnabled = true
+    automationDraftAllowSelfReschedule = false
+    automationDraftUsesNextRun = false
+    automationDraftNextRunDate = Date().addingTimeInterval(3600)
+    automationDraftRunMode = "assistant"
+    automationDraftComputeBudget = "auto"
+    automationDraftCommandExecMode = "ask-some"
+    automationDraftPermissionMode = "default"
+    automationDraftProgrammerReview = true
+    automationDraftProgrammerReviewRounds = 2
+    if keepProjectAndSession {
+      automationDraftProjectID = currentProject
+      automationDraftSessionID = currentSession
+    } else {
+      automationDraftProjectID = selectedProjectID ?? ""
+      automationDraftSessionID = selectedSessionID ?? ""
     }
   }
 
@@ -5891,6 +5975,32 @@ private final class ArtificerModel: ObservableObject {
     let result = await runBackend("automation-run", automation.id)
     if decode(GenericSuccessResponse.self, from: result) != nil || decode(AutomationMutationResponse.self, from: result) != nil {
       statusMessage = "Automation queued."
+      await loadAutomations()
+    }
+  }
+
+  func requestDeleteAutomation(_ automation: AutomationItem) {
+    automationDeleteID = automation.id
+    automationDeleteName = automation.name
+    showingAutomationDeleteDialog = true
+  }
+
+  func clearPendingAutomationDelete() {
+    automationDeleteID = ""
+    automationDeleteName = ""
+    showingAutomationDeleteDialog = false
+  }
+
+  func deleteAutomationConfirmed() async {
+    let automationID = automationDeleteID
+    clearPendingAutomationDelete()
+    guard !automationID.isEmpty else { return }
+    let result = await runBackend("automation-delete", automationID)
+    if decode(GenericSuccessResponse.self, from: result) != nil || decode(AutomationMutationResponse.self, from: result) != nil {
+      if automationEditingID == automationID {
+        resetAutomationDraft(keepProjectAndSession: true)
+      }
+      statusMessage = "Automation deleted."
       await loadAutomations()
     }
   }
@@ -7918,13 +8028,17 @@ private struct AutomationItem: Identifiable, Decodable, Hashable {
   let conversationTitle: String
   let prompt: String
   let scheduleKind: String
+  let scheduleValue: String
   let scheduleText: String
   let allowSelfReschedule: Bool
+  let nextRunEpoch: Int
   let nextRunISO: String
   let runMode: String
   let computeBudget: String
   let commandExecMode: String
   let permissionMode: String
+  let programmerReview: Bool
+  let programmerReviewRounds: Int
   let enabled: Bool
   let lastStatus: String
   let lastError: String
@@ -7936,13 +8050,17 @@ private struct AutomationItem: Identifiable, Decodable, Hashable {
     case conversationID = "conversation_id"
     case conversationTitle = "conversation_title"
     case scheduleKind = "schedule_kind"
+    case scheduleValue = "schedule_value"
     case scheduleText = "schedule_text"
     case allowSelfReschedule = "allow_self_reschedule"
+    case nextRunEpoch = "next_run"
     case nextRunISO = "next_run_iso"
     case runMode = "run_mode"
     case computeBudget = "compute_budget"
     case commandExecMode = "command_exec_mode"
     case permissionMode = "permission_mode"
+    case programmerReview = "programmer_review"
+    case programmerReviewRounds = "programmer_review_rounds"
     case lastStatus = "last_status"
     case lastError = "last_error"
   }
@@ -7957,13 +8075,17 @@ private struct AutomationItem: Identifiable, Decodable, Hashable {
     conversationTitle = (try? container.decode(String.self, forKey: .conversationTitle)) ?? ""
     prompt = (try? container.decode(String.self, forKey: .prompt)) ?? ""
     scheduleKind = (try? container.decode(String.self, forKey: .scheduleKind)) ?? ""
+    scheduleValue = (try? container.decode(String.self, forKey: .scheduleValue)) ?? ""
     scheduleText = (try? container.decode(String.self, forKey: .scheduleText)) ?? ""
     allowSelfReschedule = container.decodeFlexibleBool(forKey: .allowSelfReschedule)
+    nextRunEpoch = container.decodeFlexibleInt(forKey: .nextRunEpoch)
     nextRunISO = (try? container.decode(String.self, forKey: .nextRunISO)) ?? ""
     runMode = (try? container.decode(String.self, forKey: .runMode)) ?? ""
     computeBudget = (try? container.decode(String.self, forKey: .computeBudget)) ?? ""
     commandExecMode = (try? container.decode(String.self, forKey: .commandExecMode)) ?? ""
     permissionMode = (try? container.decode(String.self, forKey: .permissionMode)) ?? ""
+    programmerReview = container.decodeFlexibleBool(forKey: .programmerReview)
+    programmerReviewRounds = container.decodeFlexibleInt(forKey: .programmerReviewRounds)
     enabled = container.decodeFlexibleBool(forKey: .enabled)
     lastStatus = (try? container.decode(String.self, forKey: .lastStatus)) ?? ""
     lastError = (try? container.decode(String.self, forKey: .lastError)) ?? ""

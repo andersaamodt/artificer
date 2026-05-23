@@ -79,9 +79,10 @@ Actions:
   self-improve-run-options-set OBJECTIVE COMPETITION_ENABLED CHALLENGER_MODEL CODEX_WORK_CHECK SOURCE_PAPERS SOURCE_WEB SOURCE_RUNTIME SOURCE_REPO SOURCE_PLATFORM
   self-improve-run MODEL OBJECTIVE COMPETITION_ENABLED CHALLENGER_MODEL CODEX_WORK_CHECK SOURCE_PAPERS SOURCE_WEB SOURCE_RUNTIME SOURCE_REPO SOURCE_PLATFORM
   automations
-  automation-upsert WORKSPACE_ID CONVERSATION_ID NAME PROMPT SCHEDULE_KIND SCHEDULE_VALUE ENABLED ALLOW_SELF_RESCHEDULE RUN_MODE COMPUTE_BUDGET COMMAND_EXEC_MODE PERMISSION_MODE PROGRAMMER_REVIEW PROGRAMMER_REVIEW_ROUNDS NEXT_RUN
+  automation-upsert WORKSPACE_ID CONVERSATION_ID NAME PROMPT SCHEDULE_KIND SCHEDULE_VALUE ENABLED ALLOW_SELF_RESCHEDULE RUN_MODE COMPUTE_BUDGET COMMAND_EXEC_MODE PERMISSION_MODE PROGRAMMER_REVIEW PROGRAMMER_REVIEW_ROUNDS NEXT_RUN [AUTOMATION_ID]
   automation-run AUTOMATION_ID
   automation-toggle AUTOMATION_ID ENABLED
+  automation-delete AUTOMATION_ID
   models
   model-catalog
   model-install-start MODEL
@@ -1111,6 +1112,27 @@ case "$action" in
     programmer_review=${13:-1}
     programmer_review_rounds=${14:-2}
     next_run=${15:-}
+    automation_id=${16:-}
+    if [ -n "$automation_id" ]; then
+      runtime_client automation upsert \
+        --automation-id "$automation_id" \
+        --workspace-id "$workspace_id" \
+        --conversation-id "$conversation_id" \
+        --name "$name" \
+        --prompt "$prompt" \
+        --schedule-kind "$schedule_kind" \
+        --schedule-value "$schedule_value" \
+        --enabled "$enabled" \
+        --allow-self-reschedule "$allow_self_reschedule" \
+        --run-mode "$run_mode" \
+        --compute-budget "$compute_budget" \
+        --command-exec-mode "$command_exec_mode" \
+        --permission-mode "$permission_mode" \
+        --programmer-review "$programmer_review" \
+        --programmer-review-rounds "$programmer_review_rounds" \
+        --next-run "$next_run"
+      exit $?
+    fi
     runtime_client automation upsert \
       --workspace-id "$workspace_id" \
       --conversation-id "$conversation_id" \
@@ -1136,6 +1158,10 @@ case "$action" in
     automation_id=${1-}
     enabled=${2-}
     runtime_client automation toggle --automation-id "$automation_id" --enabled "$enabled"
+    ;;
+  automation-delete)
+    automation_id=${1-}
+    runtime_client automation delete --automation-id "$automation_id"
     ;;
   automation-daemon-status)
     daemon_fast_status_json
