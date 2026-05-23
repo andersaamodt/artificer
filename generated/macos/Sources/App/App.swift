@@ -1518,6 +1518,30 @@ private struct VoiceControlPreferencesTab: View {
               Task { await model.setDesktopPref("voice_automation_sound", enabled: nextValue) }
             }
           ))
+          Toggle("Use built-in Mac voice commands", isOn: Binding(
+            get: { model.voiceBuiltinCommandsEnabled },
+            set: { nextValue in
+              Task { await model.setDesktopPref("voice_builtin_commands", enabled: nextValue) }
+            }
+          ))
+          Text("Includes app switching, window controls, keyboard shortcuts, scrolling, numbered targets, pointer movement, and reading the current notification aloud.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+          VStack(alignment: .leading, spacing: 6) {
+            Toggle("Allow dictation into the frontmost app", isOn: Binding(
+              get: { model.voiceDictationCommandsEnabled },
+              set: { nextValue in
+                Task { await model.setDesktopPref("voice_dictation_commands", enabled: nextValue) }
+              }
+            ))
+            Text("Say Start dictation to type recognized speech into the active app, and Stop dictation to return to commands.")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          .padding(.leading, 18)
+          .disabled(!model.voiceBuiltinCommandsEnabled)
         }
         .padding(.leading, 18)
         .disabled(!model.voiceAutomationsEnabled)
@@ -1544,6 +1568,10 @@ private struct VoiceControlPreferencesTab: View {
           }
           .disabled(!model.canSaveVoiceCommandPhrases)
           VoiceCommandExampleRow(title: "Local action", example: "Set a name, shell command, and comma-separated phrases.")
+          VoiceCommandExampleRow(title: "Switch apps", example: "switch to Safari, open Calendar, quit Notes")
+          VoiceCommandExampleRow(title: "Read notification", example: "read it, read that aloud, what did that notification say")
+          VoiceCommandExampleRow(title: "Use the screen", example: "show numbers, click 3, show grid, scroll down")
+          VoiceCommandExampleRow(title: "Dictate", example: "start dictation, dictate hello comma world, stop dictation")
           VoiceCommandExampleRow(title: "Ask Artificer", example: "artificer summarize this thread, ask artificer check the build")
           VoiceCommandExampleRow(title: "Action prompt", example: "hey artificer turn this into a pull request")
         }
@@ -1969,6 +1997,8 @@ private final class ArtificerModel: ObservableObject {
   @Published var menuBarIconEnabled = false
   @Published var voiceAutomationsEnabled = false
   @Published var voiceRecognitionSoundEnabled = false
+  @Published var voiceBuiltinCommandsEnabled = true
+  @Published var voiceDictationCommandsEnabled = true
   @Published var voiceLlmPromptsEnabled = false
   @Published var voiceLlmActionsEnabled = false
   @Published var voiceLocalAction1Name = ""
@@ -2663,6 +2693,8 @@ private final class ArtificerModel: ObservableObject {
       menuBarIconEnabled = prefs.menuBarIcon
       voiceAutomationsEnabled = prefs.voiceAutomations
       voiceRecognitionSoundEnabled = prefs.voiceRecognitionSound
+      voiceBuiltinCommandsEnabled = prefs.voiceBuiltinCommands
+      voiceDictationCommandsEnabled = prefs.voiceDictationCommands
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
       loadVoiceLocalActions(from: prefs)
@@ -2700,6 +2732,12 @@ private final class ArtificerModel: ObservableObject {
     if let value = prefs["voice_automation_sound"] {
       voiceRecognitionSoundEnabled = desktopLaunchBool(value)
     }
+    if let value = prefs["voice_builtin_commands"] {
+      voiceBuiltinCommandsEnabled = desktopLaunchBool(value)
+    }
+    if let value = prefs["voice_dictation_commands"] {
+      voiceDictationCommandsEnabled = desktopLaunchBool(value)
+    }
     if let value = prefs["voice_automation_llm_prompts"] {
       voiceLlmPromptsEnabled = desktopLaunchBool(value)
     }
@@ -2735,6 +2773,8 @@ private final class ArtificerModel: ObservableObject {
       menuBarIconEnabled = prefs.menuBarIcon
       voiceAutomationsEnabled = prefs.voiceAutomations
       voiceRecognitionSoundEnabled = prefs.voiceRecognitionSound
+      voiceBuiltinCommandsEnabled = prefs.voiceBuiltinCommands
+      voiceDictationCommandsEnabled = prefs.voiceDictationCommands
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
       loadVoiceLocalActions(from: prefs)
@@ -4122,6 +4162,8 @@ private struct DesktopPrefsResponse: Decodable {
   let menuBarIcon: Bool
   let voiceAutomations: Bool
   let voiceRecognitionSound: Bool
+  let voiceBuiltinCommands: Bool
+  let voiceDictationCommands: Bool
   let voiceLlmPrompts: Bool
   let voiceLlmActions: Bool
   let voiceLocalAction1Name: String
@@ -4142,6 +4184,8 @@ private struct DesktopPrefsResponse: Decodable {
     case menuBarIcon = "menu_bar_icon"
     case voiceAutomations = "voice_automations"
     case voiceRecognitionSound = "voice_automation_sound"
+    case voiceBuiltinCommands = "voice_builtin_commands"
+    case voiceDictationCommands = "voice_dictation_commands"
     case voiceLlmPrompts = "voice_automation_llm_prompts"
     case voiceLlmActions = "voice_automation_llm_actions"
     case voiceLocalAction1Name = "voice_local_action_1_name"
@@ -4164,6 +4208,8 @@ private struct DesktopPrefsResponse: Decodable {
     menuBarIcon = container.decodeFlexibleBool(forKey: .menuBarIcon)
     voiceAutomations = container.decodeFlexibleBool(forKey: .voiceAutomations)
     voiceRecognitionSound = container.decodeFlexibleBool(forKey: .voiceRecognitionSound)
+    voiceBuiltinCommands = container.decodeFlexibleBool(forKey: .voiceBuiltinCommands, defaultValue: true)
+    voiceDictationCommands = container.decodeFlexibleBool(forKey: .voiceDictationCommands, defaultValue: true)
     voiceLlmPrompts = container.decodeFlexibleBool(forKey: .voiceLlmPrompts)
     voiceLlmActions = container.decodeFlexibleBool(forKey: .voiceLlmActions)
     voiceLocalAction1Name = (try? container.decode(String.self, forKey: .voiceLocalAction1Name)) ?? ""
@@ -4737,12 +4783,12 @@ private extension KeyedDecodingContainer {
     return 0
   }
 
-  func decodeFlexibleBool(forKey key: Key) -> Bool {
+  func decodeFlexibleBool(forKey key: Key, defaultValue: Bool = false) -> Bool {
     if let value = try? decode(Bool.self, forKey: key) { return value }
     if let value = try? decode(Int.self, forKey: key) { return value != 0 }
     if let value = try? decode(String.self, forKey: key) {
       return ["1", "true", "yes", "enabled", "ready"].contains(value.lowercased())
     }
-    return false
+    return defaultValue
   }
 }

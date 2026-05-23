@@ -54,6 +54,22 @@ for file in "$template" "$generated"; do
     printf '%s\n' "Native UI should persist recognized-command sound feedback: $file" >&2
     exit 1
   }
+  grep -q 'Use built-in Mac voice commands' "$file" || {
+    printf '%s\n' "Native UI should expose built-in voice commands: $file" >&2
+    exit 1
+  }
+  grep -q 'Allow dictation into the frontmost app' "$file" || {
+    printf '%s\n' "Native UI should expose voice dictation into apps: $file" >&2
+    exit 1
+  }
+  grep -q 'voice_builtin_commands' "$file" || {
+    printf '%s\n' "Native UI should persist built-in voice command preference: $file" >&2
+    exit 1
+  }
+  grep -q 'voice_dictation_commands' "$file" || {
+    printf '%s\n' "Native UI should persist voice dictation preference: $file" >&2
+    exit 1
+  }
   grep -q 'voice_local_action_1_phrases' "$file" || {
     printf '%s\n' "Native UI should load and save local action voice phrases: $file" >&2
     exit 1
@@ -124,8 +140,33 @@ grep -q 'voice_automation_sound' "$backend" || {
   exit 1
 }
 
+grep -q 'voice_builtin_commands' "$backend" || {
+  printf '%s\n' "Native backend should persist built-in voice command preference" >&2
+  exit 1
+}
+
+grep -q 'voice_dictation_commands' "$backend" || {
+  printf '%s\n' "Native backend should persist voice dictation preference" >&2
+  exit 1
+}
+
 grep -q 'play_recognition_sound' "$root/scripts/artificer-voice-automations.sh" || {
   printf '%s\n' "Voice listener should play feedback when a command is recognized" >&2
+  exit 1
+}
+
+grep -q 'run_builtin_action' "$root/scripts/artificer-voice-automations.sh" || {
+  printf '%s\n' "Voice listener should dispatch built-in macOS-style commands" >&2
+  exit 1
+}
+
+grep -q 'read_notification' "$root/scripts/artificer-voice-builtins.sh" || {
+  printf '%s\n' "Voice built-ins should support reading the current notification" >&2
+  exit 1
+}
+
+grep -q 'start_dictation' "$root/scripts/artificer-voice-builtins.sh" || {
+  printf '%s\n' "Voice built-ins should support dictation mode" >&2
   exit 1
 }
 

@@ -26,6 +26,7 @@ workspace_add_modal_and_tilde	Add Project supports ~/ expansion and modal action
 workspace_browse_path_population	Browse and directory picker populate folder path and placeholder.	test-workspace-browse-path-population.sh
 workspace_drag_surface	Project rows drag from row surface (not drag-handle controls).	test-workspace-drag-surface-behavior.sh
 automations_layout	Automations appears as left-nav section with right-pane workflow.	test-automations-pane-layout.sh
+voice_builtins	Voice automations dispatch macOS-style built-ins for app switching, numbered grid clicks, notification reading, and dictation mode.	test-voice-builtins.sh
 gui_lifecycle_smoke_safari_driver	Safari GUI lifecycle smoke uses safaridriver/WebDriver with Safari session-continue interlock handling instead of deprecated Apple-event page scripting.	test-gui-lifecycle-smoke-safaridriver-contract.sh
 self_reflexive_self_actuation	Permissions include reflexive knowledge plus self-actuation and wire both through run/queue/runtime command gating.	test-self-reflexive-self-actuation-permissions.sh
 self_knowledge_introspection	Reflexive knowledge runtime exposes structured self-knowledge and contributor-level LLM/Ollama teaching surfaces through API and appctl.	test-self-knowledge-introspection-surface.sh

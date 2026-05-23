@@ -27,6 +27,14 @@ for file in "$template" "$generated"; do
     printf '%s\n' "Native Settings should expose voice controls in their own tab: $file" >&2
     exit 1
   }
+  grep -q 'Use built-in Mac voice commands' "$file" || {
+    printf '%s\n' "Native Settings should expose built-in Mac voice commands: $file" >&2
+    exit 1
+  }
+  grep -q 'Allow dictation into the frontmost app' "$file" || {
+    printf '%s\n' "Native Settings should expose voice dictation into apps: $file" >&2
+    exit 1
+  }
   if sed -n '/private struct AutomationsPreferencesTab: View/,/private struct VoiceControlPreferencesTab: View/p' "$file" | grep -q 'Voice automations\|Save Local Actions'; then
     printf '%s\n' "Native Settings should not bury voice command editing in Automations: $file" >&2
     exit 1

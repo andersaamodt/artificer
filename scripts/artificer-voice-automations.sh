@@ -4,6 +4,7 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
 backend_script="$script_dir/artificer-native-backend.sh"
+builtins_script="$script_dir/artificer-voice-builtins.sh"
 home=${HOME:?}
 state_root=${ARTIFICER_NATIVE_STATE_ROOT:-${XDG_STATE_HOME:-"$home/.local/state"}/artificer-native}
 config_root=${XDG_CONFIG_HOME:-"$home/.config"}/artificer
@@ -15,7 +16,7 @@ label="com.artificer.voice-automations"
 plist="$home/Library/LaunchAgents/$label.plist"
 log_file="$daemon_dir/voice-automations.log"
 spellbook_dir="$home/.spellbook"
-PATH="$spellbook_dir:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+PATH="$spellbook_dir:${PATH:-/usr/bin:/bin}:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export PATH
 
 usage() {
@@ -118,6 +119,16 @@ read_pref_raw() {
 pref_bool() {
   key=$1
   value=$(read_pref_raw "$key" 2>/dev/null || printf '0')
+  case "$value" in
+    1|true|yes|on|enabled) printf '1' ;;
+    *) printf '0' ;;
+  esac
+}
+
+pref_bool_default() {
+  key=$1
+  default_value=${2:-0}
+  value=$(read_pref_raw "$key" 2>/dev/null || printf '%s' "$default_value")
   case "$value" in
     1|true|yes|on|enabled) printf '1' ;;
     *) printf '0' ;;
@@ -281,6 +292,40 @@ run_known_action() {
   return 2
 }
 
+run_builtin_action() {
+  phrase=$1
+  [ "$(pref_bool_default voice_builtin_commands 1)" = 1 ] || return 2
+  [ -x "$builtins_script" ] || return 2
+  output_file=$(mktemp "${TMPDIR:-/tmp}/artificer-voice-builtins.XXXXXX")
+  dictation_enabled=$(pref_bool_default voice_dictation_commands 1)
+  if ARTIFICER_VOICE_DICTATION_ENABLED="$dictation_enabled" "$builtins_script" handle "$phrase" > "$output_file" 2>&1; then
+    output=$(sed -n '1p' "$output_file")
+    rm -f "$output_file"
+    [ -n "$output" ] || output="Ran built-in voice command."
+    play_recognition_sound
+    log_event "recognized phrase='$phrase' action='builtin'"
+    write_status triggered "$output" "$phrase" "builtin"
+    return 0
+  fi
+  builtin_rc=$?
+  output=$(sed -n '1p' "$output_file")
+  rm -f "$output_file"
+  if [ "$builtin_rc" = 2 ]; then
+    return 2
+  fi
+  [ -n "$output" ] || output="Built-in voice command failed."
+  log_event "built-in action failed phrase='$phrase' message='$output'"
+  write_status error "$output" "$phrase" "builtin"
+  return 1
+}
+
+dictation_builtin_active() {
+  [ "$(pref_bool_default voice_builtin_commands 1)" = 1 ] || return 1
+  [ "$(pref_bool_default voice_dictation_commands 1)" = 1 ] || return 1
+  [ -x "$builtins_script" ] || return 1
+  "$builtins_script" dictation-active >/dev/null 2>&1
+}
+
 llm_prompt_from_phrase() {
   phrase=$1
   case "$phrase" in
@@ -400,18 +445,34 @@ handle_phrase() {
   fi
   log_event "heard phrase='$phrase'"
 
-  if run_known_action "$phrase"; then
+  if dictation_builtin_active; then
+    run_builtin_action "$phrase" || true
     return 0
   fi
-  action_rc=$?
+
+  action_rc=0
+  run_known_action "$phrase" || action_rc=$?
+  if [ "$action_rc" = 0 ]; then
+    return 0
+  fi
   if [ "$action_rc" != 2 ]; then
     return 0
   fi
 
-  if queue_llm_prompt "$phrase"; then
+  builtin_rc=0
+  run_builtin_action "$phrase" || builtin_rc=$?
+  if [ "$builtin_rc" = 0 ]; then
     return 0
   fi
-  prompt_rc=$?
+  if [ "$builtin_rc" != 2 ]; then
+    return 0
+  fi
+
+  prompt_rc=0
+  queue_llm_prompt "$phrase" || prompt_rc=$?
+  if [ "$prompt_rc" = 0 ]; then
+    return 0
+  fi
   if [ "$prompt_rc" != 2 ]; then
     return 0
   fi

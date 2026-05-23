@@ -128,9 +128,11 @@ Implemented natively:
 - Automations sidebar panel with add/list/run controls plus Preferences controls
   for launching, pausing, and checking due automations in the existing Artificer
   background runtime
-- voice automation Preferences and a local launchd-backed listener for
-  user-configured local command phrases, with separate opt-ins for
-  voice-to-Artificer prompts and voice-triggered Artificer actions
+- voice automation Preferences and a local app-hosted listener for
+  user-configured local command phrases, built-in macOS-style commands,
+  voice dictation into the frontmost app, current-notification reading aloud,
+  and separate opt-ins for voice-to-Artificer prompts and voice-triggered
+  Artificer actions
 - Artificer Mobile as a native Android/iOS thin client, paired to this computer
   through the desktop Mobile bridge over localhost, explicit LAN exposure, or
   an optional Tor hidden service
@@ -155,6 +157,14 @@ Deferred on purpose:
 - the detailed self-improvement/assay dashboards stay in hosted Artificer; the
   native app exposes the underlying run/session controls without cloning every
   diagnostic visualization
+
+Voice control expansion ideas for later:
+
+- context-sensitive command lists that change with the active app
+- more reliable named-control clicking for commands like `Click Done` across
+  every native app
+- VoiceOver command parity
+- code-aware dictation modes for programming editors
 
 ## Source Layout
 
