@@ -50,6 +50,12 @@ printf 'say %s\n' "\$*" >> "$log_file"
 exit 0
 EOF
 
+cat > "$bin_dir/afplay" <<EOF
+#!/bin/sh
+printf 'afplay %s\n' "\$*" >> "$log_file"
+exit 0
+EOF
+
 cat > "$bin_dir/pmset" <<EOF
 #!/bin/sh
 printf 'pmset %s\n' "\$*" >> "$log_file"
@@ -72,6 +78,13 @@ EOF
 cat > "$bin_dir/pbpaste" <<EOF
 #!/bin/sh
 cat "$clipboard_file"
+exit 0
+EOF
+
+cat > "$bin_dir/local-latency-action" <<EOF
+#!/bin/sh
+sleep 0.05
+printf '%s\n' 'local-action' >> "$log_file"
 exit 0
 EOF
 
@@ -132,6 +145,30 @@ printf '%s\n' "$unmatched_json" | grep -q '"last_action":"unmatched"' || {
   exit 1
 }
 
+cat > "$home_dir/.config/artificer/ui-prefs.env" <<EOF
+voice_automations=1
+voice_automation_sound=1
+voice_builtin_commands=1
+voice_dictation_commands=1
+voice_automation_llm_prompts=0
+voice_automation_llm_actions=0
+voice_local_action_1_name=Latency check
+voice_local_action_1_command=$bin_dir/local-latency-action
+voice_local_action_1_phrases=latency check
+EOF
+: > "$log_file"
+run_voice "latency check" >/dev/null
+sleep 0.1
+first_feedback_lines=$(grep -E '^(afplay|local-action)' "$log_file" | head -2 | tr '\n' ' ')
+case "$first_feedback_lines" in
+  afplay*" local-action "*) ;;
+  *)
+    printf '%s\n' "recognized-command sound should start before a matched local action runs" >&2
+    printf '%s\n' "$first_feedback_lines" >&2
+    exit 1
+    ;;
+esac
+
 grep -q 'voice_builtin_commands' "$repo_root/scripts/artificer-native-backend.sh" || {
   printf '%s\n' "native backend should persist built-in voice command preference" >&2
   exit 1
@@ -139,6 +176,26 @@ grep -q 'voice_builtin_commands' "$repo_root/scripts/artificer-native-backend.sh
 
 grep -q 'voice_dictation_commands' "$repo_root/templates/macos/App.swift.template" || {
   printf '%s\n' "native Preferences should expose voice dictation preference" >&2
+  exit 1
+}
+
+grep -q 'voiceAutomationCaptureSeconds: TimeInterval = 2.2' "$repo_root/templates/macos/App.swift.template" || {
+  printf '%s\n' "native voice listener should use shorter capture windows for lower command latency" >&2
+  exit 1
+}
+
+grep -q 'voiceAutomationLoopPauseNanoseconds: UInt64 = 80_000_000' "$repo_root/templates/macos/App.swift.template" || {
+  printf '%s\n' "native voice listener should leave only a short gap between capture windows" >&2
+  exit 1
+}
+
+grep -q 'waitForVoiceAutomationCaptureWindow' "$repo_root/templates/macos/App.swift.template" || {
+  printf '%s\n' "native voice listener should stop capture early after speech falls silent" >&2
+  exit 1
+}
+
+grep -q 'recorder.isMeteringEnabled = true' "$repo_root/templates/macos/App.swift.template" || {
+  printf '%s\n' "native voice listener should enable metering for speech-end latency tuning" >&2
   exit 1
 }
 

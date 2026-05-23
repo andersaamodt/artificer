@@ -7,6 +7,38 @@ import SwiftUI
 
 private let fallbackProjectDir = "__PROJECT_DIR__"
 private let appDisplayName = "__APP_NAME__"
+private let voiceAutomationCaptureSeconds: TimeInterval = 2.2
+private let voiceAutomationLoopPauseNanoseconds: UInt64 = 80_000_000
+private let voiceAutomationMeterPollNanoseconds: UInt64 = 50_000_000
+private let voiceAutomationSpeechThresholdDecibels: Float = -45.0
+private let voiceAutomationTrailingSilenceSeconds: TimeInterval = 0.45
+private let voiceAutomationMinimumCaptureSeconds: TimeInterval = 0.7
+
+private func waitForVoiceAutomationCaptureWindow(_ recorder: AVAudioRecorder, maxSeconds: TimeInterval) async -> TimeInterval {
+  let startedAt = Date()
+  var heardSpeech = false
+  var lastSpeechAt = startedAt
+  let maxDuration = max(1.0, maxSeconds)
+  while !Task.isCancelled {
+    recorder.updateMeters()
+    let now = Date()
+    let elapsed = now.timeIntervalSince(startedAt)
+    if recorder.averagePower(forChannel: 0) > voiceAutomationSpeechThresholdDecibels {
+      heardSpeech = true
+      lastSpeechAt = now
+    }
+    if heardSpeech,
+       elapsed >= voiceAutomationMinimumCaptureSeconds,
+       now.timeIntervalSince(lastSpeechAt) >= voiceAutomationTrailingSilenceSeconds {
+      return elapsed
+    }
+    if elapsed >= maxDuration {
+      return elapsed
+    }
+    try? await Task.sleep(nanoseconds: voiceAutomationMeterPollNanoseconds)
+  }
+  return Date().timeIntervalSince(startedAt)
+}
 
 @main
 struct ArtificerNativeApp: App {
@@ -2799,7 +2831,7 @@ private final class ArtificerModel: ObservableObject {
           guard let self else { return }
           self.appendVoiceAutomationLog("native loop tick")
           await self.runVoiceAutomationLoopTickDetached()
-          try? await Task.sleep(nanoseconds: 250_000_000)
+          try? await Task.sleep(nanoseconds: voiceAutomationLoopPauseNanoseconds)
         }
       }
     } else {
@@ -2817,7 +2849,7 @@ private final class ArtificerModel: ObservableObject {
     if isDictating {
       return
     }
-    guard let audioURL = await captureVoiceAutomationAudio(seconds: 3) else {
+    guard let audioURL = await captureVoiceAutomationAudio(seconds: voiceAutomationCaptureSeconds) else {
       return
     }
     defer { try? FileManager.default.removeItem(at: audioURL) }
@@ -2859,7 +2891,7 @@ private final class ArtificerModel: ObservableObject {
     guard voiceAutomationEnabledFromDisk() else {
       return
     }
-    guard let audioURL = await captureVoiceAutomationAudioDetached(seconds: 3) else {
+    guard let audioURL = await captureVoiceAutomationAudioDetached(seconds: voiceAutomationCaptureSeconds) else {
       return
     }
     Task.detached { [weak self] in
@@ -2963,13 +2995,14 @@ private final class ArtificerModel: ObservableObject {
 
     do {
       let recorder = try AVAudioRecorder(url: audioURL, settings: settings)
+      recorder.isMeteringEnabled = true
       recorder.prepareToRecord()
       guard recorder.record() else {
         appendVoiceAutomationLog("native recorder did not start")
         return nil
       }
       appendVoiceAutomationLog("native recorder started")
-      try? await Task.sleep(nanoseconds: UInt64(max(1.0, seconds) * 1_000_000_000))
+      let elapsed = await waitForVoiceAutomationCaptureWindow(recorder, maxSeconds: seconds)
       recorder.stop()
       let size = ((try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? NSNumber)?.intValue) ?? 0
       guard size > 44 else {
@@ -2977,7 +3010,7 @@ private final class ArtificerModel: ObservableObject {
         appendVoiceAutomationLog("native recorder captured no audio")
         return nil
       }
-      appendVoiceAutomationLog("native recorder captured \(size) bytes")
+      appendVoiceAutomationLog("native recorder captured \(size) bytes in \(String(format: "%.2f", elapsed))s")
       return audioURL
     } catch {
       try? FileManager.default.removeItem(at: audioURL)
@@ -3060,6 +3093,7 @@ private final class ArtificerModel: ObservableObject {
 
     do {
       let recorder = try AVAudioRecorder(url: audioURL, settings: settings)
+      recorder.isMeteringEnabled = true
       recorder.prepareToRecord()
       voiceAutomationRecorder = recorder
       guard recorder.record() else {
@@ -3069,7 +3103,7 @@ private final class ArtificerModel: ObservableObject {
         return nil
       }
       appendVoiceAutomationLog("native recorder started")
-      try? await Task.sleep(nanoseconds: UInt64(max(1.0, seconds) * 1_000_000_000))
+      let elapsed = await waitForVoiceAutomationCaptureWindow(recorder, maxSeconds: seconds)
       recorder.stop()
       voiceAutomationRecorder = nil
       let size = ((try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? NSNumber)?.intValue) ?? 0
@@ -3079,7 +3113,7 @@ private final class ArtificerModel: ObservableObject {
         lastError = "Voice automation recording captured no audio."
         return nil
       }
-      appendVoiceAutomationLog("native recorder captured \(size) bytes")
+      appendVoiceAutomationLog("native recorder captured \(size) bytes in \(String(format: "%.2f", elapsed))s")
       return audioURL
     } catch {
       voiceAutomationRecorder = nil

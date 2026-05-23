@@ -278,8 +278,8 @@ run_known_action() {
     [ -n "$name" ] || name="Local action $slot"
     if phrase_in_list "$phrase" "$phrases"; then
       resolved_command=$(resolve_action_command "$command_text")
+      play_recognition_sound
       if /bin/sh -c "$resolved_command" >/dev/null 2>&1; then
-        play_recognition_sound
         log_event "recognized phrase='$phrase' action='$resolved_command'"
         write_status triggered "Ran local action: $name." "$phrase" "$resolved_command"
         return 0
@@ -393,14 +393,14 @@ tick_once_locked() {
     return 0
   fi
 
-  window_seconds=${ARTIFICER_VOICE_AUTOMATION_WINDOW_SECONDS:-3}
+  window_seconds=${ARTIFICER_VOICE_AUTOMATION_WINDOW_SECONDS:-2}
   case "$window_seconds" in
     ''|*[!0-9]*)
-      window_seconds=3
+      window_seconds=2
       ;;
   esac
-  if [ "$window_seconds" -lt 2 ]; then
-    window_seconds=2
+  if [ "$window_seconds" -lt 1 ]; then
+    window_seconds=1
   fi
   if [ "$window_seconds" -gt 8 ]; then
     window_seconds=8
@@ -493,10 +493,10 @@ daemon_loop() {
   write_status listening "Voice automations listening locally." "" ""
   while [ "$(pref_bool voice_automations)" = 1 ]; do
     tick_once || true
-    cooldown=${ARTIFICER_VOICE_AUTOMATION_COOLDOWN_SECONDS:-2}
+    cooldown=${ARTIFICER_VOICE_AUTOMATION_COOLDOWN_SECONDS:-1}
     case "$cooldown" in
       ''|*[!0-9]*)
-        cooldown=2
+        cooldown=1
         ;;
     esac
     if [ "$cooldown" -lt 1 ]; then
