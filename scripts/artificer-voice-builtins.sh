@@ -257,15 +257,15 @@ press_key_spec() {
 type_text() {
   text=$1
   [ -n "$text" ] || return 0
+  if command -v cliclick >/dev/null 2>&1; then
+    cliclick "t:$text" >/dev/null
+    return 0
+  fi
   if command -v pbcopy >/dev/null 2>&1 && command -v pbpaste >/dev/null 2>&1; then
     clip_file=$(mktemp "${TMPDIR:-/tmp}/artificer-voice-clip.XXXXXX")
     pbpaste > "$clip_file" 2>/dev/null || :
     printf '%s' "$text" | pbcopy
-    if command -v cliclick >/dev/null 2>&1; then
-      cliclick kd:cmd t:v ku:cmd >/dev/null
-    else
-      perform_key v command
-    fi
+    perform_key v command
     sleep 0.08
     pbcopy < "$clip_file" 2>/dev/null || :
     rm -f "$clip_file"

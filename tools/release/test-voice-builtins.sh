@@ -134,12 +134,8 @@ grep -q 'say Messages. Alice. Dinner is ready' "$log_file" || {
 run_voice "start dictation" >/dev/null
 run_voice "hello comma world" >/dev/null
 run_voice "stop dictation" >/dev/null
-grep -q 'pbcopy hello, world' "$log_file" || {
-  printf '%s\n' "dictation mode should type normalized dictated text" >&2
-  exit 1
-}
-grep -q 'cliclick kd:cmd t:v ku:cmd' "$log_file" || {
-  printf '%s\n' "dictation mode should paste through cliclick when it is available" >&2
+grep -q 'cliclick t:hello, world' "$log_file" || {
+  printf '%s\n' "dictation mode should type through cliclick when it is available" >&2
   exit 1
 }
 
@@ -148,7 +144,7 @@ run_voice "listening phrase period" >/dev/null
 run_voice "show grid" >/dev/null
 run_voice "click 5" >/dev/null
 run_voice "stop listening" >/dev/null
-grep -q 'pbcopy listening phrase.' "$log_file" || {
+grep -q 'cliclick t:listening phrase.' "$log_file" || {
   printf '%s\n' "start listening should enter dictation mode until stop listening" >&2
   exit 1
 }
@@ -174,11 +170,11 @@ if dictation_active; then
   printf '%s\n' "stop dictating should leave dictation mode" >&2
   exit 1
 fi
-grep -q 'pbcopy here is a sentence' "$log_file" || {
+grep -q 'cliclick t:here is a sentence' "$log_file" || {
   printf '%s\n' "dictate with inline text should type the inline phrase immediately" >&2
   exit 1
 }
-grep -q 'pbcopy and it continues.' "$log_file" || {
+grep -q 'cliclick t:and it continues.' "$log_file" || {
   printf '%s\n' "dictate with inline text should keep dictating follow-on phrases" >&2
   exit 1
 }
