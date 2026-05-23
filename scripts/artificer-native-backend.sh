@@ -24,6 +24,8 @@ Actions:
   health
   projects
   project-add PATH NAME [COMMAND_EXEC_MODE]
+  project-rename WORKSPACE_ID NAME
+  project-delete WORKSPACE_ID
   sessions WORKSPACE_ID
   session WORKSPACE_ID CONVERSATION_ID
   session-create WORKSPACE_ID TITLE [MODEL]
@@ -745,6 +747,18 @@ case "$action" in
     reject_line_breaks "$path_value" "workspace path"
     reject_line_breaks "$name_value" "workspace name"
     runtime_client project add --path "$path_value" --name "$name_value" --command-exec-mode "$command_exec_mode"
+    ;;
+  project-rename)
+    workspace_id=${1-}
+    name_value=${2-}
+    reject_line_breaks "$workspace_id" "workspace id"
+    reject_line_breaks "$name_value" "workspace name"
+    runtime_client project rename --workspace-id "$workspace_id" --name "$name_value"
+    ;;
+  project-delete)
+    workspace_id=${1-}
+    reject_line_breaks "$workspace_id" "workspace id"
+    runtime_client project delete --workspace-id "$workspace_id"
     ;;
   sessions)
     workspace_id=${1-}

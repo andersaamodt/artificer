@@ -279,4 +279,33 @@ bad' running > "$rules_tmp/organize-bad-key.out" 2> "$rules_tmp/organize-bad-key
   exit 1
 fi
 
+rules_backend project-rename "$rules_workspace_id" "Native Rules Renamed" > "$rules_tmp/project-rename.json"
+python3 - "$rules_tmp/project-rename.json" "$rules_workspace_id" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+workspace_id = sys.argv[2]
+assert payload.get("success") is True, payload
+workspace = payload.get("workspace") or {}
+assert workspace.get("id") == workspace_id and workspace.get("name") == "Native Rules Renamed", payload
+PY
+
+rules_backend project-delete "$rules_workspace_id" > "$rules_tmp/project-delete.json"
+python3 - "$rules_tmp/project-delete.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+assert payload.get("success") is True, payload
+PY
+
+rules_backend projects > "$rules_tmp/projects-after-delete.json"
+python3 - "$rules_tmp/projects-after-delete.json" "$rules_workspace_id" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+workspace_id = sys.argv[2]
+assert payload.get("success") is True, payload
+assert not any(project.get("id") == workspace_id for project in (payload.get("projects") or [])), payload
+PY
+
 printf '%s\n' "ok native settings parity contract"

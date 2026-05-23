@@ -354,6 +354,14 @@ private struct RootView: View {
       BranchSheet(model: model)
         .frame(minWidth: 380, minHeight: 180)
     }
+    .sheet(isPresented: $model.showingProjectRenameDialog) {
+      ProjectRenameSheet(model: model)
+        .frame(minWidth: 420, minHeight: 180)
+    }
+    .sheet(isPresented: $model.showingProjectRemoveDialog) {
+      ProjectRemoveSheet(model: model)
+        .frame(minWidth: 430, minHeight: 190)
+    }
     .sheet(isPresented: $model.showingQueueTray) {
       QueueTraySheet(model: model)
         .frame(minWidth: 620, minHeight: 430)
@@ -845,6 +853,60 @@ private struct SidebarOrganizeMenu: View {
   }
 }
 
+private struct WorkspaceProjectMenu: View {
+  @ObservedObject var model: ArtificerModel
+  let project: Project
+  @Environment(\.openWindow) private var openWindow
+
+  var body: some View {
+    Menu {
+      Button {
+        model.prepareProjectApprovals(project.id)
+        openWindow(id: "preferences")
+        Task { await model.loadCommandRules(workspaceID: project.id) }
+      } label: {
+        Label("Command approvals...", systemImage: "terminal")
+      }
+      Button {
+        model.prepareProjectRename(project)
+      } label: {
+        Label("Rename...", systemImage: "pencil")
+      }
+      Divider()
+      Button(role: .destructive) {
+        model.prepareProjectRemoval(project)
+      } label: {
+        Label("Remove...", systemImage: "trash")
+      }
+    } label: {
+      SidebarRowIconMenuLabel(title: "Project actions", systemImage: "ellipsis")
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize(horizontal: true, vertical: true)
+    .help("Project actions")
+    .disabled(model.isBusy)
+  }
+}
+
+private struct SidebarRowIconMenuLabel: View {
+  let title: String
+  let systemImage: String
+  @State private var isHovering = false
+
+  var body: some View {
+    Image(systemName: systemImage)
+      .font(.system(size: 12, weight: .semibold))
+      .foregroundStyle(isHovering ? Color.primary : Color.secondary)
+      .frame(width: 22, height: 22)
+      .contentShape(Circle())
+      .background(isHovering ? Color(nsColor: .controlBackgroundColor).opacity(0.92) : Color.clear)
+      .clipShape(Circle())
+      .shadow(color: isHovering ? Color.black.opacity(0.16) : Color.clear, radius: 6, x: 0, y: 3)
+      .onHover { isHovering = $0 }
+      .accessibilityLabel(Text(title))
+  }
+}
+
 private struct AutomationSidebarRow: View {
   @ObservedObject var model: ArtificerModel
 
@@ -948,6 +1010,7 @@ private struct ChronoSessionTreeRow: View {
 private struct WorkspaceTreeGroup: View {
   @ObservedObject var model: ArtificerModel
   let project: Project
+  @State private var isHovering = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -975,6 +1038,8 @@ private struct WorkspaceTreeGroup: View {
             .opacity(model.creatingSessionProjectIDs.contains(project.id) ? 1 : 0)
         }
         .frame(width: 28)
+        WorkspaceProjectMenu(model: model, project: project)
+          .opacity(isHovering || project.id == model.selectedProjectID ? 1 : 0.68)
         Button {
           Task { await model.createSession(in: project.id) }
         } label: {
@@ -985,6 +1050,7 @@ private struct WorkspaceTreeGroup: View {
         .help("New thread")
         .buttonStyle(.plain)
         .disabled(model.isBusy || model.creatingSessionProjectIDs.contains(project.id))
+        .opacity(isHovering || project.id == model.selectedProjectID ? 1 : 0.78)
       }
       .frame(height: 28)
       .padding(.horizontal, 6)
@@ -995,6 +1061,7 @@ private struct WorkspaceTreeGroup: View {
       .onTapGesture {
         Task { await model.toggleProject(project.id) }
       }
+      .onHover { isHovering = $0 }
 
       if model.isProjectExpanded(project.id) {
         let sessions = model.visibleSessionsForSidebar(project)
@@ -1794,6 +1861,66 @@ private struct BranchSheet: View {
         .buttonStyle(.borderedProminent)
         .fixedSize()
         .disabled(model.branchNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isBusy)
+      }
+    }
+    .padding(16)
+  }
+}
+
+private struct ProjectRenameSheet: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Label("Rename project", systemImage: "pencil")
+        .font(.headline)
+      TextField("Project name", text: $model.projectRenameDraft)
+        .textFieldStyle(.roundedBorder)
+      HStack {
+        Spacer()
+        Button("Cancel") {
+          model.showingProjectRenameDialog = false
+        }
+        .fixedSize()
+        Button {
+          Task { await model.renameProjectFromDialog() }
+        } label: {
+          Label("Rename", systemImage: "checkmark")
+        }
+        .buttonStyle(.borderedProminent)
+        .fixedSize()
+        .disabled(model.projectRenameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isBusy)
+      }
+    }
+    .padding(16)
+  }
+}
+
+private struct ProjectRemoveSheet: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Label("Remove project", systemImage: "trash")
+        .font(.headline)
+      Text(model.projectRemovalMessage)
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+      HStack {
+        Spacer()
+        Button("Cancel") {
+          model.showingProjectRemoveDialog = false
+        }
+        .fixedSize()
+        Button(role: .destructive) {
+          Task { await model.removeProjectFromDialog() }
+        } label: {
+          Label("Remove", systemImage: "trash")
+        }
+        .buttonStyle(.borderedProminent)
+        .fixedSize()
+        .disabled(model.projectActionProjectID.isEmpty || model.isBusy)
       }
     }
     .padding(16)
@@ -3847,6 +3974,8 @@ private final class ArtificerModel: ObservableObject {
   @Published var showingGitDiff = false
   @Published var showingCommitDialog = false
   @Published var showingBranchDialog = false
+  @Published var showingProjectRenameDialog = false
+  @Published var showingProjectRemoveDialog = false
   @Published var showingQueueTray = false
   @Published var showingTerminalPanel = false
   @Published var showingModelsPanel = false
@@ -3857,6 +3986,8 @@ private final class ArtificerModel: ObservableObject {
   @Published var commitIncludeUnstaged = true
   @Published var commitPushAfter = false
   @Published var branchNameDraft = ""
+  @Published var projectActionProjectID = ""
+  @Published var projectRenameDraft = ""
   @Published var queueItems: [QueueItem] = []
   @Published var terminalSessionID = ""
   @Published var terminalOutput = ""
@@ -3909,6 +4040,15 @@ private final class ArtificerModel: ObservableObject {
 
   var selectedProject: Project? {
     projects.first { $0.id == selectedProjectID }
+  }
+
+  var projectActionProject: Project? {
+    projects.first { $0.id == projectActionProjectID }
+  }
+
+  var projectRemovalMessage: String {
+    let name = projectActionProject?.name ?? "this project"
+    return "Remove \(name) from Artificer and delete its Artificer thread history. The project folder itself is not deleted."
   }
 
   var selectedTheme: AppTheme {
@@ -4315,6 +4455,60 @@ private final class ArtificerModel: ObservableObject {
       branchNameDraft = ""
       statusMessage = response.output.isEmpty ? "Created \(response.branch)." : response.output
       await loadGitStatusAndBranches()
+    }
+  }
+
+  func prepareProjectApprovals(_ projectID: String) {
+    selectedProjectID = projectID
+    commandRulesWorkspaceID = projectID
+    preferencesTab = "approvals"
+    showingAutomations = false
+  }
+
+  func prepareProjectRename(_ project: Project) {
+    projectActionProjectID = project.id
+    projectRenameDraft = project.name
+    showingProjectRenameDialog = true
+  }
+
+  func prepareProjectRemoval(_ project: Project) {
+    projectActionProjectID = project.id
+    projectRenameDraft = project.name
+    showingProjectRemoveDialog = true
+  }
+
+  func renameProjectFromDialog() async {
+    let projectID = projectActionProjectID
+    let name = projectRenameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !projectID.isEmpty, !name.isEmpty else { return }
+    let result = await runBackend("project-rename", projectID, name)
+    if decode(GenericSuccessResponse.self, from: result) != nil || decode(ProjectsResponse.self, from: result) != nil {
+      showingProjectRenameDialog = false
+      projectActionProjectID = ""
+      projectRenameDraft = ""
+      statusMessage = "Project renamed."
+      await loadProjects()
+    }
+  }
+
+  func removeProjectFromDialog() async {
+    let projectID = projectActionProjectID
+    guard !projectID.isEmpty else { return }
+    let result = await runBackend("project-delete", projectID)
+    if decode(GenericSuccessResponse.self, from: result) != nil || decode(ProjectsResponse.self, from: result) != nil {
+      showingProjectRemoveDialog = false
+      projectActionProjectID = ""
+      projectRenameDraft = ""
+      if selectedProjectID == projectID {
+        selectedProjectID = nil
+        selectedSessionID = nil
+        selectedSession = nil
+        sessions = []
+      }
+      sessionsByProject.removeValue(forKey: projectID)
+      expandedProjectIDs.remove(projectID)
+      statusMessage = "Project removed."
+      await loadProjects()
     }
   }
 
