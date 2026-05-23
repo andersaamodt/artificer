@@ -404,8 +404,8 @@ struct ContentView: View {
             ContextWindow(model: model)
         }
         .padding(.horizontal)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.top, 26)
+        .padding(.bottom, 10)
         .background(.bar)
     }
 
@@ -418,9 +418,16 @@ struct ContentView: View {
             }
             TextField("Bridge URL", text: $model.endpoint)
                 .textContentType(.URL)
+                .font(.body)
+                .textFieldStyle(.roundedBorder)
             SecureField("Pairing token", text: $model.token)
+                .font(.body)
+                .textFieldStyle(.roundedBorder)
             HStack {
                 Button(model.projects.isEmpty ? "Connect" : "Refresh") { Task { await model.refresh() } }
+                    .font(.body.weight(.semibold))
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
                     .disabled(model.endpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if model.isRefreshing {
                     ProgressView()
@@ -624,6 +631,7 @@ struct ChatView: View {
         HStack(alignment: .bottom) {
             TextField("Message Artificer", text: $model.draft, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
+                .font(.body)
             Button {
                 Task { await model.send() }
             } label: {
@@ -634,6 +642,8 @@ struct ChatView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .font(.body.weight(.semibold))
+            .controlSize(.regular)
             .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isSending)
         }
         .padding()

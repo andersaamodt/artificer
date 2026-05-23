@@ -105,6 +105,7 @@ import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
@@ -149,6 +150,9 @@ public final class MainActivity extends Activity {
     private int ink = Color.rgb(31, 35, 36);
     private int line = Color.rgb(212, 205, 193);
     private int accent = Color.rgb(29, 109, 115);
+    private int rootPadX;
+    private int rootPadTop;
+    private int rootPadBottom;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -176,7 +180,14 @@ public final class MainActivity extends Activity {
     private Button button(String label) {
         Button view = new Button(this);
         view.setText(label);
+        view.setTextSize(16);
         view.setAllCaps(false);
+        view.setMinHeight(dp(44));
+        view.setMinWidth(dp(96));
+        view.setPadding(dp(16), 0, dp(16), 0);
+        view.setTextColor(Color.WHITE);
+        view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        view.setBackground(rounded(accent, 0, dp(10)));
         return view;
     }
 
@@ -184,10 +195,20 @@ public final class MainActivity extends Activity {
         EditText view = new EditText(this);
         view.setHint(hint);
         view.setText(value);
+        view.setTextSize(16);
+        view.setTextColor(ink);
+        view.setHintTextColor(Color.rgb(116, 108, 96));
         view.setSingleLine(false);
         view.setMinLines(1);
+        view.setMinHeight(dp(48));
+        view.setPadding(dp(12), 0, dp(12), 0);
+        view.setBackground(rounded(Color.rgb(255, 253, 247), line, dp(10)));
         view.setImeOptions(EditorInfo.IME_ACTION_DONE);
         return view;
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     private GradientDrawable rounded(int color, int strokeColor, int radius) {
@@ -203,35 +224,53 @@ public final class MainActivity extends Activity {
         int count = runtime.optInt("installed_model_count", 0);
         String first = model.length() > 0 ? model : (connected ? "Connected" : "Not connected");
         String second = count > 0 ? count + " models" : (lastUpdated.length() > 0 ? lastUpdated : "Bridge");
-        TextView view = text(first + "\n" + second, 11, Typeface.NORMAL);
+        TextView view = text(first + "\n" + second, 12, Typeface.NORMAL);
         view.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         view.setLines(2);
-        view.setMaxWidth(230);
+        view.setMaxWidth(dp(180));
         view.setEllipsize(TextUtils.TruncateAt.END);
         view.setTextColor(Color.rgb(38, 68, 70));
-        view.setPadding(10, 6, 10, 6);
-        view.setBackground(rounded(Color.rgb(232, 241, 239), Color.rgb(179, 211, 207), 14));
+        view.setPadding(dp(10), dp(7), dp(10), dp(7));
+        view.setBackground(rounded(Color.rgb(232, 241, 239), Color.rgb(179, 211, 207), dp(10)));
         return view;
+    }
+
+    private void applyRootInsets() {
+        rootPadX = dp(22);
+        rootPadTop = dp(22);
+        rootPadBottom = dp(16);
+        root.setPadding(rootPadX, rootPadTop, rootPadX, rootPadBottom);
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            view.setPadding(
+                rootPadX + insets.getSystemWindowInsetLeft(),
+                rootPadTop + insets.getSystemWindowInsetTop(),
+                rootPadX + insets.getSystemWindowInsetRight(),
+                rootPadBottom + insets.getSystemWindowInsetBottom()
+            );
+            return insets;
+        });
+        root.requestApplyInsets();
     }
 
     private void base(String screenTitle) {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(22, 18, 22, 14);
         root.setBackgroundColor(bg);
+        applyRootInsets();
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        title = text(screenTitle, 22, Typeface.BOLD);
+        title = text(screenTitle, 24, Typeface.BOLD);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
         header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         header.addView(contextWindow(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        status = text("", 12, Typeface.NORMAL);
+        status = text("", 13, Typeface.NORMAL);
         status.setTextColor(Color.rgb(100, 92, 82));
         root.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(status, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(root);
+        root.requestApplyInsets();
     }
 
     private void setStatus(String value) {
@@ -267,21 +306,27 @@ public final class MainActivity extends Activity {
 
     private void showConnect() {
         base("Artificer Mobile");
-        TextView hint = text("Pair this phone with the Mobile tab in Artificer Preferences.", 14, Typeface.NORMAL);
+        TextView hint = text("Pair this phone with the Mobile tab in Artificer Preferences.", 16, Typeface.NORMAL);
         hint.setTextColor(Color.rgb(83, 78, 71));
-        hint.setPadding(0, 12, 0, 8);
+        hint.setPadding(0, dp(16), 0, dp(10));
         root.addView(hint);
-        TextView steps = text("1. Enable Mobile bridge\n2. Copy the bridge URL\n3. Copy the pairing token", 13, Typeface.NORMAL);
+        TextView steps = text("1. Enable Mobile bridge\n2. Copy the bridge URL\n3. Copy the pairing token", 15, Typeface.NORMAL);
         steps.setTextColor(Color.rgb(83, 78, 71));
-        steps.setPadding(12, 10, 12, 10);
-        steps.setBackground(rounded(Color.rgb(239, 235, 226), line, 12));
+        steps.setPadding(dp(14), dp(12), dp(14), dp(12));
+        steps.setBackground(rounded(Color.rgb(239, 235, 226), line, dp(10)));
         root.addView(steps, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         EditText endpointField = input("http://192.168.1.20:8765", endpoint);
         EditText tokenField = input("Pairing token", token);
-        root.addView(endpointField);
-        root.addView(tokenField);
+        LinearLayout.LayoutParams fieldParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        fieldParams.setMargins(0, dp(12), 0, 0);
+        root.addView(endpointField, fieldParams);
+        LinearLayout.LayoutParams tokenParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tokenParams.setMargins(0, dp(10), 0, 0);
+        root.addView(tokenField, tokenParams);
         Button connect = button("Connect");
-        root.addView(connect, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        buttonParams.setMargins(0, dp(14), 0, 0);
+        root.addView(connect, buttonParams);
         connect.setOnClickListener(v -> {
             endpoint = endpointField.getText().toString().trim();
             token = tokenField.getText().toString().trim();
@@ -344,8 +389,12 @@ public final class MainActivity extends Activity {
         Button refresh = button("Refresh");
         refresh.setOnClickListener(v -> loadProjects());
         controls.addView(search, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        controls.addView(refresh, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(controls);
+        LinearLayout.LayoutParams refreshParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        refreshParams.setMargins(dp(10), 0, 0, 0);
+        controls.addView(refresh, refreshParams);
+        LinearLayout.LayoutParams controlsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        controlsParams.setMargins(0, dp(12), 0, dp(8));
+        root.addView(controls, controlsParams);
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
         list.setId(1001);
@@ -401,18 +450,18 @@ public final class MainActivity extends Activity {
     }
 
     private void emptyState(LinearLayout list, String heading, String detail) {
-        TextView view = text(heading + "\n" + detail, 14, Typeface.NORMAL);
+        TextView view = text(heading + "\n" + detail, 15, Typeface.NORMAL);
         view.setTextColor(Color.rgb(83, 78, 71));
-        view.setPadding(14, 18, 14, 18);
+        view.setPadding(dp(14), dp(18), dp(14), dp(18));
         view.setGravity(Gravity.CENTER);
-        view.setBackground(rounded(Color.rgb(239, 235, 226), line, 12));
+        view.setBackground(rounded(Color.rgb(239, 235, 226), line, dp(10)));
         list.addView(view, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
     private void noteRow(LinearLayout list, String value) {
-        TextView view = text("    " + value, 13, Typeface.NORMAL);
+        TextView view = text("    " + value, 14, Typeface.NORMAL);
         view.setTextColor(Color.rgb(100, 92, 82));
-        view.setPadding(12, 8, 12, 8);
+        view.setPadding(dp(12), dp(8), dp(12), dp(8));
         list.addView(view);
     }
 
@@ -442,28 +491,28 @@ public final class MainActivity extends Activity {
         String label = (expanded ? "v " : "> ") + project.optString("name", projectId);
         int count = project.optInt("session_count", -1);
         if (count >= 0) label += "  " + count + " chats";
-        TextView row = text(label, 16, Typeface.BOLD);
-        row.setPadding(12, 12, 12, 8);
-        row.setBackground(rounded(Color.rgb(250, 248, 242), line, 10));
+        TextView row = text(label, 17, Typeface.BOLD);
+        row.setPadding(dp(12), dp(13), dp(12), dp(10));
+        row.setBackground(rounded(Color.rgb(250, 248, 242), line, dp(10)));
         row.setOnClickListener(v -> toggleProject(project));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, 8, 0, 2);
+        params.setMargins(0, dp(8), 0, dp(2));
         list.addView(row, params);
     }
 
     private void addChatRow(LinearLayout list, JSONObject project, JSONObject session) {
         String title = session.optString("title", session.optString("id", "Chat"));
         String detail = sessionDetailLine(session);
-        TextView row = text("    " + title + (detail.length() > 0 ? "\n      " + detail : ""), 14, Typeface.NORMAL);
-        row.setPadding(12, 10, 12, 10);
-        row.setBackground(rounded(Color.rgb(255, 253, 247), 0, 8));
+        TextView row = text("    " + title + (detail.length() > 0 ? "\n      " + detail : ""), 15, Typeface.NORMAL);
+        row.setPadding(dp(12), dp(11), dp(12), dp(11));
+        row.setBackground(rounded(Color.rgb(255, 253, 247), 0, dp(8)));
         row.setOnClickListener(v -> {
             selectedProject = project;
             selectedSession = session;
             loadSession();
         });
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMargins(12, 2, 0, 2);
+        params.setMargins(dp(12), dp(2), 0, dp(2));
         list.addView(row, params);
     }
 
@@ -592,11 +641,11 @@ public final class MainActivity extends Activity {
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
             if (item == null) continue;
-            TextView bubble = text(item.optString("role", "message") + "\n" + item.optString("content", ""), 14, Typeface.NORMAL);
-            bubble.setPadding(12, 10, 12, 10);
-            bubble.setBackground(rounded(Color.rgb(255, 253, 247), line, 10));
+            TextView bubble = text(item.optString("role", "message") + "\n" + item.optString("content", ""), 15, Typeface.NORMAL);
+            bubble.setPadding(dp(12), dp(11), dp(12), dp(11));
+            bubble.setBackground(rounded(Color.rgb(255, 253, 247), line, dp(10)));
             LinearLayout.LayoutParams bubbleParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            bubbleParams.setMargins(0, 4, 0, 6);
+            bubbleParams.setMargins(0, dp(4), 0, dp(6));
             messages.addView(bubble, bubbleParams);
         }
         root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
@@ -605,8 +654,12 @@ public final class MainActivity extends Activity {
         LinearLayout compose = new LinearLayout(this);
         compose.setOrientation(LinearLayout.HORIZONTAL);
         compose.addView(composer, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        compose.addView(send, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(compose);
+        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        sendParams.setMargins(dp(10), 0, 0, 0);
+        compose.addView(send, sendParams);
+        LinearLayout.LayoutParams composeParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        composeParams.setMargins(0, dp(10), 0, 0);
+        root.addView(compose, composeParams);
         send.setOnClickListener(v -> sendMessage(composer.getText().toString()));
         slideIn(1);
     }
@@ -1070,8 +1123,8 @@ struct ContentView: View {
             ContextWindow(model: model)
         }
         .padding(.horizontal)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.top, 26)
+        .padding(.bottom, 10)
         .background(.bar)
     }
 
@@ -1084,9 +1137,16 @@ struct ContentView: View {
             }
             TextField("Bridge URL", text: $model.endpoint)
                 .textContentType(.URL)
+                .font(.body)
+                .textFieldStyle(.roundedBorder)
             SecureField("Pairing token", text: $model.token)
+                .font(.body)
+                .textFieldStyle(.roundedBorder)
             HStack {
                 Button(model.projects.isEmpty ? "Connect" : "Refresh") { Task { await model.refresh() } }
+                    .font(.body.weight(.semibold))
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
                     .disabled(model.endpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if model.isRefreshing {
                     ProgressView()
@@ -1290,6 +1350,7 @@ struct ChatView: View {
         HStack(alignment: .bottom) {
             TextField("Message Artificer", text: $model.draft, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
+                .font(.body)
             Button {
                 Task { await model.send() }
             } label: {
@@ -1300,6 +1361,8 @@ struct ChatView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .font(.body.weight(.semibold))
+            .controlSize(.regular)
             .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isSending)
         }
         .padding()
