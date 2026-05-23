@@ -26,6 +26,10 @@ esac
 
 set -eu
 
+BASE_PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/opt/pkg/bin:/opt/pkg/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
+PATH="$BASE_PATH${PATH:+:$PATH}"
+export PATH
+
 action=${1-}
 shift || true
 
@@ -134,6 +138,44 @@ current_pid() {
 tor_pid() {
   [ -f "$tor_pid_file" ] || return 1
   sed -n '1p' "$tor_pid_file"
+}
+
+tor_command() {
+  command -v tor 2>/dev/null || return 1
+}
+
+tor_version() {
+  tor_version_cmd=${1-}
+  [ -n "$tor_version_cmd" ] || return 1
+  "$tor_version_cmd" --version 2>/dev/null | sed -n '1p'
+}
+
+spawn_detached() {
+  spawn_detached_log=${1-}
+  shift
+  python3 - "$spawn_detached_log" "$@" <<'PY'
+import os
+import subprocess
+import sys
+
+if len(sys.argv) < 3:
+    sys.exit(2)
+
+log_path = sys.argv[1]
+cmd = sys.argv[2:]
+stdin = open(os.devnull, "rb")
+stdout = open(os.devnull, "ab")
+stderr = open(log_path, "ab") if log_path else stdout
+proc = subprocess.Popen(
+    cmd,
+    stdin=stdin,
+    stdout=stdout,
+    stderr=stderr,
+    close_fds=True,
+    start_new_session=True,
+)
+print(proc.pid)
+PY
 }
 
 local_ip() {
@@ -293,7 +335,8 @@ PY
 start_tor_if_needed() {
   tor_enabled=$(pref_or_default tor_enabled 0)
   [ "$tor_enabled" = 1 ] || return 0
-  command -v tor >/dev/null 2>&1 || return 0
+  tor_cmd=$(tor_command 2>/dev/null || true)
+  [ -n "$tor_cmd" ] || return 0
   if pid=$(tor_pid 2>/dev/null) && process_alive "$pid"; then
     return 0
   fi
@@ -308,8 +351,7 @@ HiddenServicePort 80 127.0.0.1:$port
 SocksPort 0
 Log notice file $state_dir/tor.log
 TORRC
-  tor -f "$torrc_file" >/dev/null 2>&1 &
-  printf '%s\n' "$!" >"$tor_pid_file"
+  spawn_detached "$state_dir/tor-launch.log" "$tor_cmd" -f "$torrc_file" >"$tor_pid_file"
 }
 
 stop_tor() {
@@ -330,14 +372,16 @@ start_bridge() {
   port=$(pref_or_default port 8765)
   allow_execute=$(pref_or_default allow_execute 0)
   allow_self_actuation=$(pref_or_default allow_self_actuation 0)
-  ARTIFICER_MOBILE_BACKEND="$backend_script" \
-  ARTIFICER_MOBILE_TOKEN="$(cat "$token_file")" \
-  ARTIFICER_MOBILE_HOST="$bind_host" \
-  ARTIFICER_MOBILE_PORT="$port" \
-  ARTIFICER_MOBILE_ALLOW_EXECUTE="$allow_execute" \
-  ARTIFICER_MOBILE_ALLOW_SELF_ACTUATION="$allow_self_actuation" \
-    python3 "$server_script" >/dev/null 2>"$state_dir/mobile-bridge.log" &
-  printf '%s\n' "$!" >"$pid_file"
+  (
+    ARTIFICER_MOBILE_BACKEND="$backend_script"
+    ARTIFICER_MOBILE_TOKEN="$(cat "$token_file")"
+    ARTIFICER_MOBILE_HOST="$bind_host"
+    ARTIFICER_MOBILE_PORT="$port"
+    ARTIFICER_MOBILE_ALLOW_EXECUTE="$allow_execute"
+    ARTIFICER_MOBILE_ALLOW_SELF_ACTUATION="$allow_self_actuation"
+    export ARTIFICER_MOBILE_BACKEND ARTIFICER_MOBILE_TOKEN ARTIFICER_MOBILE_HOST ARTIFICER_MOBILE_PORT ARTIFICER_MOBILE_ALLOW_EXECUTE ARTIFICER_MOBILE_ALLOW_SELF_ACTUATION
+    spawn_detached "$state_dir/mobile-bridge.log" python3 "$server_script"
+  ) >"$pid_file"
   start_tor_if_needed
 }
 
@@ -350,13 +394,23 @@ stop_bridge() {
 }
 
 install_tor() {
-  if command -v tor >/dev/null 2>&1; then
-    printf '{"success":true,"installed":true,"method":"existing"}\n'
+  tor_cmd=$(tor_command 2>/dev/null || true)
+  if [ -n "$tor_cmd" ]; then
+    printf '{"success":true,"installed":true,"method":"existing","tor_path":%s,"tor_version":%s}\n' \
+      "$(json_escape "$tor_cmd")" \
+      "$(json_escape "$(tor_version "$tor_cmd" 2>/dev/null || printf '')")"
     return 0
   fi
   if command -v brew >/dev/null 2>&1; then
     brew install tor >/dev/null
-    printf '{"success":true,"installed":true,"method":"brew"}\n'
+    tor_cmd=$(tor_command 2>/dev/null || true)
+    if [ -n "$tor_cmd" ]; then
+      printf '{"success":true,"installed":true,"method":"brew","tor_path":%s,"tor_version":%s}\n' \
+        "$(json_escape "$tor_cmd")" \
+        "$(json_escape "$(tor_version "$tor_cmd" 2>/dev/null || printf '')")"
+      return 0
+    fi
+    printf '{"success":false,"installed":false,"error":"Homebrew finished but tor is still not visible on PATH."}\n'
     return 0
   fi
   printf '{"success":false,"installed":false,"error":"Tor is not installed and no supported package manager was found."}\n'
@@ -367,12 +421,23 @@ status_json() {
   bind_host=$(pref_or_default bind_host 127.0.0.1)
   port=$(pref_or_default port 8765)
   tor_enabled=$(pref_or_default tor_enabled 0)
+  tor_cmd=$(tor_command 2>/dev/null || true)
+  tor_installed=false
+  tor_path=""
+  tor_version_value=""
+  if [ -n "$tor_cmd" ]; then
+    tor_installed=true
+    tor_path=$tor_cmd
+    tor_version_value=$(tor_version "$tor_cmd" 2>/dev/null || printf '')
+  fi
   allow_execute=$(pref_or_default allow_execute 0)
   allow_self_actuation=$(pref_or_default allow_self_actuation 0)
   running=false
   pid=""
   if pid=$(current_pid 2>/dev/null) && process_alive "$pid"; then
     running=true
+  else
+    pid=""
   fi
   tor_running=false
   tor_address=""
@@ -387,7 +452,7 @@ status_json() {
   if [ "$bind_host" = "0.0.0.0" ] && [ -n "$ip" ]; then
     lan_url="http://$ip:$port"
   fi
-  printf '{"success":true,"enabled":%s,"running":%s,"pid":%s,"bind_host":%s,"port":%s,"local_url":%s,"lan_url":%s,"tor_enabled":%s,"tor_running":%s,"tor_address":%s,"pairing_token":%s,"allow_execute":%s,"allow_self_actuation":%s,"config_file":%s,"state_dir":%s}\n' \
+  printf '{"success":true,"enabled":%s,"running":%s,"pid":%s,"bind_host":%s,"port":%s,"local_url":%s,"lan_url":%s,"tor_enabled":%s,"tor_installed":%s,"tor_running":%s,"tor_address":%s,"tor_path":%s,"tor_version":%s,"pairing_token":%s,"allow_execute":%s,"allow_self_actuation":%s,"config_file":%s,"state_dir":%s}\n' \
     "$running" \
     "$running" \
     "$(json_escape "$pid")" \
@@ -396,8 +461,11 @@ status_json() {
     "$(json_escape "http://127.0.0.1:$port")" \
     "$(json_escape "$lan_url")" \
     "$([ "$tor_enabled" = 1 ] && printf true || printf false)" \
+    "$tor_installed" \
     "$tor_running" \
     "$(json_escape "$tor_address")" \
+    "$(json_escape "$tor_path")" \
+    "$(json_escape "$tor_version_value")" \
     "$(json_escape "$(cat "$token_file")")" \
     "$([ "$allow_execute" = 1 ] && printf true || printf false)" \
     "$([ "$allow_self_actuation" = 1 ] && printf true || printf false)" \

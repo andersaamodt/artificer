@@ -4713,17 +4713,44 @@ private struct MobilePreferencesTab: View {
             Task { await model.setDesktopPref("mobile_lan", enabled: nextValue) }
           }
         ))
-        Toggle("Tor hidden service", isOn: Binding(
-          get: { model.mobileTorEnabled },
-          set: { nextValue in
-            Task { await model.setDesktopPref("mobile_tor", enabled: nextValue) }
+        if let mobile = model.mobileStatus {
+          HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Toggle("Tor hidden service", isOn: Binding(
+              get: { model.mobileTorEnabled },
+              set: { nextValue in
+                Task { await model.setDesktopPref("mobile_tor", enabled: nextValue) }
+              }
+            ))
+            .disabled(!mobile.torInstalled)
+            Text(mobile.torStatusLabel)
+              .font(.caption)
+              .foregroundColor(mobile.torInstalled ? .secondary : .red)
+            Button(mobile.torInstalled ? "Installed" : "Install Tor") { Task { await model.installMobileTor() } }
+              .disabled(mobile.torInstalled)
           }
-        ))
+          .buttonStyle(.bordered)
+          if mobile.torEnabled && mobile.torInstalled && !mobile.running {
+            Text("The hidden service starts with the mobile bridge.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          }
+        } else {
+          HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Toggle("Tor hidden service", isOn: Binding(
+              get: { model.mobileTorEnabled },
+              set: { nextValue in
+                Task { await model.setDesktopPref("mobile_tor", enabled: nextValue) }
+              }
+            ))
+            .disabled(true)
+            Text("Checking Tor...")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
         HStack {
-          Button("Install Tor") { Task { await model.installMobileTor() } }
           Button("Restart Bridge") { Task { await model.restartMobileBridge() } }
             .disabled(!model.mobileBridgeEnabled)
-          Button("Refresh") { Task { await model.loadMobileStatus() } }
         }
         .buttonStyle(.bordered)
         if let mobile = model.mobileStatus {
@@ -4731,7 +4758,10 @@ private struct MobilePreferencesTab: View {
           if !mobile.lanURL.isEmpty {
             SettingsInfoRow(title: "IP", value: mobile.lanURL)
           }
-          SettingsInfoRow(title: "Tor", value: mobile.torAddress.isEmpty ? (mobile.torEnabled ? "Starting..." : "Off") : "http://\(mobile.torAddress)")
+          SettingsInfoRow(title: "Tor", value: mobile.torAddressDisplay)
+          if !mobile.torPath.isEmpty {
+            SettingsInfoRow(title: "Tor binary", value: mobile.torPath)
+          }
           SettingsInfoRow(title: "Pairing token", value: mobile.pairingToken)
           SettingsInfoRow(title: "State", value: mobile.running ? "Running" : "Stopped")
         } else {
@@ -7576,8 +7606,12 @@ private final class ArtificerModel: ObservableObject {
   func installMobileTor() async {
     let result = await runBackend("mobile-install-tor")
     if decode(GenericSuccessResponse.self, from: result) != nil {
-      statusMessage = "Tor install checked."
       await loadMobileStatus()
+      if mobileStatus?.torInstalled == true {
+        statusMessage = "Tor is installed."
+      } else {
+        statusMessage = "Tor install did not complete."
+      }
     }
   }
 
@@ -9702,8 +9736,11 @@ private struct MobileBridgeStatus: Decodable {
   let localURL: String
   let lanURL: String
   let torEnabled: Bool
+  let torInstalled: Bool
   let torRunning: Bool
   let torAddress: String
+  let torPath: String
+  let torVersion: String
   let pairingToken: String
   let allowExecute: Bool
   let allowSelfActuation: Bool
@@ -9716,8 +9753,11 @@ private struct MobileBridgeStatus: Decodable {
     case localURL = "local_url"
     case lanURL = "lan_url"
     case torEnabled = "tor_enabled"
+    case torInstalled = "tor_installed"
     case torRunning = "tor_running"
     case torAddress = "tor_address"
+    case torPath = "tor_path"
+    case torVersion = "tor_version"
     case pairingToken = "pairing_token"
     case allowExecute = "allow_execute"
     case allowSelfActuation = "allow_self_actuation"
@@ -9735,13 +9775,48 @@ private struct MobileBridgeStatus: Decodable {
     localURL = (try? container.decode(String.self, forKey: .localURL)) ?? ""
     lanURL = (try? container.decode(String.self, forKey: .lanURL)) ?? ""
     torEnabled = container.decodeFlexibleBool(forKey: .torEnabled)
+    torInstalled = container.decodeFlexibleBool(forKey: .torInstalled)
     torRunning = container.decodeFlexibleBool(forKey: .torRunning)
     torAddress = (try? container.decode(String.self, forKey: .torAddress)) ?? ""
+    torPath = (try? container.decode(String.self, forKey: .torPath)) ?? ""
+    torVersion = (try? container.decode(String.self, forKey: .torVersion)) ?? ""
     pairingToken = (try? container.decode(String.self, forKey: .pairingToken)) ?? ""
     allowExecute = container.decodeFlexibleBool(forKey: .allowExecute)
     allowSelfActuation = container.decodeFlexibleBool(forKey: .allowSelfActuation)
     configFile = (try? container.decode(String.self, forKey: .configFile)) ?? ""
     stateDir = (try? container.decode(String.self, forKey: .stateDir)) ?? ""
+  }
+
+  var torStatusLabel: String {
+    if !torInstalled {
+      return "Not installed"
+    }
+    if torEnabled && torRunning {
+      return "Running"
+    }
+    if torEnabled && running {
+      return "Starting"
+    }
+    if torEnabled {
+      return "Ready"
+    }
+    return "Installed"
+  }
+
+  var torAddressDisplay: String {
+    if !torInstalled {
+      return "Not installed"
+    }
+    if !torAddress.isEmpty {
+      return "http://\(torAddress)"
+    }
+    if torEnabled && !running {
+      return "Ready when bridge starts"
+    }
+    if torEnabled {
+      return "Starting..."
+    }
+    return "Off"
   }
 }
 

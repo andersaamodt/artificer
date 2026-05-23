@@ -52,6 +52,55 @@ XDG_CONFIG_HOME="$tmp_dir/config" XDG_STATE_HOME="$tmp_dir/state" sh "$bridge" s
   exit 1
 }
 
+mkdir -p "$tmp_dir/state/artificer-native/mobile-bridge"
+printf '%s\n' 999999 >"$tmp_dir/state/artificer-native/mobile-bridge/mobile-bridge.pid"
+XDG_CONFIG_HOME="$tmp_dir/config" XDG_STATE_HOME="$tmp_dir/state" sh "$bridge" status | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["running"] is False, p; assert p["pid"] == "", p' || {
+  printf '%s\n' "mobile bridge status should not report stale pid files as active" >&2
+  exit 1
+}
+
+fake_bin="$tmp_dir/bin"
+mkdir -p "$fake_bin"
+cat >"$fake_bin/tor" <<'SH'
+#!/bin/sh
+if [ "${1-}" = "--version" ]; then
+  printf '%s\n' "Tor version contract."
+  exit 0
+fi
+exit 0
+SH
+chmod +x "$fake_bin/tor"
+
+PATH="$fake_bin:/usr/bin:/bin" XDG_CONFIG_HOME="$tmp_dir/config-path" XDG_STATE_HOME="$tmp_dir/state-path" sh "$bridge" status | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["tor_installed"] is True, p; assert p["tor_path"].endswith("/tor"), p' || {
+  printf '%s\n' "mobile bridge should expose Tor install detection in status" >&2
+  exit 1
+}
+
+grep -q '/opt/homebrew/bin:/opt/homebrew/sbin:/opt/pkg/bin:/opt/pkg/sbin:/usr/local/bin:/usr/local/sbin' "$bridge" || {
+  printf '%s\n' "mobile bridge should bootstrap package-manager paths before probing Tor" >&2
+  exit 1
+}
+
+grep -q 'start_new_session=True' "$bridge" || {
+  printf '%s\n' "mobile bridge should detach child processes from the launching shell" >&2
+  exit 1
+}
+
+grep -q 'spawn_detached "$state_dir/tor-launch.log" "$tor_cmd" -f "$torrc_file"' "$bridge" || {
+  printf '%s\n' "mobile Tor hidden service should survive the launching shell exiting" >&2
+  exit 1
+}
+
+grep -q 'Button(mobile.torInstalled ? "Installed" : "Install Tor")' "$template" || {
+  printf '%s\n' "Native Settings should render Tor install state from backend status" >&2
+  exit 1
+}
+
+grep -q 'mobile.torStatusLabel' "$template" || {
+  printf '%s\n' "Native Settings should show Tor readiness beside the hidden-service toggle" >&2
+  exit 1
+}
+
 grep -q 'parsed.path == "/tree"' "$bridge" || {
   printf '%s\n' "mobile bridge should expose a full folder/chat tree endpoint" >&2
   exit 1

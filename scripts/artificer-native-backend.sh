@@ -689,7 +689,7 @@ case "$action" in
     elif [ "$key" = "mobile_tor" ]; then
       normalized_enabled=$(bool_pref_value "$enabled_value")
       mobile_bridge_script set tor_enabled "$normalized_enabled" >/dev/null
-      if [ "$normalized_enabled" = 1 ]; then
+      if [ "$(read_desktop_pref mobile_bridge 2>/dev/null || printf 0)" = 1 ]; then
         mobile_bridge_script restart >/dev/null
       fi
     elif [ "$key" = "mobile_lan" ]; then
