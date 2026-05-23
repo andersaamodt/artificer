@@ -112,6 +112,36 @@ grep -q 'endpoint.trim().length() > 0 && token.trim().length() > 0' "$renderer" 
   exit 1
 }
 
+grep -q 'https://api.github.com/repos/andersaamodt/artificer/releases/latest' "$renderer" || {
+  printf '%s\n' "mobile app should check GitHub releases for updates" >&2
+  exit 1
+}
+
+grep -q 'REQUEST_INSTALL_PACKAGES' "$renderer" || {
+  printf '%s\n' "Android mobile app should request package installer handoff for direct updates" >&2
+  exit 1
+}
+
+grep -q 'ACTION_INSTALL_PACKAGE' "$renderer" || {
+  printf '%s\n' "Android mobile app should launch the platform package installer for downloaded updates" >&2
+  exit 1
+}
+
+grep -q 'MY_PACKAGE_REPLACED' "$renderer" || {
+  printf '%s\n' "Android mobile app should relaunch after package replacement" >&2
+  exit 1
+}
+
+grep -q 'Update' "$renderer" || {
+  printf '%s\n' "mobile app should expose the blue Update pill/action when an update is available" >&2
+  exit 1
+}
+
+grep -q 'ARTIFICER_MOBILE_ANDROID_KEYSTORE' "$mobile/generated/mobile/android/app/build.gradle" 2>/dev/null || grep -q 'ARTIFICER_MOBILE_ANDROID_KEYSTORE' "$renderer" || {
+  printf '%s\n' "Android mobile release builds should support stable signing for self-updates" >&2
+  exit 1
+}
+
 grep -q 'folderErrors' "$renderer" || {
   printf '%s\n' "mobile app should expose per-folder chat load retry state" >&2
   exit 1
@@ -124,6 +154,11 @@ grep -q 'isSending' "$renderer" || {
 
 grep -q 'artificer/artificer-mobile/generated/mobile/android' "$root/.github/workflows/build-artifacts.yml" || {
   printf '%s\n' "GitHub Actions should build the Artificer Mobile Android artifact" >&2
+  exit 1
+}
+
+grep -q 'softprops/action-gh-release' "$root/.github/workflows/build-artifacts.yml" || {
+  printf '%s\n' "GitHub Actions should attach mobile artifacts to tagged GitHub releases" >&2
   exit 1
 }
 

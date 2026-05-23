@@ -150,6 +150,13 @@ sh artificer-mobile/scripts/render-native-mobile.sh
 Rendered Android and iOS projects live under
 `artificer-mobile/generated/mobile/`.
 
+Mobile update behavior is platform-specific. Android direct APK builds check
+GitHub Releases, download a newer `artificer-mobile` APK automatically, and
+show an `Update` pill that hands off to Android's package installer. iOS builds
+can check GitHub Releases and open the release page, but iOS app replacement
+must still go through Apple-supported distribution such as App Store,
+TestFlight, or an approved alternative marketplace.
+
 Deferred on purpose:
 
 - rich attachment previews and download/open affordances remain hosted for now;
@@ -190,7 +197,9 @@ The GitHub Actions builds create:
 
 The Linux bundles are portable artifacts for Debian, Ubuntu, NixOS, and Arch on
 their corresponding CPU architecture. The mobile artifacts are CI-built
-thin-client packages for testing against an Artificer desktop bridge.
+thin-client packages for testing against an Artificer desktop bridge. Tagged
+release builds also attach the mobile artifacts to the GitHub Release so direct
+Android builds can discover them for updates.
 
 ## Documentation
 

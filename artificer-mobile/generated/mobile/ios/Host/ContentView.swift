@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct RuntimeHealth: Codable {
     let defaultModel: String
@@ -142,6 +145,35 @@ struct SessionDetail: Codable {
     }
 }
 
+struct GitHubRelease: Codable {
+    let tagName: String
+    let htmlURL: String
+    let assets: [GitHubReleaseAsset]
+
+    enum CodingKeys: String, CodingKey {
+        case assets
+        case tagName = "tag_name"
+        case htmlURL = "html_url"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        tagName = (try? container.decode(String.self, forKey: .tagName)) ?? ""
+        htmlURL = (try? container.decode(String.self, forKey: .htmlURL)) ?? ""
+        assets = (try? container.decode([GitHubReleaseAsset].self, forKey: .assets)) ?? []
+    }
+}
+
+struct GitHubReleaseAsset: Codable {
+    let name: String
+    let browserDownloadURL: String
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case browserDownloadURL = "browser_download_url"
+    }
+}
+
 @MainActor
 final class BridgeModel: ObservableObject {
     @AppStorage("bridgeEndpoint") var endpoint = ""
@@ -161,6 +193,10 @@ final class BridgeModel: ObservableObject {
     @Published var isRefreshing = false
     @Published var isSending = false
     @Published var lastUpdated = ""
+    @Published var updateAvailable = false
+    @Published var updateTag = ""
+    @Published var updateURL: URL?
+    @Published var isCheckingUpdate = false
 
     func connect() async {
         await refresh()
@@ -247,6 +283,55 @@ final class BridgeModel: ObservableObject {
         } catch {
             status = error.localizedDescription
         }
+    }
+
+    func checkForUpdate() async {
+        guard !isCheckingUpdate else { return }
+        isCheckingUpdate = true
+        defer { isCheckingUpdate = false }
+        do {
+            guard let url = URL(string: "https://api.github.com/repos/andersaamodt/artificer/releases/latest") else { return }
+            var request = URLRequest(url: url)
+            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            try check(response, data: data)
+            let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+            guard isNewerRelease(release.tagName), hasMobileReleaseAsset(release.assets), let releaseURL = safeReleaseURL(release.htmlURL) else {
+                updateAvailable = false
+                return
+            }
+            updateTag = release.tagName
+            updateURL = releaseURL
+            updateAvailable = true
+        } catch {
+            status = error.localizedDescription
+        }
+    }
+
+    func openUpdate() {
+        guard let updateURL else { return }
+        status = "Opening GitHub release. iOS installs still use Apple or TestFlight update channels."
+        #if canImport(UIKit)
+        UIApplication.shared.open(updateURL)
+        #endif
+    }
+
+    private func hasMobileReleaseAsset(_ assets: [GitHubReleaseAsset]) -> Bool {
+        assets.contains { asset in
+            let lower = asset.name.lowercased()
+            return lower.contains("artificer-mobile") && (lower.hasSuffix(".zip") || lower.hasSuffix(".apk"))
+        }
+    }
+
+    private func isNewerRelease(_ tag: String) -> Bool {
+        let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        return !tag.isEmpty && tag != current && tag != "v\(current)"
+    }
+
+    private func safeReleaseURL(_ value: String) -> URL? {
+        guard let url = URL(string: value), url.scheme == "https", url.host == "github.com" else { return nil }
+        guard url.path.hasPrefix("/andersaamodt/artificer/releases/") else { return nil }
+        return url
     }
 
     func visibleProjects() -> [BridgeProject] {
@@ -388,6 +473,7 @@ struct ContentView: View {
                 }
             }
             .task { await model.autoConnectIfPossible() }
+            .task { await model.checkForUpdate() }
         }
     }
 
@@ -401,6 +487,15 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            if model.updateAvailable {
+                Button("Update") {
+                    model.openUpdate()
+                }
+                .font(.caption.bold())
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .tint(.blue)
+            }
             ContextWindow(model: model)
         }
         .padding(.horizontal)

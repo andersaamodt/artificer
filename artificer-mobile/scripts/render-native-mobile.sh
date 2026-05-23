@@ -61,13 +61,49 @@ android {
         versionCode $version_code
         versionName '$app_version'
     }
+
+    signingConfigs {
+        release {
+            def keystorePath = System.getenv("ARTIFICER_MOBILE_ANDROID_KEYSTORE")
+            if (keystorePath) {
+                storeFile file(keystorePath)
+                storePassword System.getenv("ARTIFICER_MOBILE_ANDROID_KEYSTORE_PASSWORD") ?: ""
+                keyAlias System.getenv("ARTIFICER_MOBILE_ANDROID_KEY_ALIAS") ?: ""
+                keyPassword System.getenv("ARTIFICER_MOBILE_ANDROID_KEY_PASSWORD") ?: ""
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            def keystorePath = System.getenv("ARTIFICER_MOBILE_ANDROID_KEYSTORE")
+            signingConfig keystorePath ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
 }
 GRADLE
 
 cat >"$android_dir/app/src/main/AndroidManifest.xml" <<XML
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application android:theme="@style/AppTheme" android:label="$app_name" android:allowBackup="false" android:supportsRtl="true" android:usesCleartextTraffic="true">
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="\${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/update_file_paths" />
+        </provider>
+        <receiver android:name=".MainActivity\$SelfUpdateReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -76,6 +112,14 @@ cat >"$android_dir/app/src/main/AndroidManifest.xml" <<XML
         </activity>
     </application>
 </manifest>
+XML
+
+mkdir -p "$android_dir/app/src/main/res/xml"
+cat >"$android_dir/app/src/main/res/xml/update_file_paths.xml" <<'XML'
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-files-path name="updates" path="Download/" />
+    <cache-path name="cache_updates" path="updates/" />
+</paths>
 XML
 
 cat >"$android_dir/app/src/main/res/values/styles.xml" <<'XML'
@@ -94,11 +138,19 @@ cat >"$android_dir/app/src/main/java/app/wizardry/artificer/mobile/MainActivity.
 package app.wizardry.artificer.mobile;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.Settings;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.net.Uri;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -113,6 +165,8 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -123,6 +177,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
+import androidx.core.content.FileProvider;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -146,6 +201,16 @@ public final class MainActivity extends Activity {
     private String lastUpdated = "";
     private boolean connected = false;
     private boolean loadingHome = false;
+    private boolean checkingUpdate = false;
+    private boolean downloadingUpdate = false;
+    private boolean updateDownloaded = false;
+    private String updateStatus = "";
+    private String updateTag = "";
+    private String updateAssetName = "";
+    private String updateAssetUrl = "";
+    private String updateReleaseUrl = "";
+    private String updateApkPath = "";
+    private TextView updatePill;
     private int bg = Color.rgb(247, 244, 237);
     private int ink = Color.rgb(31, 35, 36);
     private int line = Color.rgb(212, 205, 193);
@@ -160,6 +225,13 @@ public final class MainActivity extends Activity {
         prefs = getSharedPreferences("artificer-mobile", MODE_PRIVATE);
         endpoint = prefs.getString("endpoint", "");
         token = prefs.getString("token", "");
+        updateTag = prefs.getString("update_tag", "");
+        updateAssetName = prefs.getString("update_asset_name", "");
+        updateAssetUrl = prefs.getString("update_asset_url", "");
+        updateReleaseUrl = prefs.getString("update_release_url", "");
+        updateApkPath = prefs.getString("update_apk_path", "");
+        updateDownloaded = updateApkPath.length() > 0 && new File(updateApkPath).isFile();
+        checkForUpdate(true);
         if (endpoint.trim().length() > 0 && token.trim().length() > 0) {
             loadProjects();
         } else {
@@ -219,6 +291,24 @@ public final class MainActivity extends Activity {
         return shape;
     }
 
+    private TextView updatePill() {
+        TextView view = text("Update", 13, Typeface.BOLD);
+        view.setTextColor(Color.WHITE);
+        view.setGravity(Gravity.CENTER);
+        view.setPadding(dp(12), dp(7), dp(12), dp(7));
+        view.setMinWidth(dp(78));
+        view.setBackground(rounded(Color.rgb(28, 104, 219), 0, dp(100)));
+        view.setVisibility(updateDownloaded ? View.VISIBLE : View.GONE);
+        view.setOnClickListener(v -> installDownloadedUpdate());
+        return view;
+    }
+
+    private void refreshUpdatePill() {
+        if (updatePill == null) return;
+        updatePill.setVisibility(updateDownloaded ? View.VISIBLE : View.GONE);
+        updatePill.setText(updateDownloaded ? "Update" : "");
+    }
+
     private TextView contextWindow() {
         String model = runtime.optString("default_model", "");
         int count = runtime.optInt("installed_model_count", 0);
@@ -264,6 +354,10 @@ public final class MainActivity extends Activity {
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
         header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        updatePill = updatePill();
+        LinearLayout.LayoutParams updateParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        updateParams.setMargins(dp(8), 0, dp(8), 0);
+        header.addView(updatePill, updateParams);
         header.addView(contextWindow(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         status = text("", 13, Typeface.NORMAL);
         status.setTextColor(Color.rgb(100, 92, 82));
@@ -302,6 +396,162 @@ public final class MainActivity extends Activity {
         while ((lineValue = reader.readLine()) != null) out.append(lineValue);
         reader.close();
         return out.toString();
+    }
+
+    private void checkForUpdate(boolean autoDownload) {
+        if (checkingUpdate) return;
+        checkingUpdate = true;
+        updateStatus = "Checking for update...";
+        new Thread(() -> {
+            try {
+                JSONObject release = latestRelease();
+                String tag = release.optString("tag_name", "");
+                String htmlUrl = release.optString("html_url", "");
+                JSONObject asset = selectAndroidApkAsset(release.optJSONArray("assets"));
+                if (tag.length() == 0 || asset == null || !isNewerRelease(tag)) {
+                    updateDownloaded = false;
+                    updateApkPath = "";
+                    prefs.edit()
+                        .remove("update_tag")
+                        .remove("update_asset_name")
+                        .remove("update_asset_url")
+                        .remove("update_release_url")
+                        .remove("update_apk_path")
+                        .apply();
+                    checkingUpdate = false;
+                    runOnUiThread(this::refreshUpdatePill);
+                    return;
+                }
+                String assetName = asset.optString("name", "");
+                String assetUrl = asset.optString("browser_download_url", "");
+                validateGithubUpdateAsset(assetName, assetUrl);
+                updateTag = tag;
+                updateAssetName = assetName;
+                updateAssetUrl = assetUrl;
+                updateReleaseUrl = htmlUrl;
+                updateDownloaded = updateApkPath.length() > 0 && new File(updateApkPath).isFile() && assetName.equals(new File(updateApkPath).getName());
+                prefs.edit()
+                    .putString("update_tag", updateTag)
+                    .putString("update_asset_name", updateAssetName)
+                    .putString("update_asset_url", updateAssetUrl)
+                    .putString("update_release_url", updateReleaseUrl)
+                    .apply();
+                if (!updateDownloaded && autoDownload) {
+                    downloadUpdateApk(assetName, assetUrl);
+                }
+                checkingUpdate = false;
+                runOnUiThread(this::refreshUpdatePill);
+            } catch (Exception ex) {
+                checkingUpdate = false;
+                downloadingUpdate = false;
+                updateStatus = ex.getMessage();
+            }
+        }).start();
+    }
+
+    private JSONObject latestRelease() throws Exception {
+        HttpURLConnection conn = (HttpURLConnection)new URL("https://api.github.com/repos/andersaamodt/artificer/releases/latest").openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(8000);
+        conn.setReadTimeout(20000);
+        conn.setRequestProperty("Accept", "application/vnd.github+json");
+        InputStream stream = conn.getResponseCode() >= 400 ? conn.getErrorStream() : conn.getInputStream();
+        if (stream == null) throw new Exception("GitHub latest release could not be loaded.");
+        BufferedReader reader = new BufferedReader(new InputStreamReader(stream, "UTF-8"));
+        StringBuilder out = new StringBuilder();
+        String lineValue;
+        while ((lineValue = reader.readLine()) != null) out.append(lineValue);
+        reader.close();
+        if (conn.getResponseCode() >= 400) throw new Exception("GitHub latest release could not be loaded.");
+        return new JSONObject(out.toString());
+    }
+
+    private JSONObject selectAndroidApkAsset(JSONArray assets) {
+        if (assets == null) return null;
+        for (int i = 0; i < assets.length(); i++) {
+            JSONObject asset = assets.optJSONObject(i);
+            if (asset == null) continue;
+            String lower = asset.optString("name", "").toLowerCase(Locale.US);
+            if (lower.endsWith(".apk") && lower.contains("artificer-mobile")) return asset;
+        }
+        return null;
+    }
+
+    private boolean isNewerRelease(String tag) {
+        String current = currentVersionName();
+        return tag.length() > 0 && !tag.equals(current) && !tag.equals("v" + current);
+    }
+
+    private String currentVersionName() {
+        try {
+            PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            return info.versionName == null ? "" : info.versionName;
+        } catch (Exception ex) {
+            return "";
+        }
+    }
+
+    private void validateGithubUpdateAsset(String name, String url) throws Exception {
+        if (name.length() == 0 || name.contains("/") || name.contains("\\") || name.contains("\n") || name.contains("\r") || !name.toLowerCase(Locale.US).endsWith(".apk")) {
+            throw new Exception("GitHub release asset name is not safe to install.");
+        }
+        String prefix = "https://github.com/andersaamodt/artificer/releases/download/";
+        if (!url.startsWith(prefix) || url.contains("\n") || url.contains("\r")) {
+            throw new Exception("GitHub release asset URL is not safe to download.");
+        }
+    }
+
+    private void downloadUpdateApk(String assetName, String assetUrl) throws Exception {
+        if (downloadingUpdate) return;
+        downloadingUpdate = true;
+        updateStatus = "Downloading update...";
+        File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        if (dir == null) dir = new File(getCacheDir(), "updates");
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new Exception("Update download folder could not be created.");
+        File target = new File(dir, assetName);
+        File part = new File(dir, assetName + ".part");
+        HttpURLConnection conn = (HttpURLConnection)new URL(assetUrl).openConnection();
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(30000);
+        conn.setRequestProperty("Accept", "application/octet-stream");
+        if (conn.getResponseCode() >= 400) throw new Exception("Update APK could not be downloaded.");
+        InputStream input = conn.getInputStream();
+        FileOutputStream output = new FileOutputStream(part);
+        byte[] buffer = new byte[65536];
+        int read;
+        while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+        output.close();
+        input.close();
+        if (target.exists() && !target.delete()) throw new Exception("Old update APK could not be replaced.");
+        if (!part.renameTo(target)) throw new Exception("Update APK could not be staged.");
+        updateApkPath = target.getAbsolutePath();
+        updateDownloaded = true;
+        downloadingUpdate = false;
+        updateStatus = "Update downloaded.";
+        prefs.edit().putString("update_apk_path", updateApkPath).apply();
+    }
+
+    private void installDownloadedUpdate() {
+        if (updateApkPath.length() == 0 || !new File(updateApkPath).isFile()) {
+            updateDownloaded = false;
+            refreshUpdatePill();
+            setStatus("The update is no longer downloaded.");
+            checkForUpdate(true);
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !getPackageManager().canRequestPackageInstalls()) {
+            Intent settings = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName()));
+            startActivity(settings);
+            setStatus("Enable this source, then tap Update again.");
+            return;
+        }
+        File apk = new File(updateApkPath);
+        Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apk);
+        Intent install = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+        install.setData(uri);
+        install.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        install.putExtra(Intent.EXTRA_RETURN_RESULT, true);
+        startActivity(install);
     }
 
     private void showConnect() {
@@ -681,6 +931,17 @@ public final class MainActivity extends Activity {
             }
         }).start();
     }
+
+    public static final class SelfUpdateReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (!Intent.ACTION_MY_PACKAGE_REPLACED.equals(intent.getAction())) return;
+            Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+            if (launch == null) return;
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            context.startActivity(launch);
+        }
+    }
 }
 JAVA
 
@@ -719,6 +980,9 @@ SWIFT
 cat >"$ios_dir/Host/ContentView.swift" <<'SWIFT'
 import Foundation
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct RuntimeHealth: Codable {
     let defaultModel: String
@@ -861,6 +1125,35 @@ struct SessionDetail: Codable {
     }
 }
 
+struct GitHubRelease: Codable {
+    let tagName: String
+    let htmlURL: String
+    let assets: [GitHubReleaseAsset]
+
+    enum CodingKeys: String, CodingKey {
+        case assets
+        case tagName = "tag_name"
+        case htmlURL = "html_url"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        tagName = (try? container.decode(String.self, forKey: .tagName)) ?? ""
+        htmlURL = (try? container.decode(String.self, forKey: .htmlURL)) ?? ""
+        assets = (try? container.decode([GitHubReleaseAsset].self, forKey: .assets)) ?? []
+    }
+}
+
+struct GitHubReleaseAsset: Codable {
+    let name: String
+    let browserDownloadURL: String
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case browserDownloadURL = "browser_download_url"
+    }
+}
+
 @MainActor
 final class BridgeModel: ObservableObject {
     @AppStorage("bridgeEndpoint") var endpoint = ""
@@ -880,6 +1173,10 @@ final class BridgeModel: ObservableObject {
     @Published var isRefreshing = false
     @Published var isSending = false
     @Published var lastUpdated = ""
+    @Published var updateAvailable = false
+    @Published var updateTag = ""
+    @Published var updateURL: URL?
+    @Published var isCheckingUpdate = false
 
     func connect() async {
         await refresh()
@@ -966,6 +1263,55 @@ final class BridgeModel: ObservableObject {
         } catch {
             status = error.localizedDescription
         }
+    }
+
+    func checkForUpdate() async {
+        guard !isCheckingUpdate else { return }
+        isCheckingUpdate = true
+        defer { isCheckingUpdate = false }
+        do {
+            guard let url = URL(string: "https://api.github.com/repos/andersaamodt/artificer/releases/latest") else { return }
+            var request = URLRequest(url: url)
+            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            try check(response, data: data)
+            let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+            guard isNewerRelease(release.tagName), hasMobileReleaseAsset(release.assets), let releaseURL = safeReleaseURL(release.htmlURL) else {
+                updateAvailable = false
+                return
+            }
+            updateTag = release.tagName
+            updateURL = releaseURL
+            updateAvailable = true
+        } catch {
+            status = error.localizedDescription
+        }
+    }
+
+    func openUpdate() {
+        guard let updateURL else { return }
+        status = "Opening GitHub release. iOS installs still use Apple or TestFlight update channels."
+        #if canImport(UIKit)
+        UIApplication.shared.open(updateURL)
+        #endif
+    }
+
+    private func hasMobileReleaseAsset(_ assets: [GitHubReleaseAsset]) -> Bool {
+        assets.contains { asset in
+            let lower = asset.name.lowercased()
+            return lower.contains("artificer-mobile") && (lower.hasSuffix(".zip") || lower.hasSuffix(".apk"))
+        }
+    }
+
+    private func isNewerRelease(_ tag: String) -> Bool {
+        let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        return !tag.isEmpty && tag != current && tag != "v\(current)"
+    }
+
+    private func safeReleaseURL(_ value: String) -> URL? {
+        guard let url = URL(string: value), url.scheme == "https", url.host == "github.com" else { return nil }
+        guard url.path.hasPrefix("/andersaamodt/artificer/releases/") else { return nil }
+        return url
     }
 
     func visibleProjects() -> [BridgeProject] {
@@ -1107,6 +1453,7 @@ struct ContentView: View {
                 }
             }
             .task { await model.autoConnectIfPossible() }
+            .task { await model.checkForUpdate() }
         }
     }
 
@@ -1120,6 +1467,15 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            if model.updateAvailable {
+                Button("Update") {
+                    model.openUpdate()
+                }
+                .font(.caption.bold())
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .tint(.blue)
+            }
             ContextWindow(model: model)
         }
         .padding(.horizontal)
@@ -1408,6 +1764,8 @@ Generated from \`app-blueprint/mobile.ir.yaml\`.
 - Android output is a plain Gradle Android project with no Play Services dependency.
 - iOS output is a SwiftUI project generated through XcodeGen.
 - The app is a thin client for the Artificer Mobile bridge exposed by desktop Preferences.
+- Android direct builds check GitHub Releases, auto-download newer APK assets, and expose an Update pill that launches Android's package installer.
+- iOS builds can detect GitHub mobile releases and open the release page; installing a replacement app still uses Apple-supported update channels.
 README
 
 printf 'status=ok\n'
