@@ -1052,17 +1052,41 @@ private struct SessionDetailView: View {
           RunTraceSummaryView(model: model, session: session)
           QueueInlineBar(model: model, session: session)
         }
-        ScrollView {
-          LazyVStack(alignment: .leading, spacing: 12) {
-            ForEach(model.selectedSession?.messages ?? []) { message in
-              MessageView(message: message)
+        ScrollViewReader { proxy in
+          ZStack(alignment: .bottomTrailing) {
+            ScrollView {
+              LazyVStack(alignment: .leading, spacing: 12) {
+                ForEach(model.selectedSession?.messages ?? []) { message in
+                  MessageView(message: message)
+                    .id(message.id)
+                }
+                if (model.selectedSession?.messages ?? []).isEmpty {
+                  EmptyStateView(title: "Empty Session", systemImage: "text.bubble", detail: "Send a prompt to start the transcript.")
+                  .padding(.top, 80)
+                }
+                Color.clear
+                  .frame(height: 1)
+                  .id("transcript-bottom")
+              }
+              .padding(16)
             }
-            if (model.selectedSession?.messages ?? []).isEmpty {
-              EmptyStateView(title: "Empty Session", systemImage: "text.bubble", detail: "Send a prompt to start the transcript.")
-              .padding(.top, 80)
+            if (model.selectedSession?.messages.count ?? 0) > 4 {
+              FloatingIconButton(title: "Jump to latest message", systemImage: "arrow.down.to.line", size: 30) {
+                withAnimation(.easeOut(duration: 0.16)) {
+                  proxy.scrollTo("transcript-bottom", anchor: .bottom)
+                }
+              }
+              .padding(14)
             }
           }
-          .padding(16)
+          .onAppear {
+            proxy.scrollTo("transcript-bottom", anchor: .bottom)
+          }
+          .onChange(of: model.selectedSession?.messages.count ?? 0) { _ in
+            withAnimation(.easeOut(duration: 0.16)) {
+              proxy.scrollTo("transcript-bottom", anchor: .bottom)
+            }
+          }
         }
         Divider()
         ComposerView(model: model)
@@ -2648,6 +2672,8 @@ private struct SettingsView: View {
       VoiceControlPreferencesTab(model: model)
     case "automations":
       AutomationsPreferencesTab(model: model)
+    case "approvals":
+      ApprovalRulesPreferencesTab(model: model)
     case "self-improve":
       SelfImprovePreferencesTab(model: model)
     case "runtime":
@@ -2672,6 +2698,7 @@ private let preferencesTabs = [
   PreferencesTabDescriptor(id: "general", title: "General", systemImage: "gearshape"),
   PreferencesTabDescriptor(id: "voice-control", title: "Voice Control", systemImage: "waveform.circle"),
   PreferencesTabDescriptor(id: "automations", title: "Automations", systemImage: "clock.arrow.circlepath"),
+  PreferencesTabDescriptor(id: "approvals", title: "Approvals", systemImage: "terminal"),
   PreferencesTabDescriptor(id: "self-improve", title: "Self-improve", systemImage: "wand.and.stars"),
   PreferencesTabDescriptor(id: "runtime", title: "Runtime", systemImage: "slider.horizontal.3"),
   PreferencesTabDescriptor(id: "mobile", title: "Mobile", systemImage: "iphone"),
@@ -3003,6 +3030,163 @@ private struct AutomationsPreferencesTab: View {
         .frame(maxWidth: 180, alignment: .leading)
       }
     }
+  }
+}
+
+private struct ApprovalRulesPreferencesTab: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    PreferencesPane {
+      PreferencesSection("Command Approvals") {
+        Picker("Project", selection: Binding(
+          get: { model.commandRulesWorkspaceID.isEmpty ? (model.selectedProjectID ?? "") : model.commandRulesWorkspaceID },
+          set: { nextValue in
+            model.commandRulesWorkspaceID = nextValue
+            Task { await model.loadCommandRules(workspaceID: nextValue) }
+          }
+        )) {
+          Text("Select project").tag("")
+          ForEach(model.projects) { project in
+            Text(project.name).tag(project.id)
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 280, alignment: .leading)
+
+        HStack(spacing: 8) {
+          Button {
+            Task { await model.loadCommandRulesForCurrentSelection() }
+          } label: {
+            Label("Refresh Rules", systemImage: "arrow.clockwise")
+          }
+          .disabled(model.commandRulesWorkspaceID.isEmpty || model.commandRulesLoading)
+
+          Button {
+            Task { await model.clearCommandRules(scope: "remember") }
+          } label: {
+            Label("Clear Remembered", systemImage: "eraser")
+          }
+          .disabled(model.commandRules?.remembered.isEmpty ?? true)
+
+          Button {
+            Task { await model.clearCommandRules(scope: "once") }
+          } label: {
+            Label("Clear One-Time", systemImage: "trash")
+          }
+          .disabled(model.commandRules?.once.isEmpty ?? true)
+        }
+        .buttonStyle(.bordered)
+
+        if model.commandRulesLoading {
+          HStack(spacing: 8) {
+            ProgressView()
+              .controlSize(.small)
+            Text("Loading command rules...")
+              .foregroundStyle(.secondary)
+          }
+          .font(.footnote)
+        }
+
+        if !model.commandRulesError.isEmpty {
+          HStack(spacing: 8) {
+            Text(model.commandRulesError)
+              .foregroundStyle(.red)
+              .lineLimit(2)
+            FloatingIconButton(title: "Copy command rules error", systemImage: "doc.on.doc", size: 24) {
+              copyToPasteboard(model.commandRulesError)
+            }
+          }
+          .font(.footnote)
+        }
+
+        if let rules = model.commandRules {
+          CommandRulesGroup(title: "Global defaults", emptyText: "No global defaults configured.", rules: rules.globalDefaults, locked: true, scope: "", model: model)
+          CommandRulesGroup(title: "Remembered project rules", emptyText: "No remembered project rules.", rules: rules.remembered, locked: false, scope: "remember", model: model)
+          CommandRulesGroup(title: "One-time project rules", emptyText: "No one-time project rules.", rules: rules.once, locked: false, scope: "once", model: model)
+        } else if !model.commandRulesLoading {
+          Text("Select a project to inspect approval rules.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+      }
+    }
+    .task {
+      await model.loadCommandRulesForCurrentSelection()
+    }
+  }
+}
+
+private struct CommandRulesGroup: View {
+  let title: String
+  let emptyText: String
+  let rules: [CommandRule]
+  let locked: Bool
+  let scope: String
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(title)
+        .font(.subheadline.weight(.semibold))
+      if rules.isEmpty {
+        Text(emptyText)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      } else {
+        VStack(alignment: .leading, spacing: 6) {
+          ForEach(rules) { rule in
+            CommandRuleRow(rule: rule, locked: locked, scope: scope, model: model)
+          }
+        }
+      }
+    }
+    .padding(.top, 4)
+  }
+}
+
+private struct CommandRuleRow: View {
+  let rule: CommandRule
+  let locked: Bool
+  let scope: String
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 10) {
+      Text(rule.decisionLabel)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(rule.decision == "deny" ? Color.red : Color.green)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background((rule.decision == "deny" ? Color.red : Color.green).opacity(0.10))
+        .clipShape(Capsule())
+      VStack(alignment: .leading, spacing: 2) {
+        Text(rule.displayTitle)
+          .font(.footnote)
+          .lineLimit(1)
+          .truncationMode(.middle)
+          .textSelection(.enabled)
+        Text(rule.matchDescription)
+          .font(.system(.caption, design: .monospaced))
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+          .textSelection(.enabled)
+      }
+      Spacer(minLength: 10)
+      if !locked {
+        FloatingIconButton(title: "Delete rule", systemImage: "trash", disabled: rule.index.isEmpty || model.commandRulesLoading, size: 24) {
+          Task { await model.deleteCommandRule(scope: scope, index: rule.index) }
+        }
+      } else {
+        Image(systemName: "lock")
+          .foregroundStyle(.tertiary)
+      }
+    }
+    .padding(8)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color(nsColor: .controlBackgroundColor).opacity(0.52))
+    .clipShape(RoundedRectangle(cornerRadius: 8))
   }
 }
 
@@ -3543,6 +3727,10 @@ private final class ArtificerModel: ObservableObject {
   @Published var dictationToggleShortcut = "none"
   @Published var gitWorkflowPolicy = "managed"
   @Published var gitAmbiguityPolicy = "preserve"
+  @Published var commandRulesWorkspaceID = ""
+  @Published var commandRules: CommandRulesResponse?
+  @Published var commandRulesLoading = false
+  @Published var commandRulesError = ""
   @Published var selectedThemeID = "system"
   @Published var showingGitDiff = false
   @Published var showingCommitDialog = false
@@ -3894,6 +4082,51 @@ private final class ArtificerModel: ObservableObject {
       statusMessage = decision == "allow" ? "Command approved." : "Command denied."
       await loadSelectedSession(status: nil, trackBusy: false)
       await loadQueueItems()
+    }
+  }
+
+  func loadCommandRulesForCurrentSelection() async {
+    let projectID = commandRulesWorkspaceID.isEmpty ? (selectedProjectID ?? projects.first?.id ?? "") : commandRulesWorkspaceID
+    commandRulesWorkspaceID = projectID
+    await loadCommandRules(workspaceID: projectID)
+  }
+
+  func loadCommandRules(workspaceID: String) async {
+    guard !workspaceID.isEmpty else {
+      commandRules = nil
+      commandRulesError = ""
+      return
+    }
+    commandRulesLoading = true
+    commandRulesError = ""
+    let result = await runBackend("command-rules-list", [workspaceID], trackBusy: false)
+    commandRulesLoading = false
+    if let response = decode(CommandRulesResponse.self, from: result), response.success {
+      commandRules = response
+      commandRulesWorkspaceID = response.workspaceID.isEmpty ? workspaceID : response.workspaceID
+      statusMessage = "Command rules loaded."
+    } else if !lastError.isEmpty {
+      commandRulesError = lastError
+    } else {
+      commandRulesError = "Could not load command rules."
+    }
+  }
+
+  func clearCommandRules(scope: String) async {
+    guard !commandRulesWorkspaceID.isEmpty else { return }
+    let result = await runBackend("command-rules-clear", commandRulesWorkspaceID, scope)
+    if let response = decode(GenericSuccessResponse.self, from: result), response.success {
+      statusMessage = "Command rules cleared."
+      await loadCommandRules(workspaceID: commandRulesWorkspaceID)
+    }
+  }
+
+  func deleteCommandRule(scope: String, index: String) async {
+    guard !commandRulesWorkspaceID.isEmpty, !scope.isEmpty, !index.isEmpty else { return }
+    let result = await runBackend("command-rule-delete", commandRulesWorkspaceID, scope, index)
+    if let response = decode(GenericSuccessResponse.self, from: result), response.success {
+      statusMessage = "Command rule deleted."
+      await loadCommandRules(workspaceID: commandRulesWorkspaceID)
     }
   }
 
@@ -6041,6 +6274,74 @@ private struct GitBranchMutationResponse: Decodable {
 private struct QueueItemsResponse: Decodable {
   let success: Bool
   let items: [QueueItem]
+}
+
+private struct CommandRulesResponse: Decodable {
+  let success: Bool
+  let workspaceID: String
+  let globalDefaults: [CommandRule]
+  let remembered: [CommandRule]
+  let once: [CommandRule]
+
+  enum CodingKeys: String, CodingKey {
+    case success, remembered, once
+    case workspaceID = "workspace_id"
+    case globalDefaults = "global_defaults"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? false
+    workspaceID = container.decodeFlexibleString(forKey: .workspaceID)
+    globalDefaults = (try? container.decode([CommandRule].self, forKey: .globalDefaults)) ?? []
+    remembered = (try? container.decode([CommandRule].self, forKey: .remembered)) ?? []
+    once = (try? container.decode([CommandRule].self, forKey: .once)) ?? []
+  }
+}
+
+private struct CommandRule: Identifiable, Decodable, Hashable {
+  let id: String
+  let index: String
+  let decision: String
+  let matchMode: String
+  let pattern: String
+  let label: String
+
+  enum CodingKeys: String, CodingKey {
+    case index, decision, pattern, label
+    case matchMode = "match_mode"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    index = container.decodeFlexibleString(forKey: .index)
+    decision = container.decodeFlexibleString(forKey: .decision).lowercased()
+    matchMode = container.decodeFlexibleString(forKey: .matchMode).lowercased()
+    pattern = container.decodeFlexibleString(forKey: .pattern)
+    label = container.decodeFlexibleString(forKey: .label)
+    id = [index, decision, matchMode, pattern, label].joined(separator: "|")
+  }
+
+  var decisionLabel: String {
+    switch decision {
+    case "deny": return "Deny"
+    case "allow": return "Allow"
+    default: return decision.isEmpty ? "Rule" : decision.capitalized
+    }
+  }
+
+  var displayTitle: String {
+    if !label.isEmpty { return label }
+    if matchMode == "regex" { return "regex rule" }
+    return pattern.isEmpty ? "Command rule" : pattern
+  }
+
+  var matchDescription: String {
+    if matchMode == "regex" {
+      return pattern.isEmpty ? "regex" : pattern
+    }
+    return "exact"
+  }
 }
 
 private struct QueueItem: Identifiable, Decodable, Hashable {

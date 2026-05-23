@@ -46,6 +46,9 @@ Actions:
   queue-cancel WORKSPACE_ID CONVERSATION_ID [ITEM_ID]
   queue-stop WORKSPACE_ID CONVERSATION_ID
   approval-answer WORKSPACE_ID CONVERSATION_ID DECISION SCOPE MATCH_MODE [PATTERN] [COMMAND]
+  command-rules-list WORKSPACE_ID
+  command-rules-clear WORKSPACE_ID SCOPE
+  command-rule-delete WORKSPACE_ID SCOPE INDEX
   decision-answer WORKSPACE_ID CONVERSATION_ID ANSWER
   terminal-session-start WORKSPACE_ID
   terminal-session-poll WORKSPACE_ID SESSION_ID [OFFSET]
@@ -888,6 +891,21 @@ case "$action" in
     pattern_value=${6-}
     command_value=${7-}
     api_post approval_answer workspace_id "$workspace_id" conversation_id "$conversation_id" decision "$decision" scope "$scope_value" match_mode "$match_mode" pattern "$pattern_value" command "$command_value"
+    ;;
+  command-rules-list)
+    workspace_id=${1-}
+    api_get command_rules_list workspace_id "$workspace_id"
+    ;;
+  command-rules-clear)
+    workspace_id=${1-}
+    scope_value=${2:-remember}
+    api_post command_rules_clear workspace_id "$workspace_id" scope "$scope_value"
+    ;;
+  command-rule-delete)
+    workspace_id=${1-}
+    scope_value=${2:-remember}
+    index_value=${3-}
+    api_post command_rule_delete workspace_id "$workspace_id" scope "$scope_value" index "$index_value"
     ;;
   decision-answer)
     workspace_id=${1-}

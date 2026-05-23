@@ -27,6 +27,26 @@ for file in "$template" "$generated"; do
     printf '%s\n' "Native Settings should expose voice controls in their own tab: $file" >&2
     exit 1
   }
+  grep -q 'ApprovalRulesPreferencesTab(model: model)' "$file" || {
+    printf '%s\n' "Native Settings should expose command approval rules in their own tab: $file" >&2
+    exit 1
+  }
+  grep -q 'CommandRulesGroup(title: "Global defaults"' "$file" || {
+    printf '%s\n' "Native Settings should show global command approval defaults: $file" >&2
+    exit 1
+  }
+  grep -q 'CommandRulesGroup(title: "Remembered project rules"' "$file" || {
+    printf '%s\n' "Native Settings should show remembered project command rules: $file" >&2
+    exit 1
+  }
+  grep -q 'Clear Remembered' "$file" || {
+    printf '%s\n' "Native Settings should clear remembered command approval rules: $file" >&2
+    exit 1
+  }
+  grep -q 'command-rules-list' "$file" || {
+    printf '%s\n' "Native Settings should load command approval rules through the backend: $file" >&2
+    exit 1
+  }
   grep -q 'Use built-in Mac voice commands' "$file" || {
     printf '%s\n' "Native Settings should expose built-in Mac voice commands: $file" >&2
     exit 1
@@ -63,7 +83,10 @@ for action in \
   self-improve-run-options-set \
   self-improve-run \
   git-runtime-settings-get \
-  git-runtime-settings-set
+  git-runtime-settings-set \
+  command-rules-list \
+  command-rules-clear \
+  command-rule-delete
 do
   grep -q "$action" "$backend" || {
     printf '%s\n' "Native backend should expose $action" >&2
@@ -103,6 +126,79 @@ printf '%s' "$model_catalog_json" | python3 -c 'import json,sys; payload=json.lo
   printf '%s\n' "Native backend should expose the hosted model catalog" >&2
   exit 1
 }
+
+rules_tmp=$(mktemp -d "${TMPDIR:-/tmp}/artificer-native-rules-test.XXXXXX")
+cleanup_rules_tmp() {
+  rm -rf "$rules_tmp"
+}
+trap cleanup_rules_tmp EXIT INT TERM
+mkdir -p "$rules_tmp/home" "$rules_tmp/state" "$rules_tmp/config" "$rules_tmp/project"
+
+rules_backend() {
+  HOME="$rules_tmp/home" \
+    XDG_STATE_HOME="$rules_tmp/state" \
+    XDG_CONFIG_HOME="$rules_tmp/config" \
+    ARTIFICER_STATE_ROOT="$rules_tmp/state/artificer" \
+    ARTIFICER_CORE_ROOT="$root" \
+    "$backend" "$@"
+}
+
+rules_backend project-add "$rules_tmp/project" "Native Rules Contract" ask-all > "$rules_tmp/project.json"
+rules_workspace_id=$(python3 - "$rules_tmp/project.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+workspace = payload.get("workspace") or {}
+print(workspace.get("id") or payload.get("workspace_id") or payload.get("id") or "")
+PY
+)
+[ -n "$rules_workspace_id" ] || {
+  printf '%s\n' "Native backend command rules contract could not create an isolated workspace" >&2
+  exit 1
+}
+
+rules_backend session-create "$rules_workspace_id" "Rules Contract" default > "$rules_tmp/session.json"
+rules_conversation_id=$(python3 - "$rules_tmp/session.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+session = payload.get("session") or payload.get("conversation") or {}
+print(session.get("id") or payload.get("conversation_id") or payload.get("id") or "")
+PY
+)
+[ -n "$rules_conversation_id" ] || {
+  printf '%s\n' "Native backend command rules contract could not create an isolated session" >&2
+  exit 1
+}
+
+rules_backend approval-answer "$rules_workspace_id" "$rules_conversation_id" deny remember exact "printf contract-smoke" "printf contract-smoke" > "$rules_tmp/answer.json"
+rules_backend command-rules-list "$rules_workspace_id" > "$rules_tmp/list.json"
+python3 - "$rules_tmp/list.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+assert payload.get("success") is True, payload
+assert isinstance(payload.get("global_defaults"), list), payload
+remembered = payload.get("remembered") or []
+assert any(rule.get("decision") == "deny" and rule.get("pattern") == "printf contract-smoke" for rule in remembered), payload
+PY
+
+rules_backend command-rule-delete "$rules_workspace_id" remember 1 > "$rules_tmp/delete.json"
+python3 - "$rules_tmp/delete.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+assert payload.get("success") is True and payload.get("deleted") is True, payload
+PY
+
+rules_backend command-rules-list "$rules_workspace_id" > "$rules_tmp/list-after-delete.json"
+python3 - "$rules_tmp/list-after-delete.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+assert payload.get("success") is True, payload
+assert not any(rule.get("pattern") == "printf contract-smoke" for rule in (payload.get("remembered") or [])), payload
+PY
 
 grep -q 'XDG_STATE_HOME:-"$home/.local/state"}/wizardry/voice-recognition' "$backend" || {
   printf '%s\n' "Native backend should reuse the Wizardry voice-recognition install root" >&2

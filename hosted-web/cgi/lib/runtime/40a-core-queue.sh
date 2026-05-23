@@ -308,7 +308,7 @@ global_safe_default_rules_json() {
   printf ',{"id":"g8","label":"rg search","match_mode":"regex","pattern":"^rg([[:space:]].*)?$"}'
   printf ',{"id":"g9","label":"tool lookup","match_mode":"regex","pattern":"^(which[[:space:]]+[A-Za-z0-9._+-]+|command[[:space:]]+-v[[:space:]]+[A-Za-z0-9._+-]+)$"}'
   printf ',{"id":"g10","label":"tool version checks","match_mode":"regex","pattern":"^((godot|godot4|python|python3|node|npm|pnpm|yarn|cargo|rustc)[[:space:]]+--version|go[[:space:]]+version)([[:space:]].*)?$"}'
-  printf ',{"id":"g11","label":"godot headless smoke test","match_mode":"regex","pattern":"^(godot|godot4)[[:space:]]+--headless[[:space:]]+--path[[:space:]]+\\.[[:space:]]+--quit$"}'
+  printf ',{"id":"g11","label":"godot headless smoke test","match_mode":"regex","pattern":"^(godot|godot4)[[:space:]]+--headless[[:space:]]+--path[[:space:]]+\\\\.[[:space:]]+--quit$"}'
   printf ',{"id":"g12","label":"shell syntax check","match_mode":"regex","pattern":"^(sh|bash)[[:space:]]+-n[[:space:]]+[A-Za-z0-9._/-]+$"}'
   printf ',{"id":"g13","label":"python compile check","match_mode":"regex","pattern":"^(python|python3)[[:space:]]+-m[[:space:]]+py_compile[[:space:]]+[A-Za-z0-9._/-]+$"}'
   printf ',{"id":"g14","label":"node syntax check","match_mode":"regex","pattern":"^node[[:space:]]+--check[[:space:]]+[A-Za-z0-9._/-]+$"}'
