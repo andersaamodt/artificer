@@ -16,7 +16,7 @@
 
 - release workflow now builds macOS app artifacts directly and publishes both Linux architecture bundles
 - self-improvement plugin metadata now stores lane/model provenance, domain tags, evidence refs, admin actions, and risk level
-- project license updated from O.W.L. 2.0 to O.W.L. 3.0
+- project license updated to O.W.L. 3.1
 
 ### Fixed
 
@@ -34,7 +34,7 @@ First GitHub-publishable Artificer release surface.
 - macOS `.app` bundle builder
 - GitHub Actions build and release workflow
 - publish-surface audit document and audit script
-- explicit version file and O.W.L. 2.0 license
+- explicit version file and project license
 
 ### Changed
 
