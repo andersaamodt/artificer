@@ -23,6 +23,14 @@ for file in "$template" "$generated"; do
     printf '%s\n' "Native Settings should restore Git policy controls: $file" >&2
     exit 1
   }
+  grep -q 'VoiceControlPreferencesTab(model: model)' "$file" || {
+    printf '%s\n' "Native Settings should expose voice controls in their own tab: $file" >&2
+    exit 1
+  }
+  if sed -n '/private struct AutomationsPreferencesTab: View/,/private struct VoiceControlPreferencesTab: View/p' "$file" | grep -q 'Voice automations\|Save Local Actions'; then
+    printf '%s\n' "Native Settings should not bury voice command editing in Automations: $file" >&2
+    exit 1
+  fi
   grep -q 'Allow self-reschedule' "$file" || {
     printf '%s\n' "Native automation creation should restore self-reschedule control: $file" >&2
     exit 1

@@ -30,12 +30,16 @@ for file in "$template" "$generated"; do
     printf '%s\n' "Automations panel should create automations through the model: $file" >&2
     exit 1
   }
-  grep -q 'VoiceCommandsOverviewPane(model: model)' "$file" || {
-    printf '%s\n' "Automations panel should expose voice commands: $file" >&2
+  if sed -n '/private struct AutomationsDetailView: View/,/private struct AutomationCreatePane: View/p' "$file" | grep -q 'Voice Commands\|Edit Voice Commands\|VoiceCommandsOverviewPane'; then
+    printf '%s\n' "Automations panel should not expose voice command editing: $file" >&2
+    exit 1
+  fi
+  grep -q 'VoiceControlPreferencesTab(model: model)' "$file" || {
+    printf '%s\n' "Preferences should expose a dedicated Voice Control tab: $file" >&2
     exit 1
   }
-  grep -q 'Edit Voice Commands' "$file" || {
-    printf '%s\n' "Automations panel should point users to voice command editing: $file" >&2
+  grep -q 'Label("Voice Control", systemImage: "waveform.circle")' "$file" || {
+    printf '%s\n' "Preferences should label the dedicated voice settings tab clearly: $file" >&2
     exit 1
   }
   grep -q 'Save Local Actions' "$file" || {

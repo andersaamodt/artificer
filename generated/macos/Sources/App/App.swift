@@ -719,7 +719,6 @@ private struct EmptyStateView: View {
 
 private struct AutomationsDetailView: View {
   @ObservedObject var model: ArtificerModel
-  @Environment(\.openWindow) private var openWindow
 
   var body: some View {
     VStack(spacing: 0) {
@@ -750,13 +749,6 @@ private struct AutomationsDetailView: View {
 
       Divider()
 
-      VoiceCommandsOverviewPane(model: model) {
-        openWindow(id: "preferences")
-      }
-      .padding(12)
-
-      Divider()
-
       HSplitView {
         AutomationCreatePane(model: model)
           .frame(minWidth: 280, idealWidth: 340, maxWidth: 420, maxHeight: .infinity)
@@ -777,71 +769,6 @@ private struct AutomationsDetailView: View {
       return "Background runtime: \(daemon.status). \(model.automations.count) automation\(model.automations.count == 1 ? "" : "s")."
     }
     return "\(model.automations.count) automation\(model.automations.count == 1 ? "" : "s")."
-  }
-}
-
-private struct VoiceCommandsOverviewPane: View {
-  @ObservedObject var model: ArtificerModel
-  let openPreferences: () -> Void
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      HStack(alignment: .firstTextBaseline, spacing: 10) {
-        Label("Voice Commands", systemImage: model.voiceAutomationsEnabled ? "waveform.circle.fill" : "waveform.circle")
-          .font(.headline)
-        Text(model.voiceAutomationStatus?.status ?? (model.voiceAutomationsEnabled ? "enabled" : "off"))
-          .font(.caption)
-          .foregroundStyle(model.voiceAutomationsEnabled ? Color.secondary : Color.orange)
-        Spacer()
-        Button {
-          openPreferences()
-        } label: {
-          Label("Edit Voice Commands", systemImage: "slider.horizontal.3")
-        }
-        .buttonStyle(.bordered)
-      }
-      Text("Local phrases can trigger allowlisted actions even when push-to-talk is not active.")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-      if model.hasVoiceLocalAction1 {
-        VoicePhraseSummary(title: model.voiceLocalAction1Name, phrases: model.voiceLocalAction1Phrases)
-      }
-      if model.hasVoiceLocalAction2 {
-        VoicePhraseSummary(title: model.voiceLocalAction2Name, phrases: model.voiceLocalAction2Phrases)
-      }
-      if !model.hasVoiceLocalAction1 && !model.hasVoiceLocalAction2 {
-        Text("No local voice actions configured.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-      if model.voiceLlmPromptsEnabled {
-        VoicePhraseSummary(title: "Ask Artificer", phrases: "artificer summarize this thread, ask artificer check the build")
-      }
-      if model.voiceLlmActionsEnabled {
-        Text("Artificer action phrases use the selected thread and may run with the enabled action permissions.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-  }
-}
-
-private struct VoicePhraseSummary: View {
-  let title: String
-  let phrases: String
-
-  var body: some View {
-    HStack(alignment: .top, spacing: 10) {
-      Text(title)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .frame(width: 86, alignment: .leading)
-      Text(phrases)
-        .font(.caption)
-        .lineLimit(2)
-        .textSelection(.enabled)
-    }
   }
 }
 
@@ -1249,19 +1176,28 @@ private struct SettingsView: View {
   @ObservedObject var model: ArtificerModel
 
   var body: some View {
-    TabView {
+    TabView(selection: $model.preferencesTab) {
       GeneralPreferencesTab(model: model)
         .tabItem { Label("General", systemImage: "gearshape") }
+        .tag("general")
+      VoiceControlPreferencesTab(model: model)
+        .tabItem { Label("Voice Control", systemImage: "waveform.circle") }
+        .tag("voice-control")
       AutomationsPreferencesTab(model: model)
         .tabItem { Label("Automations", systemImage: "clock.arrow.circlepath") }
+        .tag("automations")
       SelfImprovePreferencesTab(model: model)
         .tabItem { Label("Self-improve", systemImage: "wand.and.stars") }
+        .tag("self-improve")
       RuntimePreferencesTab(model: model)
         .tabItem { Label("Runtime", systemImage: "slider.horizontal.3") }
+        .tag("runtime")
       MobilePreferencesTab(model: model)
         .tabItem { Label("Mobile", systemImage: "iphone") }
+        .tag("mobile")
       GitPreferencesTab(model: model)
         .tabItem { Label("Git", systemImage: "arrow.triangle.branch") }
+        .tag("git")
     }
     .padding(20)
     .task {
@@ -1526,6 +1462,45 @@ private struct AutomationsPreferencesTab: View {
             Task { await model.setMenuBarIconEnabled(nextValue) }
           }
         ))
+        if let daemon = model.daemonStatus {
+          SettingsInfoRow(title: "Status", value: daemon.status)
+          SettingsInfoRow(title: "Method", value: daemon.method)
+          SettingsInfoRow(title: "Pending", value: "\(daemon.taskPending)")
+        } else {
+          Text("Automation status has not loaded yet.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        HStack {
+          Button("Run Due Automations") { Task { await model.daemon("automation-daemon-tick") } }
+            .disabled(!(model.daemonStatus?.enabled ?? false))
+          Button((model.daemonStatus?.paused ?? false) ? "Resume Runtime" : "Pause Runtime") {
+            Task { await model.toggleAutomationDaemonPaused() }
+          }
+          .disabled(!(model.daemonStatus?.enabled ?? false))
+        }
+        .buttonStyle(.bordered)
+      }
+      PreferencesSection("Programming Mode") {
+        Toggle("Programmer does code reviews", isOn: $model.programmerReview)
+        Picker("Max review rounds", selection: $model.programmerReviewRounds) {
+          ForEach(1...4, id: \.self) { round in
+            Text("\(round)").tag(round)
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 180, alignment: .leading)
+      }
+    }
+  }
+}
+
+private struct VoiceControlPreferencesTab: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    PreferencesPane {
+      PreferencesSection("Voice Control") {
         Toggle("Voice automations", isOn: Binding(
           get: { model.voiceAutomationsEnabled },
           set: { nextValue in
@@ -1599,34 +1574,6 @@ private struct AutomationsPreferencesTab: View {
               .fixedSize(horizontal: false, vertical: true)
           }
         }
-        if let daemon = model.daemonStatus {
-          SettingsInfoRow(title: "Status", value: daemon.status)
-          SettingsInfoRow(title: "Method", value: daemon.method)
-          SettingsInfoRow(title: "Pending", value: "\(daemon.taskPending)")
-        } else {
-          Text("Automation status has not loaded yet.")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-        }
-        HStack {
-          Button("Run Due Automations") { Task { await model.daemon("automation-daemon-tick") } }
-            .disabled(!(model.daemonStatus?.enabled ?? false))
-          Button((model.daemonStatus?.paused ?? false) ? "Resume Runtime" : "Pause Runtime") {
-            Task { await model.toggleAutomationDaemonPaused() }
-          }
-          .disabled(!(model.daemonStatus?.enabled ?? false))
-        }
-        .buttonStyle(.bordered)
-      }
-      PreferencesSection("Programming Mode") {
-        Toggle("Programmer does code reviews", isOn: $model.programmerReview)
-        Picker("Max review rounds", selection: $model.programmerReviewRounds) {
-          ForEach(1...4, id: \.self) { round in
-            Text("\(round)").tag(round)
-          }
-        }
-        .pickerStyle(.menu)
-        .frame(maxWidth: 180, alignment: .leading)
       }
     }
   }
@@ -1981,6 +1928,7 @@ private final class ArtificerModel: ObservableObject {
   @Published var daemonStatus: DaemonStatus?
   @Published var health: RuntimeHealth?
   @Published var showingAutomations = false
+  @Published var preferencesTab = "general"
   @Published var selectedProjectID: String?
   @Published var selectedSessionID: String?
   @Published var sessionsByProject: [String: [SessionSummary]] = [:]
