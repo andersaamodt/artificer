@@ -213,7 +213,7 @@ canonical_desktop_value_key() {
   key=$1
   reject_line_breaks "$key" "desktop preference key"
   case "$key" in
-    selected_workspace_id|selected_conversation_id|theme_id|voice_local_action_1_name|voice_local_action_1_command|voice_local_action_1_phrases|voice_local_action_2_name|voice_local_action_2_command|voice_local_action_2_phrases)
+    selected_workspace_id|selected_conversation_id|theme_id|organize_mode|organize_sort|organize_show|voice_local_action_1_name|voice_local_action_1_command|voice_local_action_1_phrases|voice_local_action_2_name|voice_local_action_2_command|voice_local_action_2_phrases)
       printf '%s\n' "$key"
       ;;
     *)
@@ -293,6 +293,9 @@ desktop_prefs_json() {
   voice_local_action_2_command=$(read_desktop_value voice_local_action_2_command 2>/dev/null || printf '')
   voice_local_action_2_phrases=$(read_desktop_value voice_local_action_2_phrases 2>/dev/null || printf '')
   theme_id=$(read_desktop_value theme_id 2>/dev/null || printf 'system')
+  organize_mode=$(read_desktop_value organize_mode 2>/dev/null || printf 'project')
+  organize_sort=$(read_desktop_value organize_sort 2>/dev/null || printf 'updated')
+  organize_show=$(read_desktop_value organize_show 2>/dev/null || printf 'all')
   mobile_bridge=$(read_desktop_pref mobile_bridge 2>/dev/null || printf '%s\n' 0)
   mobile_tor=$(read_desktop_pref mobile_tor 2>/dev/null || printf '%s\n' 0)
   mobile_lan=$(read_desktop_pref mobile_lan 2>/dev/null || printf '%s\n' 0)
@@ -306,12 +309,15 @@ desktop_prefs_json() {
   voice_dictation_commands=$(bool_pref_value "$voice_dictation_commands" 2>/dev/null || printf '%s\n' 1)
   voice_automation_llm_prompts=$(bool_pref_value "$voice_automation_llm_prompts" 2>/dev/null || printf '%s\n' 0)
   voice_automation_llm_actions=$(bool_pref_value "$voice_automation_llm_actions" 2>/dev/null || printf '%s\n' 0)
+  case "$organize_mode" in project|chrono) ;; *) organize_mode=project ;; esac
+  case "$organize_sort" in updated|created) ;; *) organize_sort=updated ;; esac
+  case "$organize_show" in all|relevant|running) ;; *) organize_show=all ;; esac
   mobile_bridge=$(bool_pref_value "$mobile_bridge" 2>/dev/null || printf '%s\n' 0)
   mobile_tor=$(bool_pref_value "$mobile_tor" 2>/dev/null || printf '%s\n' 0)
   mobile_lan=$(bool_pref_value "$mobile_lan" 2>/dev/null || printf '%s\n' 0)
   mobile_allow_execute=$(bool_pref_value "$mobile_allow_execute" 2>/dev/null || printf '%s\n' 0)
   mobile_allow_self_actuation=$(bool_pref_value "$mobile_allow_self_actuation" 2>/dev/null || printf '%s\n' 0)
-  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_sound":%s,"voice_builtin_commands":%s,"voice_dictation_commands":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s,"voice_local_action_1_name":%s,"voice_local_action_1_command":%s,"voice_local_action_1_phrases":%s,"voice_local_action_2_name":%s,"voice_local_action_2_command":%s,"voice_local_action_2_phrases":%s,"theme_id":%s,"mobile_bridge":%s,"mobile_tor":%s,"mobile_lan":%s,"mobile_allow_execute":%s,"mobile_allow_self_actuation":%s}\n' \
+  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_sound":%s,"voice_builtin_commands":%s,"voice_dictation_commands":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s,"voice_local_action_1_name":%s,"voice_local_action_1_command":%s,"voice_local_action_1_phrases":%s,"voice_local_action_2_name":%s,"voice_local_action_2_command":%s,"voice_local_action_2_phrases":%s,"theme_id":%s,"organize_mode":%s,"organize_sort":%s,"organize_show":%s,"mobile_bridge":%s,"mobile_tor":%s,"mobile_lan":%s,"mobile_allow_execute":%s,"mobile_allow_self_actuation":%s}\n' \
     "$([ "$background_mode" = 1 ] && printf true || printf false)" \
     "$([ "$menu_bar_icon" = 1 ] && printf true || printf false)" \
     "$([ "$voice_automations" = 1 ] && printf true || printf false)" \
@@ -327,6 +333,9 @@ desktop_prefs_json() {
     "$(json_escape "$voice_local_action_2_command")" \
     "$(json_escape "$voice_local_action_2_phrases")" \
     "$(json_escape "$theme_id")" \
+    "$(json_escape "$organize_mode")" \
+    "$(json_escape "$organize_sort")" \
+    "$(json_escape "$organize_show")" \
     "$([ "$mobile_bridge" = 1 ] && printf true || printf false)" \
     "$([ "$mobile_tor" = 1 ] && printf true || printf false)" \
     "$([ "$mobile_lan" = 1 ] && printf true || printf false)" \

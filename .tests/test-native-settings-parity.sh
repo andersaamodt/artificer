@@ -234,4 +234,49 @@ key' 1 >/tmp/artificer-native-settings-parity.out 2>/tmp/artificer-native-settin
   exit 1
 fi
 
+rules_backend desktop-value-set organize_mode chrono > "$rules_tmp/organize-mode.json"
+python3 - "$rules_tmp/organize-mode.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+assert payload.get("success") is True, payload
+assert payload.get("organize_mode") == "chrono", payload
+PY
+
+rules_backend desktop-value-set organize_sort created > "$rules_tmp/organize-sort.json"
+python3 - "$rules_tmp/organize-sort.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+assert payload.get("success") is True, payload
+assert payload.get("organize_sort") == "created", payload
+PY
+
+rules_backend desktop-value-set organize_show running > "$rules_tmp/organize-show.json"
+python3 - "$rules_tmp/organize-show.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+assert payload.get("success") is True, payload
+assert payload.get("organize_show") == "running", payload
+PY
+
+rules_backend desktop-value-set organize_mode impossible > "$rules_tmp/organize-invalid-write.json"
+rules_backend desktop-prefs-get > "$rules_tmp/organize-invalid-read.json"
+python3 - "$rules_tmp/organize-invalid-read.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+assert payload.get("success") is True, payload
+assert payload.get("organize_mode") == "project", payload
+assert payload.get("organize_sort") == "created", payload
+assert payload.get("organize_show") == "running", payload
+PY
+
+if rules_backend desktop-value-set 'organize_show
+bad' running > "$rules_tmp/organize-bad-key.out" 2> "$rules_tmp/organize-bad-key.err"; then
+  printf '%s\n' "desktop value keys with line breaks must be rejected" >&2
+  exit 1
+fi
+
 printf '%s\n' "ok native settings parity contract"

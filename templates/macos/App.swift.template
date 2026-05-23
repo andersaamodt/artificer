@@ -298,7 +298,6 @@ private final class ArtificerStatusItemController: NSObject {
 
 private struct RootView: View {
   @ObservedObject var model: ArtificerModel
-  @Environment(\.openWindow) private var openWindow
 
   var body: some View {
     NavigationSplitView {
@@ -324,11 +323,6 @@ private struct RootView: View {
           model.showingTerminalPanel = true
           Task { await model.startTerminalSession() }
         }
-        ThemeToolbarMenu(model: model)
-        FloatingIconButton(title: "Models", systemImage: "shippingbox", disabled: model.isBusy) {
-          model.showingModelsPanel = true
-          Task { await model.loadModelData() }
-        }
         FloatingIconButton(title: "Refresh", systemImage: "arrow.clockwise", disabled: model.isBusy) {
           Task { await model.refreshAll() }
         }
@@ -343,9 +337,6 @@ private struct RootView: View {
         }
         FloatingIconButton(title: "Open hosted Artificer", systemImage: "safari") {
           Task { await model.openHostedArtificer() }
-        }
-        FloatingIconButton(title: "Preferences", systemImage: "gearshape") {
-          openWindow(id: "preferences")
         }
       }
     }
@@ -716,6 +707,15 @@ private struct ThemeSwatch: View {
   }
 }
 
+private struct SidebarSessionEntry: Identifiable, Hashable {
+  let project: Project
+  let session: SessionSummary
+
+  var id: String {
+    "\(project.id)|\(session.id)"
+  }
+}
+
 private struct WorkspaceSidebar: View {
   @ObservedObject var model: ArtificerModel
 
@@ -736,10 +736,11 @@ private struct WorkspaceSidebar: View {
         Button {
           Task { await model.refreshAll() }
         } label: {
-          Image(systemName: "line.3.horizontal.decrease")
+          Image(systemName: "arrow.clockwise")
         }
         .help("Refresh")
         .disabled(model.isBusy)
+        SidebarOrganizeMenu(model: model)
       }
       .buttonStyle(.borderless)
       .padding(.horizontal, 12)
@@ -757,9 +758,29 @@ private struct WorkspaceSidebar: View {
         LazyVStack(alignment: .leading, spacing: 4) {
           if model.projects.isEmpty {
             EmptySidebarState(model: model)
+          } else if model.organizeMode == "chrono" {
+            let entries = model.chronoSidebarEntries
+            if entries.isEmpty {
+              Text("No threads match current organize filters.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(8)
+            } else {
+              ForEach(entries) { entry in
+                ChronoSessionTreeRow(model: model, entry: entry)
+              }
+            }
           } else {
-            ForEach(model.projects) { project in
-              WorkspaceTreeGroup(model: model, project: project)
+            let visibleProjects = model.visibleProjectsForSidebar
+            if visibleProjects.isEmpty {
+              Text("No threads match current organize filters.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(8)
+            } else {
+              ForEach(visibleProjects) { project in
+                WorkspaceTreeGroup(model: model, project: project)
+              }
             }
           }
         }
@@ -771,10 +792,55 @@ private struct WorkspaceSidebar: View {
       Divider()
       HStack(alignment: .center, spacing: 8) {
         OpenPreferencesButton()
+        ThemeToolbarMenu(model: model)
+        SidebarModelButton(model: model)
         RuntimeHealthView(model: model)
+        Spacer(minLength: 0)
       }
       .padding(12)
       .padding(.bottom, 28)
+    }
+  }
+}
+
+private struct SidebarOrganizeMenu: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    Menu {
+      Section("View") {
+        organizeButton("By project", systemImage: "folder", kind: "mode", value: "project", selected: model.organizeMode == "project")
+        organizeButton("Chronological list", systemImage: "clock", kind: "mode", value: "chrono", selected: model.organizeMode == "chrono")
+      }
+      Section("Sort") {
+        organizeButton("Updated", systemImage: "arrow.triangle.2.circlepath", kind: "sort", value: "updated", selected: model.organizeSort == "updated")
+        organizeButton("Created", systemImage: "plus.message", kind: "sort", value: "created", selected: model.organizeSort == "created")
+      }
+      Section("Show") {
+        organizeButton("All threads", systemImage: "text.bubble", kind: "show", value: "all", selected: model.organizeShow == "all")
+        organizeButton("Relevant", systemImage: "scope", kind: "show", value: "relevant", selected: model.organizeShow == "relevant")
+        organizeButton("Running", systemImage: "play.circle", kind: "show", value: "running", selected: model.organizeShow == "running")
+      }
+    } label: {
+      FloatingIconMenuLabel(title: "Organize threads", systemImage: model.organizeShow == "all" ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize(horizontal: true, vertical: true)
+    .help(model.organizeSummary)
+    .disabled(model.isBusy)
+  }
+
+  @ViewBuilder
+  private func organizeButton(_ title: String, systemImage: String, kind: String, value: String, selected: Bool) -> some View {
+    Button {
+      Task { await model.setOrganizeOption(kind: kind, value: value) }
+    } label: {
+      HStack {
+        Label(title, systemImage: systemImage)
+        if selected {
+          Image(systemName: "checkmark")
+        }
+      }
     }
   }
 }
@@ -821,13 +887,61 @@ private struct OpenPreferencesButton: View {
   @Environment(\.openWindow) private var openWindow
 
   var body: some View {
-    Button {
+    FloatingIconButton(title: "Preferences", systemImage: "gearshape") {
       openWindow(id: "preferences")
-    } label: {
-      Image(systemName: "gearshape")
     }
-    .help("Preferences")
-    .buttonStyle(.borderless)
+  }
+}
+
+private struct SidebarModelButton: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    FloatingIconButton(title: model.modelFooterSummary, systemImage: "shippingbox", disabled: model.isBusy) {
+      model.showingModelsPanel = true
+      Task { await model.loadModelData() }
+    }
+  }
+}
+
+private struct ChronoSessionTreeRow: View {
+  @ObservedObject var model: ArtificerModel
+  let entry: SidebarSessionEntry
+
+  var body: some View {
+    Button {
+      Task { await model.selectSession(projectID: entry.project.id, sessionID: entry.session.id) }
+    } label: {
+      HStack(spacing: 7) {
+        Circle()
+          .fill(model.sidebarIndicatorColor(for: entry.session))
+          .frame(width: 7, height: 7)
+        VStack(alignment: .leading, spacing: 1) {
+          Text(entry.session.title.isEmpty ? entry.session.id : entry.session.title)
+            .font(.system(size: 13))
+            .lineLimit(1)
+            .truncationMode(.tail)
+          Text(entry.project.name)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+        SessionStatusPill(session: entry.session)
+        Spacer(minLength: 6)
+        Text(model.sidebarRelativeUpdated(entry.session))
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
+      .frame(height: 34)
+      .padding(.horizontal, 6)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
+      .background(entry.session.id == model.selectedSessionID && entry.project.id == model.selectedProjectID ? Color.accentColor.opacity(0.13) : Color.clear)
+      .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+    .buttonStyle(.plain)
+    .help("Open thread")
   }
 }
 
@@ -851,7 +965,7 @@ private struct WorkspaceTreeGroup: View {
           .truncationMode(.tail)
         Spacer(minLength: 6)
         ZStack {
-          Text("\(model.sessionsByProject[project.id]?.count ?? project.sessionCount)")
+          Text("\(model.visibleSessionsForSidebar(project).count)")
             .font(.caption2)
             .foregroundStyle(.secondary)
             .monospacedDigit()
@@ -883,9 +997,9 @@ private struct WorkspaceTreeGroup: View {
       }
 
       if model.isProjectExpanded(project.id) {
-        let sessions = model.sessionsByProject[project.id] ?? []
+        let sessions = model.visibleSessionsForSidebar(project)
         if sessions.isEmpty {
-          Text("No threads")
+          Text(model.organizeShow == "all" ? "No threads" : "No matching threads")
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
             .lineLimit(1)
@@ -954,16 +1068,11 @@ private struct SessionTreeRow: View {
   }
 
   private var indicatorColor: Color {
-    if session.queue.running > 0 { return .green }
-    if session.queue.pending > 0 { return .orange }
-    if session.queue.done > 0 { return .blue.opacity(0.75) }
-    return .secondary.opacity(0.55)
+    model.sidebarIndicatorColor(for: session)
   }
 
   private var relativeUpdated: String {
-    guard session.updated > 0 else { return "" }
-    let date = Date(timeIntervalSince1970: TimeInterval(session.updated))
-    return RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
+    model.sidebarRelativeUpdated(session)
   }
 }
 
@@ -3732,6 +3841,9 @@ private final class ArtificerModel: ObservableObject {
   @Published var commandRulesLoading = false
   @Published var commandRulesError = ""
   @Published var selectedThemeID = "system"
+  @Published var organizeMode = "project"
+  @Published var organizeSort = "updated"
+  @Published var organizeShow = "all"
   @Published var showingGitDiff = false
   @Published var showingCommitDialog = false
   @Published var showingBranchDialog = false
@@ -3809,6 +3921,69 @@ private final class ArtificerModel: ObservableObject {
 
   var themeContrastColor: Color {
     selectedTheme.contrast
+  }
+
+  var organizeSummary: String {
+    let modeLabel = organizeMode == "chrono" ? "Chronological list" : "By project"
+    let sortLabel = organizeSort == "created" ? "Created" : "Updated"
+    let showLabel: String
+    switch organizeShow {
+    case "relevant":
+      showLabel = "Relevant"
+    case "running":
+      showLabel = "Running"
+    default:
+      showLabel = "All threads"
+    }
+    return "\(modeLabel) · \(sortLabel) · \(showLabel)"
+  }
+
+  var modelFooterSummary: String {
+    let active = activeComposerModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !active.isEmpty {
+      return "Models: \(active)"
+    }
+    if installedModels.count == 1, let modelName = installedModels.first {
+      return "Models: \(modelName)"
+    }
+    if installedModels.count > 1 {
+      return "\(installedModels.count) models"
+    }
+    return "Models"
+  }
+
+  var requiresAllSessionsForOrganization: Bool {
+    organizeMode == "chrono" || organizeShow != "all"
+  }
+
+  var visibleProjectsForSidebar: [Project] {
+    let sortedProjects = sortedProjectsForSidebar(projects)
+    guard organizeShow != "all" else {
+      return sortedProjects
+    }
+    return sortedProjects.filter { project in
+      project.id == selectedProjectID || !visibleSessionsForSidebar(project).isEmpty
+    }
+  }
+
+  var chronoSidebarEntries: [SidebarSessionEntry] {
+    projects.flatMap { project in
+      visibleSessionsForSidebar(project).map { session in
+        SidebarSessionEntry(project: project, session: session)
+      }
+    }
+    .sorted { left, right in
+      let leftScore = sidebarSessionSortScore(left.session)
+      let rightScore = sidebarSessionSortScore(right.session)
+      if leftScore != rightScore {
+        return leftScore > rightScore
+      }
+      let titleCompare = left.session.title.localizedCaseInsensitiveCompare(right.session.title)
+      if titleCompare != .orderedSame {
+        return titleCompare == .orderedAscending
+      }
+      return left.project.name.localizedCaseInsensitiveCompare(right.project.name) == .orderedAscending
+    }
   }
 
   var gitBranchTitle: String {
@@ -3899,6 +4074,51 @@ private final class ArtificerModel: ObservableObject {
     expandedProjectIDs.contains(projectID)
   }
 
+  func visibleSessionsForSidebar(_ project: Project) -> [SessionSummary] {
+    sortedSessionsForSidebar(sessionsByProject[project.id] ?? []).filter { session in
+      sessionMatchesOrganizeShow(projectID: project.id, session)
+    }
+  }
+
+  func sidebarIndicatorColor(for session: SessionSummary) -> Color {
+    if isSessionRunning(projectID: session.workspaceID, session) {
+      return .green
+    }
+    if session.queue.lastStatus == "awaiting_approval" || session.queue.lastStatus == "awaiting_decision" {
+      return .purple
+    }
+    if session.queue.pending > 0 {
+      return .orange
+    }
+    if session.queue.done > 0 {
+      return .blue
+    }
+    return Color.secondary.opacity(0.55)
+  }
+
+  func sidebarRelativeUpdated(_ session: SessionSummary) -> String {
+    let timestamp = session.updated > 0 ? session.updated : session.created
+    guard timestamp > 0 else { return "now" }
+    var diff = Int(Date().timeIntervalSince1970) - timestamp
+    if diff < 0 {
+      diff = 0
+    }
+    if diff < 60 {
+      return "now"
+    }
+    if diff < 3600 {
+      return "\(max(1, diff / 60))m"
+    }
+    if diff < 86_400 {
+      return "\(max(1, diff / 3600))h"
+    }
+    if diff < 604_800 {
+      return "\(max(1, diff / 86_400))d"
+    }
+    let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+    return DateFormatter.localizedString(from: date, dateStyle: .short, timeStyle: .none)
+  }
+
   func projectPathDisplayName(_ project: Project) -> String {
     let basename = URL(fileURLWithPath: project.path).lastPathComponent
     if !basename.isEmpty {
@@ -3911,6 +4131,128 @@ private final class ArtificerModel: ObservableObject {
     guard let path = selectedProject?.path, !path.isEmpty else { return }
     copyToPasteboard(path)
     statusMessage = "Project path copied."
+  }
+
+  func setOrganizeOption(kind: String, value: String) async {
+    let key: String
+    let normalized: String
+    switch kind {
+    case "mode":
+      key = "organize_mode"
+      normalized = canonicalOrganizeMode(value)
+      organizeMode = normalized
+    case "sort":
+      key = "organize_sort"
+      normalized = canonicalOrganizeSort(value)
+      organizeSort = normalized
+    case "show":
+      key = "organize_show"
+      normalized = canonicalOrganizeShow(value)
+      organizeShow = normalized
+    default:
+      return
+    }
+
+    let result = await runBackend("desktop-value-set", key, normalized, trackBusy: false)
+    if let prefs = decode(DesktopPrefsResponse.self, from: result) {
+      applyDesktopPrefs(prefs)
+    }
+    await loadAllSessions(status: "Threads organized.")
+  }
+
+  private func sortedProjectsForSidebar(_ source: [Project]) -> [Project] {
+    source.sorted { left, right in
+      if left.id == selectedProjectID { return true }
+      if right.id == selectedProjectID { return false }
+      let leftScore = projectSidebarSortScore(left)
+      let rightScore = projectSidebarSortScore(right)
+      if leftScore != rightScore {
+        return leftScore > rightScore
+      }
+      if left.sessionCount != right.sessionCount {
+        return left.sessionCount > right.sessionCount
+      }
+      return left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
+    }
+  }
+
+  private func sortedSessionsForSidebar(_ source: [SessionSummary]) -> [SessionSummary] {
+    source.sorted { left, right in
+      let leftScore = sidebarSessionSortScore(left)
+      let rightScore = sidebarSessionSortScore(right)
+      if leftScore != rightScore {
+        return leftScore > rightScore
+      }
+      return left.title.localizedCaseInsensitiveCompare(right.title) == .orderedAscending
+    }
+  }
+
+  private func projectSidebarSortScore(_ project: Project) -> Int {
+    let projectSessions = sessionsByProject[project.id] ?? []
+    let scores = projectSessions.map(sidebarSessionSortScore)
+    return scores.max() ?? 0
+  }
+
+  private func sidebarSessionSortScore(_ session: SessionSummary) -> Int {
+    if organizeSort == "created" {
+      return session.created > 0 ? session.created : session.updated
+    }
+    return session.updated > 0 ? session.updated : session.created
+  }
+
+  private func sessionMatchesOrganizeShow(projectID: String, _ session: SessionSummary) -> Bool {
+    switch organizeShow {
+    case "running":
+      return isSessionRunning(projectID: projectID, session)
+    case "relevant":
+      return isSessionRelevant(projectID: projectID, session)
+    default:
+      return true
+    }
+  }
+
+  private func isSessionRelevant(projectID: String, _ session: SessionSummary) -> Bool {
+    if projectID == selectedProjectID && session.id == selectedSessionID {
+      return true
+    }
+    if session.queue.pending > 0 || isSessionRunning(projectID: projectID, session) {
+      return true
+    }
+    if session.queue.lastStatus == "awaiting_approval" || session.queue.lastStatus == "awaiting_decision" {
+      return true
+    }
+    if projectID == selectedProjectID,
+       session.id == selectedSessionID,
+       selectedSession?.hasAttention == true {
+      return true
+    }
+    return false
+  }
+
+  private func isSessionRunning(projectID: String, _ session: SessionSummary) -> Bool {
+    if session.queue.running > 0 || session.queue.lastStatus == "running" {
+      return true
+    }
+    if projectID == selectedProjectID,
+       session.id == selectedSessionID,
+       selectedSession?.trace.events.contains(where: { $0.status == "running" }) == true {
+      return true
+    }
+    return false
+  }
+
+  private func canonicalOrganizeMode(_ value: String) -> String {
+    value == "chrono" ? "chrono" : "project"
+  }
+
+  private func canonicalOrganizeSort(_ value: String) -> String {
+    value == "created" ? "created" : "updated"
+  }
+
+  private func canonicalOrganizeShow(_ value: String) -> String {
+    if value == "relevant" { return "relevant" }
+    if value == "running" { return "running" }
+    return "all"
   }
 
   func openSelectedProjectFolder() {
@@ -4198,7 +4540,8 @@ private final class ArtificerModel: ObservableObject {
   func setTheme(_ themeID: String) async {
     selectedThemeID = AppTheme.resolved(themeID).id
     let result = await runBackend("desktop-value-set", "theme_id", selectedThemeID)
-    if decode(DesktopPrefsResponse.self, from: result) != nil {
+    if let prefs = decode(DesktopPrefsResponse.self, from: result) {
+      applyDesktopPrefs(prefs)
       statusMessage = "Theme updated."
     }
   }
@@ -4460,13 +4803,17 @@ private final class ArtificerModel: ObservableObject {
       if left.sessionCount != right.sessionCount { return left.sessionCount < right.sessionCount }
       return left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
     }
-    let hydratedProjectIDs = Set(projects.map(\.id))
-    let visibleProjectIDs = expandedProjectIDs.union(selectedProjectID.map { Set([$0]) } ?? [])
+    let visibleProjectIDs: Set<String>
+    if requiresAllSessionsForOrganization {
+      visibleProjectIDs = Set(projects.map(\.id))
+    } else {
+      visibleProjectIDs = expandedProjectIDs.union(selectedProjectID.map { Set([$0]) } ?? [])
+    }
     var nextSessionsByProject = sessionsByProject.filter { key, _ in
       projects.contains { $0.id == key }
     }
     sessionsByProject = nextSessionsByProject
-    for project in projectOrder where hydratedProjectIDs.contains(project.id) && visibleProjectIDs.contains(project.id) {
+    for project in projectOrder where visibleProjectIDs.contains(project.id) {
       if let sortedSessions = await loadProjectSessions(project.id, trackBusy: false) {
         nextSessionsByProject[project.id] = sortedSessions
         sessionsByProject = nextSessionsByProject
@@ -4553,6 +4900,7 @@ private final class ArtificerModel: ObservableObject {
       workspaceID: projectID,
       title: title,
       model: modelName,
+      created: Int(Date().timeIntervalSince1970),
       updated: Int(Date().timeIntervalSince1970),
       queue: QueueState()
     )
@@ -4673,6 +5021,7 @@ private final class ArtificerModel: ObservableObject {
         workspaceID: detail.workspaceID,
         title: detail.title,
         model: trimmedModel,
+        created: detail.created,
         updated: Int(Date().timeIntervalSince1970),
         queue: detail.queue,
         decisionRequest: detail.decisionRequest,
@@ -4689,6 +5038,7 @@ private final class ArtificerModel: ObservableObject {
         workspaceID: existing.workspaceID,
         title: existing.title,
         model: trimmedModel,
+        created: existing.created,
         updated: Int(Date().timeIntervalSince1970),
         queue: existing.queue
       )
@@ -4860,21 +5210,7 @@ private final class ArtificerModel: ObservableObject {
   func loadDesktopPrefs() async {
     let result = await runBackend("desktop-prefs-get", trackBusy: false)
     if let prefs = decode(DesktopPrefsResponse.self, from: result) {
-      menuBarIconEnabled = prefs.menuBarIcon
-      voiceAutomationsEnabled = prefs.voiceAutomations
-      voiceRecognitionSoundEnabled = prefs.voiceRecognitionSound
-      voiceBuiltinCommandsEnabled = prefs.voiceBuiltinCommands
-      voiceDictationCommandsEnabled = prefs.voiceDictationCommands
-      voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
-      voiceLlmActionsEnabled = prefs.voiceLlmActions
-      loadVoiceLocalActions(from: prefs)
-      selectedThemeID = AppTheme.resolved(prefs.themeID).id
-      mobileBridgeEnabled = prefs.mobileBridge
-      mobileTorEnabled = prefs.mobileTor
-      mobileLanEnabled = prefs.mobileLan
-      mobileAllowExecute = prefs.mobileAllowExecute
-      mobileAllowSelfActuation = prefs.mobileAllowSelfActuation
-      syncVoiceAutomationLoop()
+      applyDesktopPrefs(prefs)
     }
   }
 
@@ -4937,26 +5273,15 @@ private final class ArtificerModel: ObservableObject {
     if let value = prefs["mobile_allow_self_actuation"] {
       mobileAllowSelfActuation = desktopLaunchBool(value)
     }
+    organizeMode = canonicalOrganizeMode(prefs["organize_mode"] ?? organizeMode)
+    organizeSort = canonicalOrganizeSort(prefs["organize_sort"] ?? organizeSort)
+    organizeShow = canonicalOrganizeShow(prefs["organize_show"] ?? organizeShow)
   }
 
   func setDesktopPref(_ key: String, enabled: Bool) async {
     let result = await runBackend("desktop-prefs-set", key, enabled ? "1" : "0")
     if let prefs = decode(DesktopPrefsResponse.self, from: result) {
-      menuBarIconEnabled = prefs.menuBarIcon
-      voiceAutomationsEnabled = prefs.voiceAutomations
-      voiceRecognitionSoundEnabled = prefs.voiceRecognitionSound
-      voiceBuiltinCommandsEnabled = prefs.voiceBuiltinCommands
-      voiceDictationCommandsEnabled = prefs.voiceDictationCommands
-      voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
-      voiceLlmActionsEnabled = prefs.voiceLlmActions
-      loadVoiceLocalActions(from: prefs)
-      selectedThemeID = AppTheme.resolved(prefs.themeID).id
-      mobileBridgeEnabled = prefs.mobileBridge
-      mobileTorEnabled = prefs.mobileTor
-      mobileLanEnabled = prefs.mobileLan
-      mobileAllowExecute = prefs.mobileAllowExecute
-      mobileAllowSelfActuation = prefs.mobileAllowSelfActuation
-      syncVoiceAutomationLoop()
+      applyDesktopPrefs(prefs)
       await loadVoiceAutomationStatus()
       await loadMobileStatus()
     }
@@ -5344,8 +5669,10 @@ private final class ArtificerModel: ObservableObject {
   func setDesktopValue(_ key: String, value: String) async {
     let result = await runBackend("desktop-value-set", key, value)
     if let prefs = decode(DesktopPrefsResponse.self, from: result) {
-      loadVoiceLocalActions(from: prefs)
-      statusMessage = "Voice commands saved."
+      applyDesktopPrefs(prefs)
+      if key.hasPrefix("voice_") {
+        statusMessage = "Voice commands saved."
+      }
       await loadVoiceAutomationStatus()
     }
   }
@@ -5370,6 +5697,27 @@ private final class ArtificerModel: ObservableObject {
     voiceLocalAction2Name = prefs.voiceLocalAction2Name
     voiceLocalAction2Command = prefs.voiceLocalAction2Command
     voiceLocalAction2Phrases = prefs.voiceLocalAction2Phrases
+  }
+
+  private func applyDesktopPrefs(_ prefs: DesktopPrefsResponse) {
+    menuBarIconEnabled = prefs.menuBarIcon
+    voiceAutomationsEnabled = prefs.voiceAutomations
+    voiceRecognitionSoundEnabled = prefs.voiceRecognitionSound
+    voiceBuiltinCommandsEnabled = prefs.voiceBuiltinCommands
+    voiceDictationCommandsEnabled = prefs.voiceDictationCommands
+    voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
+    voiceLlmActionsEnabled = prefs.voiceLlmActions
+    loadVoiceLocalActions(from: prefs)
+    selectedThemeID = AppTheme.resolved(prefs.themeID).id
+    organizeMode = canonicalOrganizeMode(prefs.organizeMode)
+    organizeSort = canonicalOrganizeSort(prefs.organizeSort)
+    organizeShow = canonicalOrganizeShow(prefs.organizeShow)
+    mobileBridgeEnabled = prefs.mobileBridge
+    mobileTorEnabled = prefs.mobileTor
+    mobileLanEnabled = prefs.mobileLan
+    mobileAllowExecute = prefs.mobileAllowExecute
+    mobileAllowSelfActuation = prefs.mobileAllowSelfActuation
+    syncVoiceAutomationLoop()
   }
 
   func loadMobileStatus() async {
@@ -6447,19 +6795,21 @@ private struct SessionSummary: Identifiable, Decodable, Hashable {
   let workspaceID: String
   let title: String
   let model: String
+  let created: Int
   let updated: Int
   let queue: QueueState
 
   enum CodingKeys: String, CodingKey {
-    case id, title, model, updated, queue
+    case id, title, model, created, updated, queue
     case workspaceID = "workspace_id"
   }
 
-  init(id: String, workspaceID: String, title: String, model: String, updated: Int, queue: QueueState) {
+  init(id: String, workspaceID: String, title: String, model: String, created: Int = 0, updated: Int, queue: QueueState) {
     self.id = id
     self.workspaceID = workspaceID
     self.title = title
     self.model = model
+    self.created = created
     self.updated = updated
     self.queue = queue
   }
@@ -6470,6 +6820,7 @@ private struct SessionSummary: Identifiable, Decodable, Hashable {
     workspaceID = (try? container.decode(String.self, forKey: .workspaceID)) ?? ""
     title = (try? container.decode(String.self, forKey: .title)) ?? id
     model = (try? container.decode(String.self, forKey: .model)) ?? ""
+    created = container.decodeFlexibleInt(forKey: .created)
     updated = container.decodeFlexibleInt(forKey: .updated)
     queue = (try? container.decode(QueueState.self, forKey: .queue)) ?? QueueState()
   }
@@ -6480,6 +6831,7 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
   let workspaceID: String
   let title: String
   let model: String
+  let created: Int
   let updated: Int
   let queue: QueueState
   let decisionRequest: DecisionRequest?
@@ -6489,17 +6841,18 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
   let draft: String
 
   enum CodingKeys: String, CodingKey {
-    case id, title, model, updated, queue, messages, trace, draft
+    case id, title, model, created, updated, queue, messages, trace, draft
     case workspaceID = "workspace_id"
     case decisionRequest = "decision_request"
     case approvalRequest = "approval_request"
   }
 
-  init(id: String, workspaceID: String, title: String, model: String, updated: Int, queue: QueueState, decisionRequest: DecisionRequest? = nil, approvalRequest: ApprovalRequest? = nil, trace: RunTrace = RunTrace(), messages: [Message], draft: String = "") {
+  init(id: String, workspaceID: String, title: String, model: String, created: Int = 0, updated: Int, queue: QueueState, decisionRequest: DecisionRequest? = nil, approvalRequest: ApprovalRequest? = nil, trace: RunTrace = RunTrace(), messages: [Message], draft: String = "") {
     self.id = id
     self.workspaceID = workspaceID
     self.title = title
     self.model = model
+    self.created = created
     self.updated = updated
     self.queue = queue
     self.decisionRequest = decisionRequest
@@ -6515,6 +6868,7 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
       workspaceID: summary.workspaceID,
       title: summary.title,
       model: summary.model,
+      created: summary.created,
       updated: summary.updated,
       queue: summary.queue,
       decisionRequest: nil,
@@ -6526,7 +6880,7 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
   }
 
   var summary: SessionSummary {
-    SessionSummary(id: id, workspaceID: workspaceID, title: title, model: model, updated: updated, queue: queue)
+    SessionSummary(id: id, workspaceID: workspaceID, title: title, model: model, created: created, updated: updated, queue: queue)
   }
 
   var hasAttention: Bool {
@@ -6545,6 +6899,7 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
     workspaceID = (try? container.decode(String.self, forKey: .workspaceID)) ?? ""
     title = (try? container.decode(String.self, forKey: .title)) ?? id
     model = (try? container.decode(String.self, forKey: .model)) ?? ""
+    created = container.decodeFlexibleInt(forKey: .created)
     updated = container.decodeFlexibleInt(forKey: .updated)
     queue = (try? container.decode(QueueState.self, forKey: .queue)) ?? QueueState()
     decisionRequest = try? container.decodeIfPresent(DecisionRequest.self, forKey: .decisionRequest)
@@ -6944,6 +7299,9 @@ private struct DesktopPrefsResponse: Decodable {
   let voiceLocalAction2Command: String
   let voiceLocalAction2Phrases: String
   let themeID: String
+  let organizeMode: String
+  let organizeSort: String
+  let organizeShow: String
   let mobileBridge: Bool
   let mobileTor: Bool
   let mobileLan: Bool
@@ -6967,6 +7325,9 @@ private struct DesktopPrefsResponse: Decodable {
     case voiceLocalAction2Command = "voice_local_action_2_command"
     case voiceLocalAction2Phrases = "voice_local_action_2_phrases"
     case themeID = "theme_id"
+    case organizeMode = "organize_mode"
+    case organizeSort = "organize_sort"
+    case organizeShow = "organize_show"
     case mobileBridge = "mobile_bridge"
     case mobileTor = "mobile_tor"
     case mobileLan = "mobile_lan"
@@ -6992,6 +7353,9 @@ private struct DesktopPrefsResponse: Decodable {
     voiceLocalAction2Command = (try? container.decode(String.self, forKey: .voiceLocalAction2Command)) ?? ""
     voiceLocalAction2Phrases = (try? container.decode(String.self, forKey: .voiceLocalAction2Phrases)) ?? ""
     themeID = (try? container.decode(String.self, forKey: .themeID)) ?? "system"
+    organizeMode = (try? container.decode(String.self, forKey: .organizeMode)) ?? "project"
+    organizeSort = (try? container.decode(String.self, forKey: .organizeSort)) ?? "updated"
+    organizeShow = (try? container.decode(String.self, forKey: .organizeShow)) ?? "all"
     mobileBridge = container.decodeFlexibleBool(forKey: .mobileBridge)
     mobileTor = container.decodeFlexibleBool(forKey: .mobileTor)
     mobileLan = container.decodeFlexibleBool(forKey: .mobileLan)
