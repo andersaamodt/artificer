@@ -74,6 +74,7 @@ class LspClient:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            bufsize=0,
         )
         self.next_id = 1
 

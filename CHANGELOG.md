@@ -18,6 +18,10 @@
 - self-improvement plugin metadata now stores lane/model provenance, domain tags, evidence refs, admin actions, and risk level
 - project license updated from O.W.L. 2.0 to O.W.L. 3.0
 
+### Fixed
+
+- LSP code-context probing now reads back-to-back server messages reliably during the full release test suite
+
 ## 0.1.0 - 2026-03-23
 
 First GitHub-publishable Artificer release surface.
