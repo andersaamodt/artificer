@@ -178,6 +178,7 @@ struct GitHubReleaseAsset: Codable {
 final class BridgeModel: ObservableObject {
     @AppStorage("bridgeEndpoint") var endpoint = ""
     @AppStorage("bridgeToken") var token = ""
+    @AppStorage("bridgeConnectionMode") var connectionMode = "ip"
     @Published var projects: [BridgeProject] = []
     @Published var sessionsByProject: [String: [BridgeSession]] = [:]
     @Published var expandedProjectIDs: Set<String> = []
@@ -197,6 +198,12 @@ final class BridgeModel: ObservableObject {
     @Published var updateTag = ""
     @Published var updateURL: URL?
     @Published var isCheckingUpdate = false
+
+    var connectionHelp: String {
+        connectionMode == "tor"
+            ? "Use the Tor URL from Artificer Preferences. Route this phone through Tor before connecting."
+            : "Use the IP URL from Artificer Preferences while this phone is on the same network."
+    }
 
     func connect() async {
         await refresh()
@@ -511,7 +518,15 @@ struct ContentView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
-            TextField("Bridge URL", text: $model.endpoint)
+            Picker("Connection", selection: $model.connectionMode) {
+                Text("IP").tag("ip")
+                Text("Tor").tag("tor")
+            }
+            .pickerStyle(.segmented)
+            Text(model.connectionHelp)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            TextField(model.connectionMode == "tor" ? "Tor URL" : "IP bridge URL", text: $model.endpoint)
                 .textContentType(.URL)
                 .font(.body)
                 .textFieldStyle(.roundedBorder)

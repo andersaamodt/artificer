@@ -4709,46 +4709,43 @@ private struct MobilePreferencesTab: View {
             Task { await model.setDesktopPref("mobile_bridge", enabled: nextValue) }
           }
         ))
-        Toggle("Advertise on local network", isOn: Binding(
-          get: { model.mobileLanEnabled },
+        Picker("Connection", selection: Binding(
+          get: { model.mobileConnectionMode },
           set: { nextValue in
-            Task { await model.setDesktopPref("mobile_lan", enabled: nextValue) }
+            Task { await model.setMobileConnectionMode(nextValue) }
           }
-        ))
+        )) {
+          Text("IP").tag("ip")
+          Text("Tor").tag("tor")
+        }
+        .pickerStyle(.radioGroup)
         if let mobile = model.mobileStatus {
-          HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Toggle("Tor hidden service", isOn: Binding(
-              get: { model.mobileTorEnabled },
-              set: { nextValue in
-                Task { await model.setDesktopPref("mobile_tor", enabled: nextValue) }
-              }
-            ))
-            .disabled(!mobile.torInstalled)
+          if model.mobileConnectionMode == "tor" {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+              Text("Tor hidden service")
+                .font(.callout)
+              Spacer()
+              Button(mobile.torInstalled ? "Installed" : "Install Tor") { Task { await model.installMobileTor() } }
+                .disabled(mobile.torInstalled)
+            }
+            .buttonStyle(.bordered)
             Text(mobile.torStatusLabel)
-              .font(.caption)
+              .font(.footnote)
               .foregroundColor(mobile.torInstalled ? .secondary : .red)
-            Button(mobile.torInstalled ? "Installed" : "Install Tor") { Task { await model.installMobileTor() } }
-              .disabled(mobile.torInstalled)
-          }
-          .buttonStyle(.bordered)
-          if mobile.torEnabled && mobile.torInstalled && !mobile.running {
-            Text("The hidden service starts with the mobile bridge.")
+            if mobile.torEnabled && mobile.torInstalled && !mobile.running {
+              Text("The hidden service starts with the mobile bridge.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+          } else {
+            Text("IP mode advertises the bridge on your local network.")
               .font(.footnote)
               .foregroundStyle(.secondary)
           }
         } else {
-          HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Toggle("Tor hidden service", isOn: Binding(
-              get: { model.mobileTorEnabled },
-              set: { nextValue in
-                Task { await model.setDesktopPref("mobile_tor", enabled: nextValue) }
-              }
-            ))
-            .disabled(true)
-            Text("Checking Tor...")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-          }
+          Text("Checking mobile bridge status...")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         }
         HStack {
           Button("Restart Bridge") { Task { await model.restartMobileBridge() } }
@@ -4756,11 +4753,14 @@ private struct MobilePreferencesTab: View {
         }
         .buttonStyle(.bordered)
         if let mobile = model.mobileStatus {
-          SettingsInfoRow(title: "Local", value: mobile.localURL)
-          if !mobile.lanURL.isEmpty {
+          if model.mobileConnectionMode == "tor" {
+            SettingsInfoRow(title: "Tor URL", value: mobile.torAddressDisplay)
+          } else if !mobile.lanURL.isEmpty {
             SettingsInfoRow(title: "IP", value: mobile.lanURL)
+          } else {
+            SettingsInfoRow(title: "IP", value: "Enable bridge to show the network address")
           }
-          SettingsInfoRow(title: "Tor", value: mobile.torAddressDisplay)
+          SettingsInfoRow(title: "Local", value: mobile.localURL)
           if !mobile.torPath.isEmpty {
             SettingsInfoRow(title: "Tor binary", value: mobile.torPath)
           }
@@ -4970,6 +4970,9 @@ private final class ArtificerModel: ObservableObject {
   @Published var mobileAllowExecute = false
   @Published var mobileAllowSelfActuation = false
   @Published var mobileStatus: MobileBridgeStatus?
+  var mobileConnectionMode: String {
+    mobileTorEnabled ? "tor" : "ip"
+  }
   @Published var installedModels: [String] = []
   @Published var modelCatalog: [ModelCatalogEntry] = []
   @Published var modelInstallJob: ModelInstallJob?
@@ -7151,6 +7154,16 @@ private final class ArtificerModel: ObservableObject {
       applyDesktopPrefs(prefs)
       await loadVoiceAutomationStatus()
       await loadMobileStatus()
+    }
+  }
+
+  func setMobileConnectionMode(_ mode: String) async {
+    if mode == "tor" {
+      await setDesktopPref("mobile_lan", enabled: false)
+      await setDesktopPref("mobile_tor", enabled: true)
+    } else {
+      await setDesktopPref("mobile_tor", enabled: false)
+      await setDesktopPref("mobile_lan", enabled: true)
     }
   }
 

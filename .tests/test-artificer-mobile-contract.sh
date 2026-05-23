@@ -96,6 +96,16 @@ grep -q 'Button(mobile.torInstalled ? "Installed" : "Install Tor")' "$template" 
   exit 1
 }
 
+grep -q 'Picker("Connection"' "$template" || {
+  printf '%s\n' "Native Settings should let the operator choose IP or Tor mode" >&2
+  exit 1
+}
+
+grep -q 'setMobileConnectionMode' "$template" || {
+  printf '%s\n' "Native Settings should apply IP/Tor mode changes to bridge settings" >&2
+  exit 1
+}
+
 grep -q 'mobile.torStatusLabel' "$template" || {
   printf '%s\n' "Native Settings should show Tor readiness beside the hidden-service toggle" >&2
   exit 1
@@ -158,6 +168,21 @@ grep -q 'autoConnectIfPossible' "$renderer" || {
 
 grep -q 'endpoint.trim().length() > 0 && token.trim().length() > 0' "$renderer" || {
   printf '%s\n' "Android mobile app should auto-connect when pairing details are saved" >&2
+  exit 1
+}
+
+grep -q 'RadioButton torMode' "$renderer" || {
+  printf '%s\n' "Android mobile app should render a Tor/IP radio selector" >&2
+  exit 1
+}
+
+grep -q 'http://your-address.onion' "$renderer" || {
+  printf '%s\n' "mobile app should treat Tor onion URLs as first-class bridge endpoints" >&2
+  exit 1
+}
+
+grep -q 'bridgeConnectionMode' "$renderer" || {
+  printf '%s\n' "iOS mobile app should persist the selected IP/Tor connection mode" >&2
   exit 1
 }
 

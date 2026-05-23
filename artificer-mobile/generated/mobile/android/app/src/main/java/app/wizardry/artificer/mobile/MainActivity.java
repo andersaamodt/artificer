@@ -26,6 +26,8 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import java.io.BufferedReader;
@@ -50,6 +52,7 @@ public final class MainActivity extends Activity {
     private SharedPreferences prefs;
     private String endpoint = "";
     private String token = "";
+    private String connectionMode = "ip";
     private JSONArray projects = new JSONArray();
     private HashMap<String, JSONArray> sessionsByProject = new HashMap<>();
     private HashMap<String, String> folderErrors = new HashMap<>();
@@ -89,6 +92,7 @@ public final class MainActivity extends Activity {
         prefs = getSharedPreferences("artificer-mobile", MODE_PRIVATE);
         endpoint = prefs.getString("endpoint", "");
         token = prefs.getString("token", "");
+        connectionMode = prefs.getString("connection_mode", "ip");
         updateTag = prefs.getString("update_tag", "");
         updateAssetName = prefs.getString("update_asset_name", "");
         updateAssetUrl = prefs.getString("update_asset_url", "");
@@ -448,12 +452,40 @@ public final class MainActivity extends Activity {
         hint.setTextColor(Color.rgb(83, 78, 71));
         hint.setPadding(0, dp(16), 0, dp(10));
         root.addView(hint);
-        TextView steps = text("1. Enable Mobile bridge\n2. Copy the bridge URL\n3. Copy the pairing token", 15, Typeface.NORMAL);
+        TextView steps = text("1. Enable Mobile bridge\n2. Choose IP or Tor in Artificer Preferences\n3. Copy the matching URL and pairing token", 15, Typeface.NORMAL);
         steps.setTextColor(Color.rgb(83, 78, 71));
         steps.setPadding(dp(14), dp(12), dp(14), dp(12));
         steps.setBackground(rounded(Color.rgb(239, 235, 226), line, dp(10)));
         root.addView(steps, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        EditText endpointField = input("http://192.168.1.20:8765", endpoint);
+        RadioGroup modeGroup = new RadioGroup(this);
+        modeGroup.setOrientation(RadioGroup.HORIZONTAL);
+        modeGroup.setPadding(0, dp(12), 0, 0);
+        RadioButton ipMode = new RadioButton(this);
+        ipMode.setText("IP");
+        ipMode.setTextColor(ink);
+        ipMode.setId(View.generateViewId());
+        RadioButton torMode = new RadioButton(this);
+        torMode.setText("Tor");
+        torMode.setTextColor(ink);
+        torMode.setId(View.generateViewId());
+        modeGroup.addView(ipMode);
+        modeGroup.addView(torMode);
+        modeGroup.check("tor".equals(connectionMode) ? torMode.getId() : ipMode.getId());
+        root.addView(modeGroup);
+        TextView modeHelp = text("", 14, Typeface.NORMAL);
+        modeHelp.setTextColor(Color.rgb(83, 78, 71));
+        modeHelp.setPadding(0, dp(6), 0, 0);
+        root.addView(modeHelp);
+        EditText endpointField = input("tor".equals(connectionMode) ? "http://your-address.onion" : "http://192.168.1.20:8765", endpoint);
+        Runnable syncModeHelp = () -> {
+            boolean torSelected = modeGroup.getCheckedRadioButtonId() == torMode.getId();
+            modeHelp.setText(torSelected
+                ? "Use the Tor URL from Artificer Preferences. Route this phone through Tor before connecting."
+                : "Use the IP URL from Artificer Preferences while this phone is on the same network.");
+            endpointField.setHint(torSelected ? "http://your-address.onion" : "http://192.168.1.20:8765");
+        };
+        modeGroup.setOnCheckedChangeListener((group, checkedId) -> syncModeHelp.run());
+        syncModeHelp.run();
         EditText tokenField = input("Pairing token", token);
         LinearLayout.LayoutParams fieldParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         fieldParams.setMargins(0, dp(12), 0, 0);
@@ -466,13 +498,14 @@ public final class MainActivity extends Activity {
         buttonParams.setMargins(0, dp(14), 0, 0);
         root.addView(connect, buttonParams);
         connect.setOnClickListener(v -> {
+            connectionMode = modeGroup.getCheckedRadioButtonId() == torMode.getId() ? "tor" : "ip";
             endpoint = endpointField.getText().toString().trim();
             token = tokenField.getText().toString().trim();
             if (endpoint.length() == 0 || token.length() == 0) {
                 setStatus("Bridge URL and pairing token are required.");
                 return;
             }
-            prefs.edit().putString("endpoint", endpoint).putString("token", token).apply();
+            prefs.edit().putString("connection_mode", connectionMode).putString("endpoint", endpoint).putString("token", token).apply();
             loadProjects();
         });
     }
