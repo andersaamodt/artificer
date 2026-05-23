@@ -297,6 +297,7 @@ private final class ArtificerStatusItemController: NSObject {
 
 private struct RootView: View {
   @ObservedObject var model: ArtificerModel
+  @Environment(\.openWindow) private var openWindow
 
   var body: some View {
     NavigationSplitView {
@@ -310,27 +311,27 @@ private struct RootView: View {
       }
     }
     .toolbar {
+      ToolbarItem(placement: .navigation) {
+        ProjectPathToolbarItem(model: model)
+      }
       ToolbarItemGroup(placement: .primaryAction) {
-        Button {
+        FloatingIconButton(title: "Refresh", systemImage: "arrow.clockwise", disabled: model.isBusy) {
           Task { await model.refreshAll() }
-        } label: {
-          Label("Refresh", systemImage: "arrow.clockwise")
         }
-        Button {
+        FloatingIconButton(title: "New thread", systemImage: "plus.message", disabled: model.selectedProjectID == nil || model.isBusy) {
           Task { await model.createSession() }
-        } label: {
-          Label("New Session", systemImage: "plus.message")
         }
-        Button {
-          Task { await model.toggleDictation() }
-        } label: {
-          Label(model.isDictating ? "Stop Dictation" : "Dictate", systemImage: model.isDictating ? "stop.fill" : "mic.fill")
+        FloatingIconButton(title: "Add project", systemImage: "folder.badge.plus", disabled: model.isBusy) {
+          model.chooseWorkspaceFolder()
         }
-        .disabled(model.selectedSessionID == nil || (model.isBusy && !model.isDictating))
-        Button {
+        FloatingIconButton(title: "Run next item", systemImage: "play.fill", disabled: model.selectedSessionID == nil || model.isBusy) {
+          Task { await model.runNext() }
+        }
+        FloatingIconButton(title: "Open hosted Artificer", systemImage: "safari") {
           Task { await model.openHostedArtificer() }
-        } label: {
-          Label("Hosted Artificer", systemImage: "safari")
+        }
+        FloatingIconButton(title: "Preferences", systemImage: "gearshape") {
+          openWindow(id: "preferences")
         }
       }
     }
@@ -338,6 +339,110 @@ private struct RootView: View {
       StatusBar(model: model)
     }
   }
+}
+
+private struct ProjectPathToolbarItem: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    HStack(spacing: 6) {
+      if let project = model.selectedProject {
+        Button {
+          model.copySelectedProjectPath()
+        } label: {
+          HStack(spacing: 6) {
+            Image(systemName: project.pathExists ? "folder" : "folder.badge.questionmark")
+              .font(.system(size: 12, weight: .semibold))
+            Text(model.projectPathDisplayName(project))
+              .font(.system(size: 12))
+              .lineLimit(1)
+              .truncationMode(.middle)
+          }
+          .padding(.horizontal, 9)
+          .frame(height: 28)
+          .frame(maxWidth: 260, alignment: .leading)
+          .background(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+          .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Click to copy path: \(project.path)")
+        .accessibilityLabel(Text("Project path \(project.path)"))
+
+        FloatingIconButton(
+          title: "Open project folder",
+          systemImage: "arrow.up.forward.app",
+          disabled: !project.pathExists
+        ) {
+          model.openSelectedProjectFolder()
+        }
+      }
+    }
+    .frame(minWidth: 1, maxWidth: 330, minHeight: 30, idealHeight: 30, maxHeight: 30, alignment: .leading)
+  }
+}
+
+private struct FloatingIconButton: View {
+  enum Prominence {
+    case plain
+    case accent
+  }
+
+  let title: String
+  let systemImage: String
+  var disabled = false
+  var prominence: Prominence = .plain
+  var size: CGFloat = 30
+  let action: () -> Void
+
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: action) {
+      Image(systemName: systemImage)
+        .font(.system(size: prominence == .accent ? 15 : 14, weight: .semibold))
+        .frame(width: size, height: size)
+        .contentShape(Circle())
+    }
+    .buttonStyle(.plain)
+    .foregroundStyle(foregroundColor)
+    .background(backgroundShape)
+    .clipShape(Circle())
+    .shadow(color: isHovering && !disabled ? Color.black.opacity(0.18) : Color.clear, radius: 8, x: 0, y: 4)
+    .frame(width: size, height: size)
+    .onHover { isHovering = $0 }
+    .help(title)
+    .accessibilityLabel(Text(title))
+    .disabled(disabled)
+    .opacity(disabled ? 0.45 : 1)
+  }
+
+  @ViewBuilder private var backgroundShape: some View {
+    if prominence == .accent {
+      Circle()
+        .fill(Color.accentColor)
+    } else if isHovering && !disabled {
+      Circle()
+        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.92))
+    } else {
+      Circle()
+        .fill(Color.clear)
+    }
+  }
+
+  private var foregroundColor: Color {
+    if prominence == .accent {
+      return accentContrastColor()
+    }
+    return isHovering && !disabled ? Color.primary : Color.secondary
+  }
+}
+
+private func accentContrastColor() -> Color {
+  let nsColor = NSColor.controlAccentColor.usingColorSpace(.deviceRGB) ?? NSColor.controlAccentColor
+  let luminance = 0.2126 * Double(nsColor.redComponent)
+    + 0.7152 * Double(nsColor.greenComponent)
+    + 0.0722 * Double(nsColor.blueComponent)
+  return luminance > 0.58 ? .black : .white
 }
 
 private struct WorkspaceSidebar: View {
@@ -669,7 +774,7 @@ private struct DetailHeader: View {
   @ObservedObject var model: ArtificerModel
 
   var body: some View {
-    HStack(spacing: 12) {
+    HStack(alignment: .center, spacing: 12) {
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 8) {
           Text(model.selectedSession?.title ?? "Artificer")
@@ -682,9 +787,9 @@ private struct DetailHeader: View {
         }
         HStack(spacing: 10) {
           if let session = model.selectedSession {
-            Text(session.model)
-            Text("pending \(session.queue.pending)")
-            Text("running \(session.queue.running)")
+            Label(session.model, systemImage: "cpu")
+            Label("pending \(session.queue.pending)", systemImage: "tray")
+            Label("running \(session.queue.running)", systemImage: "play.circle")
           } else {
             Text("Native runtime console")
           }
@@ -693,18 +798,9 @@ private struct DetailHeader: View {
         .foregroundStyle(.secondary)
       }
       Spacer()
-      Button {
-        Task { await model.runNext() }
-      } label: {
-        Label("Run", systemImage: "play.fill")
-      }
-      .disabled(model.selectedSessionID == nil || model.isBusy)
-      Button {
+      FloatingIconButton(title: "Refresh thread", systemImage: "arrow.clockwise", disabled: model.selectedSessionID == nil || model.isBusy) {
         Task { await model.loadSelectedSession() }
-      } label: {
-        Label("Refresh", systemImage: "arrow.clockwise")
       }
-      .disabled(model.selectedSessionID == nil || model.isBusy)
     }
     .padding(12)
   }
@@ -984,32 +1080,30 @@ private struct AutomationListRow: View {
 
 private struct ComposerView: View {
   @ObservedObject var model: ArtificerModel
-  @State private var runOptionsExpanded = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
+    VStack(alignment: .leading, spacing: 9) {
       ZStack(alignment: .topLeading) {
         TextEditor(text: $model.prompt)
           .font(.body)
-          .frame(
-            minHeight: runOptionsExpanded ? CGFloat(52) : CGFloat(76),
-            idealHeight: runOptionsExpanded ? CGFloat(64) : CGFloat(96),
-            maxHeight: runOptionsExpanded ? CGFloat(76) : CGFloat(112)
-          )
+          .frame(minHeight: 78, idealHeight: 96, maxHeight: 116)
           .scrollContentBackground(.hidden)
-          .padding(4)
+          .padding(.horizontal, 8)
+          .padding(.vertical, 6)
 
         if model.prompt.isEmpty {
           Text("Ask Artificer, attach files, or queue work for the selected session.")
             .foregroundStyle(.tertiary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 15)
             .allowsHitTesting(false)
         }
       }
+      .background(Color(nsColor: .textBackgroundColor))
+      .clipShape(RoundedRectangle(cornerRadius: 14))
       .overlay {
-        RoundedRectangle(cornerRadius: 8)
-          .stroke(Color.secondary.opacity(0.24), lineWidth: 1)
+        RoundedRectangle(cornerRadius: 14)
+          .stroke(Color.secondary.opacity(0.20), lineWidth: 1)
       }
 
       if !model.pendingAttachments.isEmpty {
@@ -1028,85 +1122,209 @@ private struct ComposerView: View {
         DictationWaveView(levels: model.dictationLevels, elapsed: model.dictationElapsedText)
       }
 
-      HStack(spacing: 10) {
-        Button {
+      HStack(alignment: .center, spacing: 8) {
+        FloatingIconButton(title: "Attach files", systemImage: "paperclip", disabled: model.selectedSessionID == nil || model.isBusy || model.isDictating) {
           model.chooseAttachments()
-        } label: {
-          Label("Attach", systemImage: "paperclip")
         }
-        .disabled(model.selectedSessionID == nil || model.isBusy || model.isDictating)
 
-        Button {
+        ComposerOptionsBar(model: model)
+
+        Spacer(minLength: 4)
+
+        FloatingIconButton(
+          title: model.isDictating ? "Stop dictation" : "Dictate prompt",
+          systemImage: model.isDictating ? "stop.fill" : "mic.fill",
+          disabled: model.selectedSessionID == nil || (model.isBusy && !model.isDictating)
+        ) {
           Task { await model.toggleDictation() }
-        } label: {
-          Label(model.isDictating ? "Stop" : "Dictate", systemImage: model.isDictating ? "stop.fill" : "mic.fill")
         }
-        .disabled(model.selectedSessionID == nil || (model.isBusy && !model.isDictating))
 
-        Spacer()
-
-        Button {
+        FloatingIconButton(title: "Queue prompt", systemImage: "tray.and.arrow.down", disabled: !model.canSendPrompt) {
           Task { await model.sendPrompt(runAfterQueue: false) }
-        } label: {
-          Label("Queue", systemImage: "tray.and.arrow.down")
         }
-        .disabled(!model.canSendPrompt)
 
-        Button {
+        FloatingIconButton(
+          title: "Send and run",
+          systemImage: "arrow.up",
+          disabled: !model.canSendPrompt,
+          prominence: .accent,
+          size: 34
+        ) {
           Task { await model.sendPrompt(runAfterQueue: true) }
-        } label: {
-          Label("Send", systemImage: "paperplane.fill")
         }
         .keyboardShortcut(.return, modifiers: [.command])
-        .disabled(!model.canSendPrompt)
       }
-      .buttonStyle(.bordered)
-      .controlSize(.small)
-
-      DisclosureGroup("Run options", isExpanded: $runOptionsExpanded) {
-        VStack(alignment: .leading, spacing: 8) {
-          LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 12, alignment: .leading)], alignment: .leading, spacing: 8) {
-            RunOptionPicker(title: "Mode", selection: $model.runMode, values: model.runModes)
-            RunOptionPicker(title: "Budget", selection: $model.computeBudget, values: model.computeBudgets)
-            RunOptionPicker(title: "Commands", selection: $model.commandExecMode, values: model.commandExecModes)
-            RunOptionPicker(title: "Permission", selection: $model.permissionMode, values: model.permissionModes)
-          }
-
-          HStack(spacing: 16) {
-            Toggle("Review", isOn: $model.programmerReview)
-            Toggle("Self", isOn: $model.selfActuation)
-            Toggle("Reflexive", isOn: $model.reflexiveKnowledge)
-            Spacer()
-          }
-          .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.top, 6)
-      }
-      .font(.footnote)
     }
     .padding(12)
     .padding(.bottom, 28)
   }
 }
 
-private struct RunOptionPicker: View {
+private struct ComposerOptionsBar: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 7) {
+        ComposerModelMenu(model: model)
+        ComposerOptionMenu(systemImage: "slider.horizontal.3", title: "Run mode", selection: $model.runMode, values: model.runModes)
+        ComposerOptionMenu(systemImage: "clock", title: "Compute budget", selection: $model.computeBudget, values: model.computeBudgets)
+        ComposerOptionMenu(systemImage: "terminal", title: "Command execution", selection: $model.commandExecMode, values: model.commandExecModes)
+        ComposerOptionMenu(systemImage: "shield", title: "Permission mode", selection: $model.permissionMode, values: model.permissionModes)
+        ComposerToggleIconButton(title: "Programmer review", systemImage: "checkmark.seal", isOn: $model.programmerReview)
+        ComposerToggleIconButton(title: "Reflexive knowledge", systemImage: "brain.head.profile", isOn: $model.reflexiveKnowledge)
+        ComposerToggleIconButton(title: "Self-actuation", systemImage: "wand.and.stars", isOn: $model.selfActuation)
+      }
+      .padding(.vertical, 2)
+    }
+    .frame(minHeight: 34)
+  }
+}
+
+private struct ComposerModelMenu: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    Menu {
+      if model.installedModels.isEmpty {
+        Button("Refresh models") {
+          Task { await model.loadModelData() }
+        }
+      } else {
+        ForEach(model.installedModels, id: \.self) { modelName in
+          Button {
+            Task { await model.setSelectedSessionModel(modelName) }
+          } label: {
+            HStack {
+              Text(modelDisplayName(modelName))
+              if modelName == model.activeComposerModel {
+                Image(systemName: "checkmark")
+              }
+            }
+          }
+        }
+      }
+    } label: {
+      ComposerOptionLabel(systemImage: "cpu", text: modelDisplayName(model.activeComposerModel.isEmpty ? "Select model" : model.activeComposerModel))
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize(horizontal: true, vertical: true)
+    .help("Select model")
+    .disabled(model.selectedSessionID == nil || model.isBusy)
+  }
+}
+
+private struct ComposerOptionMenu: View {
+  let systemImage: String
   let title: String
   @Binding var selection: String
   let values: [String]
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 3) {
-      Text(title)
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-      Picker(title, selection: $selection) {
-        ForEach(values, id: \.self) { Text($0).tag($0) }
+    Menu {
+      ForEach(values, id: \.self) { value in
+        Button {
+          selection = value
+        } label: {
+          HStack {
+            Text(composerOptionDisplayName(value))
+            if selection == value {
+              Image(systemName: "checkmark")
+            }
+          }
+        }
       }
-      .labelsHidden()
-      .frame(width: 96)
+    } label: {
+      ComposerOptionLabel(systemImage: systemImage, text: composerOptionDisplayName(selection))
     }
+    .menuStyle(.borderlessButton)
     .fixedSize(horizontal: true, vertical: true)
+    .help(title)
+  }
+}
+
+private struct ComposerOptionLabel: View {
+  let systemImage: String
+  let text: String
+
+  var body: some View {
+    HStack(spacing: 5) {
+      Image(systemName: systemImage)
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(.secondary)
+      Text(text)
+        .font(.system(size: 12))
+        .lineLimit(1)
+      Image(systemName: "chevron.down")
+        .font(.system(size: 8, weight: .semibold))
+        .foregroundStyle(.tertiary)
+    }
+    .padding(.horizontal, 6)
+    .frame(height: 28)
+    .contentShape(Capsule())
+  }
+}
+
+private struct ComposerToggleIconButton: View {
+  let title: String
+  let systemImage: String
+  @Binding var isOn: Bool
+
+  var body: some View {
+    Button {
+      isOn.toggle()
+    } label: {
+      Image(systemName: systemImage)
+        .font(.system(size: 13, weight: .semibold))
+        .frame(width: 28, height: 28)
+        .contentShape(Circle())
+    }
+    .buttonStyle(.plain)
+    .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+    .background(isOn ? Color.accentColor.opacity(0.12) : Color.clear)
+    .clipShape(Circle())
+    .help(title)
+    .accessibilityLabel(Text(title))
+    .accessibilityValue(Text(isOn ? "On" : "Off"))
+  }
+}
+
+private func modelDisplayName(_ modelName: String) -> String {
+  let trimmed = modelName.trimmingCharacters(in: .whitespacesAndNewlines)
+  guard !trimmed.isEmpty else { return "Select model" }
+  let parts = trimmed.split(separator: ":", maxSplits: 1).map(String.init)
+  guard let first = parts.first, !first.isEmpty else { return trimmed }
+  return first
+}
+
+private func composerOptionDisplayName(_ value: String) -> String {
+  switch value {
+  case "instant": return "Instant"
+  case "auto": return "Auto/Thinking"
+  case "programming": return "Programming"
+  case "pentest": return "Pentest"
+  case "security-audit": return "Security Audit"
+  case "chat": return "Chat"
+  case "teacher": return "Teacher"
+  case "report": return "Report"
+  case "text-perfecter": return "Text Perfecter"
+  case "gui-testing": return "GUI Testing"
+  case "assistant": return "Team"
+  case "quick": return "Instant"
+  case "standard": return "Standard"
+  case "long": return "Long-term"
+  case "until-complete": return "Until Complete"
+  case "ask-some": return "Ask some"
+  case "all": return "Ask none"
+  case "none": return "None"
+  case "default": return "Default permissions"
+  case "ask": return "Ask"
+  case "never": return "Never"
+  default:
+    return value
+      .split(separator: "-")
+      .map { part in part.prefix(1).uppercased() + String(part.dropFirst()) }
+      .joined(separator: " ")
   }
 }
 
@@ -2089,8 +2307,8 @@ private final class ArtificerModel: ObservableObject {
   private var voiceAutomationLoopTask: Task<Void, Never>?
   private var voiceAutomationRecorder: AVAudioRecorder?
 
-  let runModes = ["auto", "programming", "assistant", "report", "teacher", "security-audit", "pentest", "gui-testing"]
-  let computeBudgets = ["auto", "low", "medium", "high"]
+  let runModes = ["instant", "auto", "programming", "pentest", "security-audit", "chat", "teacher", "report", "text-perfecter", "gui-testing", "assistant"]
+  let computeBudgets = ["auto", "quick", "standard", "long", "until-complete"]
   let commandExecModes = ["ask-some", "all", "none"]
   let permissionModes = ["default", "ask", "never"]
   let dictationShortcutOptions = ["none", "space", "right-option", "left-option", "right-command", "left-command", "mouse-back", "mouse-forward", "mouse-wheel-click"]
@@ -2103,6 +2321,19 @@ private final class ArtificerModel: ObservableObject {
 
   var selectedProject: Project? {
     projects.first { $0.id == selectedProjectID }
+  }
+
+  var activeComposerModel: String {
+    if let sessionModel = selectedSession?.model.trimmingCharacters(in: .whitespacesAndNewlines), !sessionModel.isEmpty {
+      return sessionModel
+    }
+    if !selectedDefaultModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      return selectedDefaultModel
+    }
+    if let defaultModel = health?.defaultModel.trimmingCharacters(in: .whitespacesAndNewlines), !defaultModel.isEmpty {
+      return defaultModel
+    }
+    return installedModels.first ?? ""
   }
 
   var automationDraftSessions: [SessionSummary] {
@@ -2155,6 +2386,27 @@ private final class ArtificerModel: ObservableObject {
 
   func isProjectExpanded(_ projectID: String) -> Bool {
     expandedProjectIDs.contains(projectID)
+  }
+
+  func projectPathDisplayName(_ project: Project) -> String {
+    let basename = URL(fileURLWithPath: project.path).lastPathComponent
+    if !basename.isEmpty {
+      return basename
+    }
+    return project.name
+  }
+
+  func copySelectedProjectPath() {
+    guard let path = selectedProject?.path, !path.isEmpty else { return }
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(path, forType: .string)
+    statusMessage = "Project path copied."
+  }
+
+  func openSelectedProjectFolder() {
+    guard let path = selectedProject?.path, !path.isEmpty else { return }
+    NSWorkspace.shared.open(URL(fileURLWithPath: path, isDirectory: true))
+    statusMessage = "Opening project folder."
   }
 
   func archiveKey(projectID: String, sessionID: String) -> String {
@@ -2565,6 +2817,40 @@ private final class ArtificerModel: ObservableObject {
     statusMessage = "Opening thread..."
     await loadSelectedSession(status: "Thread opened.", trackBusy: false)
     await saveSelectedVoiceTarget(projectID: projectID, sessionID: sessionID)
+  }
+
+  func setSelectedSessionModel(_ modelName: String) async {
+    let trimmedModel = modelName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let projectID = selectedProjectID, let sessionID = selectedSessionID, !trimmedModel.isEmpty else { return }
+    let result = await runBackend("session-set-model", projectID, sessionID, trimmedModel)
+    guard decode(GenericSuccessResponse.self, from: result) != nil else { return }
+    if let detail = selectedSession {
+      selectedSession = SessionDetail(
+        id: detail.id,
+        workspaceID: detail.workspaceID,
+        title: detail.title,
+        model: trimmedModel,
+        updated: Int(Date().timeIntervalSince1970),
+        queue: detail.queue,
+        messages: detail.messages
+      )
+    }
+    if var list = sessionsByProject[projectID], let index = list.firstIndex(where: { $0.id == sessionID }) {
+      let existing = list[index]
+      list[index] = SessionSummary(
+        id: existing.id,
+        workspaceID: existing.workspaceID,
+        title: existing.title,
+        model: trimmedModel,
+        updated: Int(Date().timeIntervalSince1970),
+        queue: existing.queue
+      )
+      sessionsByProject[projectID] = list
+      if selectedProjectID == projectID {
+        sessions = list
+      }
+    }
+    statusMessage = "Model updated."
   }
 
   func requestOrConfirmArchive(projectID: String, sessionID: String) async {
