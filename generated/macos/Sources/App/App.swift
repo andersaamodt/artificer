@@ -333,7 +333,9 @@ private struct RootView: View {
       WorkspaceSidebar(model: model)
         .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 460)
     } detail: {
-      if model.showingAutomations {
+      if model.showingTriage {
+        TriageDetailView(model: model)
+      } else if model.showingAutomations {
         AutomationsDetailView(model: model)
       } else {
         SessionDetailView(model: model)
@@ -803,7 +805,14 @@ private struct WorkspaceSidebar: View {
 
       AutomationSidebarRow(model: model)
         .padding(.horizontal, 8)
-        .padding(.vertical, 8)
+        .padding(.top, 8)
+        .padding(.bottom, model.triageCards.isEmpty ? 8 : 3)
+
+      if !model.triageCards.isEmpty {
+        TriageSidebarRow(model: model)
+          .padding(.horizontal, 8)
+          .padding(.bottom, 8)
+      }
 
       Divider()
 
@@ -997,6 +1006,45 @@ private struct AutomationSidebarRow: View {
     }
     .buttonStyle(.plain)
     .help("Automations")
+  }
+}
+
+private struct TriageSidebarRow: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    Button {
+      Task { await model.selectTriagePanel() }
+    } label: {
+      HStack(spacing: 8) {
+        Image(systemName: "list.bullet.rectangle.portrait")
+          .foregroundStyle(model.showingTriage ? Color.accentColor : Color.secondary)
+          .frame(width: 18)
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Triage")
+            .font(.system(size: 13, weight: .semibold))
+          Text("proposals needing review")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+        Spacer()
+        Text("\(model.triageCards.count)")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(model.themeContrastColor)
+          .frame(minWidth: 20, minHeight: 20)
+          .background(Color.accentColor)
+          .clipShape(Capsule())
+      }
+      .padding(.horizontal, 8)
+      .padding(.vertical, 7)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
+      .background(model.showingTriage ? Color.accentColor.opacity(0.13) : Color.clear)
+      .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+    .buttonStyle(.plain)
+    .help("Triage proposals")
   }
 }
 
@@ -2367,6 +2415,149 @@ private struct ModelCatalogColumn: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .topLeading)
+  }
+}
+
+private struct TriageDetailView: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Triage")
+            .font(.title3)
+          Text("\(model.triageCards.count) proposal\(model.triageCards.count == 1 ? "" : "s") needing review")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+        Spacer()
+        Button {
+          Task { await model.loadTriage() }
+        } label: {
+          Label("Refresh", systemImage: "arrow.clockwise")
+        }
+        .disabled(model.isBusy)
+        Button {
+          Task { await model.cleanupTriage() }
+        } label: {
+          Label("Cleanup Preview", systemImage: "wand.and.stars")
+        }
+        .disabled(model.isBusy)
+      }
+      .padding(12)
+
+      Divider()
+
+      if model.triageCards.isEmpty {
+        EmptyStateView(title: "Triage Clear", systemImage: "checkmark.circle", detail: "No multi-agent proposals need attention.")
+      } else {
+        ScrollView {
+          LazyVStack(alignment: .leading, spacing: 10) {
+            ForEach(model.triageCards) { card in
+              TriageCardView(model: model, card: card)
+            }
+            if !model.triageCleanupPreview.isEmpty {
+              Text(model.triageCleanupPreview)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .padding(.top, 4)
+            }
+          }
+          .padding(14)
+        }
+      }
+    }
+    .task {
+      await model.loadTriage()
+    }
+  }
+}
+
+private struct TriageCardView: View {
+  @ObservedObject var model: ArtificerModel
+  let card: TriageCard
+  @State private var customDecision = ""
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 9) {
+      HStack(alignment: .top, spacing: 10) {
+        Image(systemName: card.targetType == "Charter" ? "scroll" : "lightbulb")
+          .foregroundStyle(Color.accentColor)
+          .frame(width: 22, height: 22)
+        VStack(alignment: .leading, spacing: 3) {
+          Text(card.summary.isEmpty ? card.target : card.summary)
+            .font(.headline)
+          Text(card.rationale)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .lineLimit(4)
+        }
+        Spacer()
+        Text(card.impactLabel)
+          .font(.caption.weight(.semibold))
+          .padding(.horizontal, 7)
+          .padding(.vertical, 4)
+          .background(Color.accentColor.opacity(0.12))
+          .clipShape(Capsule())
+      }
+
+      FlowHStack(items: card.metadataChips) { chip in
+        Text(chip)
+          .font(.caption)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 4)
+          .background(Color(nsColor: .controlBackgroundColor))
+          .clipShape(Capsule())
+      }
+
+      HStack(spacing: 8) {
+        Button {
+          Task { await model.decideTriage(card, decision: "accepted") }
+        } label: {
+          Label("Accept", systemImage: "checkmark")
+        }
+        Button {
+          Task { await model.decideTriage(card, decision: "deferred") }
+        } label: {
+          Label("Defer", systemImage: "clock")
+        }
+        Menu {
+          Button("Workspace") {
+            Task { await model.suppressTriage(card, scope: "workspace") }
+          }
+          Button("Global") {
+            Task { await model.suppressTriage(card, scope: "global") }
+          }
+        } label: {
+          Label("Suppress", systemImage: "bell.slash")
+        }
+        TextField("Other decision", text: $customDecision)
+          .textFieldStyle(.roundedBorder)
+          .frame(maxWidth: 220)
+        Button {
+          Task { await model.decideTriage(card, decision: customDecision) }
+          customDecision = ""
+        } label: {
+          Image(systemName: "arrow.turn.down.left")
+        }
+        .help("Apply custom decision")
+        .disabled(customDecision.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isBusy)
+        Spacer()
+      }
+      .buttonStyle(.bordered)
+      .disabled(model.isBusy)
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color(nsColor: .textBackgroundColor))
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+    .overlay {
+      RoundedRectangle(cornerRadius: 8)
+        .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
+    }
   }
 }
 
@@ -4053,9 +4244,12 @@ private final class ArtificerModel: ObservableObject {
   @Published var sessions: [SessionSummary] = []
   @Published var selectedSession: SessionDetail?
   @Published var automations: [AutomationItem] = []
+  @Published var triageCards: [TriageCard] = []
+  @Published var triageCleanupPreview = ""
   @Published var daemonStatus: DaemonStatus?
   @Published var health: RuntimeHealth?
   @Published var showingAutomations = false
+  @Published var showingTriage = false
   @Published var preferencesTab = "general"
   @Published var selectedProjectID: String?
   @Published var selectedSessionID: String?
@@ -4820,6 +5014,7 @@ private final class ArtificerModel: ObservableObject {
     commandRulesWorkspaceID = projectID
     preferencesTab = "approvals"
     showingAutomations = false
+    showingTriage = false
   }
 
   func prepareProjectRename(_ project: Project) {
@@ -5213,6 +5408,7 @@ private final class ArtificerModel: ObservableObject {
     await loadModelData()
     await loadLlmRuntimeSettings()
     await loadProjects()
+    await loadTriage()
     await loadDaemonStatus()
     await loadAutomations()
     await loadDesktopPrefs()
@@ -5487,6 +5683,7 @@ private final class ArtificerModel: ObservableObject {
     guard let projectID else { return }
     preserveCurrentPromptDraft()
     showingAutomations = false
+    showingTriage = false
     activeDraftProjectID = nil
     selectedProjectID = projectID
     selectedSessionID = nil
@@ -5537,6 +5734,7 @@ private final class ArtificerModel: ObservableObject {
     guard !creatingSessionProjectIDs.contains(projectID) else { return }
     preserveCurrentPromptDraft()
     showingAutomations = false
+    showingTriage = false
     activeDraftProjectID = nil
     selectedProjectID = projectID
     expandedProjectIDs.insert(projectID)
@@ -5583,6 +5781,7 @@ private final class ArtificerModel: ObservableObject {
   private func createSessionForDraft(projectID: String, prompt draftPrompt: String) async -> String? {
     guard !creatingSessionProjectIDs.contains(projectID) else { return nil }
     showingAutomations = false
+    showingTriage = false
     selectedProjectID = projectID
     selectedSessionID = nil
     selectedSession = nil
@@ -5664,6 +5863,7 @@ private final class ArtificerModel: ObservableObject {
   func selectProject(_ projectID: String) async {
     preserveCurrentPromptDraft()
     showingAutomations = false
+    showingTriage = false
     activeDraftProjectID = nil
     selectedProjectID = projectID
     selectedSessionID = nil
@@ -5683,6 +5883,7 @@ private final class ArtificerModel: ObservableObject {
   func toggleProject(_ projectID: String) async {
     preserveCurrentPromptDraft()
     showingAutomations = false
+    showingTriage = false
     selectedProjectID = projectID
     pendingArchiveSessionKey = ""
     if expandedProjectIDs.contains(projectID) {
@@ -5707,6 +5908,7 @@ private final class ArtificerModel: ObservableObject {
   func selectSession(projectID: String, sessionID: String) async {
     preserveCurrentPromptDraft()
     showingAutomations = false
+    showingTriage = false
     activeDraftProjectID = nil
     selectedProjectID = projectID
     selectedSessionID = sessionID
@@ -5845,9 +6047,56 @@ private final class ArtificerModel: ObservableObject {
     automations = response.automations.items
   }
 
+  func loadTriage() async {
+    let result = await runBackend("triage-list", trackBusy: false)
+    guard let response = decode(TriageResponse.self, from: result) else { return }
+    triageCards = response.cards
+    if triageCards.isEmpty, showingTriage {
+      showingTriage = false
+    }
+  }
+
+  func selectTriagePanel() async {
+    preserveCurrentPromptDraft()
+    showingTriage = true
+    showingAutomations = false
+    activeDraftProjectID = nil
+    await loadTriage()
+  }
+
+  func decideTriage(_ card: TriageCard, decision: String) async {
+    let normalized = decision.trimmingCharacters(in: .whitespacesAndNewlines)
+    let result = await runBackend("triage-decide", card.id, normalized.isEmpty ? "accepted" : normalized)
+    guard let response = decode(TriageMutationResponse.self, from: result) else { return }
+    triageCards = response.cards
+    statusMessage = "Triage decision applied."
+    if triageCards.isEmpty {
+      showingTriage = false
+    }
+  }
+
+  func suppressTriage(_ card: TriageCard, scope: String) async {
+    let result = await runBackend("triage-suppress", card.id, scope)
+    guard let response = decode(TriageMutationResponse.self, from: result) else { return }
+    triageCards = response.cards
+    statusMessage = scope == "global" ? "Proposal suppressed globally." : "Proposal suppressed for workspace."
+    if triageCards.isEmpty {
+      showingTriage = false
+    }
+  }
+
+  func cleanupTriage() async {
+    let result = await runBackend("triage-cleanup", "preview")
+    if let response = decode(TriageCleanupResponse.self, from: result) {
+      triageCleanupPreview = "Cleanup preview: \(response.result.before) -> \(response.result.after)."
+      await loadTriage()
+    }
+  }
+
   func selectAutomationsPanel() async {
     preserveCurrentPromptDraft()
     showingAutomations = true
+    showingTriage = false
     activeDraftProjectID = nil
     if automationDraftProjectID.isEmpty, let selectedProjectID {
       automationDraftProjectID = selectedProjectID
@@ -8007,6 +8256,107 @@ private struct RunChangeSummary: Hashable {
     added = nextAdded
     deleted = nextDeleted
     files = nextFiles
+  }
+}
+
+private struct TriageResponse: Decodable {
+  let success: Bool
+  let count: Int
+  let cards: [TriageCard]
+
+  enum CodingKeys: String, CodingKey {
+    case success, count, cards
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    count = container.decodeFlexibleInt(forKey: .count)
+    cards = (try? container.decode([TriageCard].self, forKey: .cards)) ?? []
+  }
+}
+
+private struct TriageMutationResponse: Decodable {
+  let success: Bool
+  let cards: [TriageCard]
+}
+
+private struct TriageCleanupResponse: Decodable {
+  let success: Bool
+  let result: TriageCleanupResult
+}
+
+private struct TriageCleanupResult: Decodable {
+  let before: Int
+  let after: Int
+
+  enum CodingKeys: String, CodingKey {
+    case before, after
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    before = container.decodeFlexibleInt(forKey: .before)
+    after = container.decodeFlexibleInt(forKey: .after)
+  }
+}
+
+private struct TriageCard: Identifiable, Decodable, Hashable {
+  let id: String
+  let workspaceID: String
+  let conversationID: String
+  let summary: String
+  let target: String
+  let targetType: String
+  let escalationClass: String
+  let rationale: String
+  let resident: String
+  let impactThreshold: Int
+  let status: String
+  let decision: String
+  let created: Int
+  let suppressed: Bool
+
+  var impactLabel: String {
+    impactThreshold > 0 ? "impact \(impactThreshold)" : "review"
+  }
+
+  var metadataChips: [String] {
+    [
+      workspaceID.isEmpty ? "" : "workspace \(workspaceID)",
+      conversationID.isEmpty ? "" : "thread \(conversationID)",
+      targetType.isEmpty ? "" : targetType,
+      escalationClass.isEmpty ? "" : escalationClass,
+      resident.isEmpty ? "" : resident,
+      status.isEmpty ? "" : status
+    ].filter { !$0.isEmpty }
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case id, summary, target, rationale, resident, status, decision, created, suppressed
+    case workspaceID = "workspace_id"
+    case conversationID = "conversation_id"
+    case targetType = "target_type"
+    case escalationClass = "escalation_class"
+    case impactThreshold = "impact_threshold"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    workspaceID = (try? container.decode(String.self, forKey: .workspaceID)) ?? ""
+    conversationID = (try? container.decode(String.self, forKey: .conversationID)) ?? ""
+    summary = (try? container.decode(String.self, forKey: .summary)) ?? ""
+    target = (try? container.decode(String.self, forKey: .target)) ?? ""
+    targetType = (try? container.decode(String.self, forKey: .targetType)) ?? ""
+    escalationClass = (try? container.decode(String.self, forKey: .escalationClass)) ?? ""
+    rationale = (try? container.decode(String.self, forKey: .rationale)) ?? ""
+    resident = (try? container.decode(String.self, forKey: .resident)) ?? ""
+    impactThreshold = container.decodeFlexibleInt(forKey: .impactThreshold)
+    status = (try? container.decode(String.self, forKey: .status)) ?? ""
+    decision = (try? container.decode(String.self, forKey: .decision)) ?? ""
+    created = container.decodeFlexibleInt(forKey: .created)
+    suppressed = container.decodeFlexibleBool(forKey: .suppressed)
   }
 }
 

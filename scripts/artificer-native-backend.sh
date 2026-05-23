@@ -83,6 +83,10 @@ Actions:
   automation-run AUTOMATION_ID
   automation-toggle AUTOMATION_ID ENABLED
   automation-delete AUTOMATION_ID
+  triage-list
+  triage-decide PROPOSAL_ID DECISION
+  triage-suppress PROPOSAL_ID SCOPE
+  triage-cleanup DIRECTIVE
   models
   model-catalog
   model-install-start MODEL
@@ -1162,6 +1166,23 @@ case "$action" in
   automation-delete)
     automation_id=${1-}
     runtime_client automation delete --automation-id "$automation_id"
+    ;;
+  triage-list)
+    api_get triage_list
+    ;;
+  triage-decide)
+    proposal_id=${1-}
+    decision=${2:-accepted}
+    api_post triage_decide proposal_id "$proposal_id" decision "$decision"
+    ;;
+  triage-suppress)
+    proposal_id=${1-}
+    scope=${2:-workspace}
+    api_post triage_suppress proposal_id "$proposal_id" scope "$scope"
+    ;;
+  triage-cleanup)
+    directive=${1-}
+    api_post triage_cleanup directive "$directive"
     ;;
   automation-daemon-status)
     daemon_fast_status_json
