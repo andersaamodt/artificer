@@ -916,14 +916,7 @@ private struct SessionTreeRow: View {
         .font(.system(size: 13))
         .lineLimit(1)
         .truncationMode(.tail)
-      if session.queue.pending > 0 {
-        Text("\(session.queue.pending)")
-          .font(.caption2)
-          .padding(.horizontal, 5)
-          .padding(.vertical, 1)
-          .background(Color.accentColor.opacity(0.16))
-          .clipShape(Capsule())
-      }
+      SessionStatusPill(session: session)
       Spacer(minLength: 6)
       let showingArchive = isHovering || model.pendingArchiveSessionKey == model.archiveKey(projectID: project.id, sessionID: session.id)
       ZStack(alignment: .trailing) {
@@ -971,6 +964,38 @@ private struct SessionTreeRow: View {
     guard session.updated > 0 else { return "" }
     let date = Date(timeIntervalSince1970: TimeInterval(session.updated))
     return RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
+  }
+}
+
+private struct SessionStatusPill: View {
+  let session: SessionSummary
+
+  var body: some View {
+    if let label = statusLabel {
+      Text(label)
+        .font(.caption2)
+        .foregroundStyle(statusColor)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 1)
+        .background(statusColor.opacity(0.14))
+        .clipShape(Capsule())
+        .lineLimit(1)
+    }
+  }
+
+  private var statusLabel: String? {
+    if session.queue.running > 0 { return "Running" }
+    if session.queue.pending > 0 { return session.queue.pending == 1 ? "Queued" : "\(session.queue.pending) queued" }
+    if session.queue.lastStatus == "awaiting_approval" { return "Approval" }
+    if session.queue.lastStatus == "awaiting_decision" { return "Decision" }
+    return nil
+  }
+
+  private var statusColor: Color {
+    if session.queue.running > 0 { return .green }
+    if session.queue.pending > 0 { return .orange }
+    if session.queue.lastStatus == "awaiting_approval" || session.queue.lastStatus == "awaiting_decision" { return .purple }
+    return .secondary
   }
 }
 
@@ -1399,10 +1424,7 @@ private struct GitDiffSheet: View {
       }
       if !model.gitDiff.diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
         ScrollView {
-          Text(model.gitDiff.diff)
-            .font(.system(size: 12, design: .monospaced))
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
+          DiffTextView(diff: model.gitDiff.diff)
             .padding(10)
         }
         .background(Color(nsColor: .textBackgroundColor))
@@ -1426,6 +1448,36 @@ private struct GitDiffSheet: View {
     .task {
       await model.loadGitDiff()
     }
+  }
+}
+
+private struct DiffTextView: View {
+  let diff: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      ForEach(Array(diffLines.enumerated()), id: \.offset) { _, line in
+        Text(line.isEmpty ? " " : line)
+          .foregroundStyle(color(for: line))
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+    }
+    .font(.system(size: 12, design: .monospaced))
+    .textSelection(.enabled)
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private var diffLines: [String] {
+    diff.components(separatedBy: .newlines)
+  }
+
+  private func color(for line: String) -> Color {
+    if line.hasPrefix("+++") || line.hasPrefix("---") { return Color.accentColor }
+    if line.hasPrefix("@@") { return .purple }
+    if line.hasPrefix("+") { return .green }
+    if line.hasPrefix("-") { return .red }
+    if line.hasPrefix("diff ") || line.hasPrefix("index ") { return .secondary }
+    return .primary
   }
 }
 
@@ -2113,6 +2165,9 @@ private struct ComposerView: View {
     }
     .padding(12)
     .padding(.bottom, 28)
+    .onChange(of: model.prompt) { nextPrompt in
+      model.updateActivePromptDraft(nextPrompt)
+    }
   }
 }
 
@@ -3294,6 +3349,7 @@ private final class ArtificerModel: ObservableObject {
   @Published var creatingSessionProjectIDs: Set<String> = []
   @Published var loadingSessionKey = ""
   @Published var prompt = ""
+  @Published var promptDraftsBySessionKey: [String: String] = [:]
   @Published var statusMessage = "Ready"
   @Published var lastError = ""
   @Published var isBusy = false
@@ -3785,6 +3841,39 @@ private final class ArtificerModel: ObservableObject {
     "\(projectID):\(sessionID)"
   }
 
+  private var activePromptDraftKey: String? {
+    guard let selectedProjectID, let selectedSessionID else { return nil }
+    return archiveKey(projectID: selectedProjectID, sessionID: selectedSessionID)
+  }
+
+  func updateActivePromptDraft(_ text: String) {
+    guard let key = activePromptDraftKey else { return }
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty {
+      promptDraftsBySessionKey.removeValue(forKey: key)
+    } else {
+      promptDraftsBySessionKey[key] = text
+    }
+  }
+
+  func preserveCurrentPromptDraft() {
+    updateActivePromptDraft(prompt)
+  }
+
+  func restorePromptDraft(for session: SessionDetail) {
+    let key = archiveKey(projectID: session.workspaceID, sessionID: session.id)
+    if let localDraft = promptDraftsBySessionKey[key] {
+      prompt = localDraft
+    } else {
+      prompt = session.draft
+      updateActivePromptDraft(session.draft)
+    }
+  }
+
+  func clearPromptDraft(projectID: String, sessionID: String) {
+    promptDraftsBySessionKey.removeValue(forKey: archiveKey(projectID: projectID, sessionID: sessionID))
+  }
+
   func dictationShortcutLabel(_ value: String) -> String {
     switch value {
     case "space": return "Space"
@@ -4052,6 +4141,7 @@ private final class ArtificerModel: ObservableObject {
     if let selectedSessionID, sessions.contains(where: { $0.id == selectedSessionID }) {
       await loadSelectedSession(status: nextStatus)
     } else {
+      preserveCurrentPromptDraft()
       selectedSessionID = sessions.first?.id
       await loadSelectedSession(status: nextStatus)
     }
@@ -4071,6 +4161,7 @@ private final class ArtificerModel: ObservableObject {
     guard let response = decode(SessionResponse.self, from: result) else { return }
     guard selectedProjectID == projectID, selectedSessionID == sessionID else { return }
     selectedSession = response.session
+    restorePromptDraft(for: response.session)
     await saveSelectedVoiceTarget(projectID: projectID, sessionID: sessionID)
     await loadQueueItems()
     if let nextStatus {
@@ -4085,6 +4176,7 @@ private final class ArtificerModel: ObservableObject {
   func createSession(in projectID: String?) async {
     guard let projectID else { return }
     guard !creatingSessionProjectIDs.contains(projectID) else { return }
+    preserveCurrentPromptDraft()
     showingAutomations = false
     selectedProjectID = projectID
     expandedProjectIDs.insert(projectID)
@@ -4103,6 +4195,7 @@ private final class ArtificerModel: ObservableObject {
     sessions = sessionsByProject[projectID] ?? []
     selectedSessionID = temporarySession.id
     selectedSession = SessionDetail(summary: temporarySession)
+    prompt = ""
     statusMessage = "Creating thread..."
 
     let result = await runBackend("session-create", [projectID, title, modelName], trackBusy: false)
@@ -4121,6 +4214,7 @@ private final class ArtificerModel: ObservableObject {
     sessions = sessionsByProject[projectID] ?? []
     selectedSessionID = response.session.id
     selectedSession = response.session
+    prompt = ""
     await saveSelectedVoiceTarget(projectID: projectID, sessionID: response.session.id)
     statusMessage = "Session created."
   }
@@ -4147,10 +4241,12 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func selectProject(_ projectID: String) async {
+    preserveCurrentPromptDraft()
     showingAutomations = false
     selectedProjectID = projectID
     selectedSessionID = nil
     selectedSession = nil
+    prompt = ""
     pendingArchiveSessionKey = ""
     if let loadedSessions = await loadProjectSessions(projectID, trackBusy: false) {
       sessions = loadedSessions
@@ -4162,6 +4258,7 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func toggleProject(_ projectID: String) async {
+    preserveCurrentPromptDraft()
     showingAutomations = false
     selectedProjectID = projectID
     pendingArchiveSessionKey = ""
@@ -4185,6 +4282,7 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func selectSession(projectID: String, sessionID: String) async {
+    preserveCurrentPromptDraft()
     showingAutomations = false
     selectedProjectID = projectID
     selectedSessionID = sessionID
@@ -4277,6 +4375,7 @@ private final class ArtificerModel: ObservableObject {
       attachmentIDs
     )
     guard decode(SessionResponse.self, from: result) != nil else { return }
+    clearPromptDraft(projectID: projectID, sessionID: sessionID)
     prompt = ""
     pendingAttachments.removeAll()
     statusMessage = runAfterQueue ? "Prompt queued; running next item." : "Prompt queued."
@@ -5951,15 +6050,16 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
   let approvalRequest: ApprovalRequest?
   let trace: RunTrace
   let messages: [Message]
+  let draft: String
 
   enum CodingKeys: String, CodingKey {
-    case id, title, model, updated, queue, messages, trace
+    case id, title, model, updated, queue, messages, trace, draft
     case workspaceID = "workspace_id"
     case decisionRequest = "decision_request"
     case approvalRequest = "approval_request"
   }
 
-  init(id: String, workspaceID: String, title: String, model: String, updated: Int, queue: QueueState, decisionRequest: DecisionRequest? = nil, approvalRequest: ApprovalRequest? = nil, trace: RunTrace = RunTrace(), messages: [Message]) {
+  init(id: String, workspaceID: String, title: String, model: String, updated: Int, queue: QueueState, decisionRequest: DecisionRequest? = nil, approvalRequest: ApprovalRequest? = nil, trace: RunTrace = RunTrace(), messages: [Message], draft: String = "") {
     self.id = id
     self.workspaceID = workspaceID
     self.title = title
@@ -5970,6 +6070,7 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
     self.approvalRequest = approvalRequest
     self.trace = trace
     self.messages = messages
+    self.draft = draft
   }
 
   init(summary: SessionSummary, messages: [Message] = []) {
@@ -5983,7 +6084,8 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
       decisionRequest: nil,
       approvalRequest: nil,
       trace: RunTrace(),
-      messages: messages
+      messages: messages,
+      draft: ""
     )
   }
 
@@ -6013,6 +6115,7 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
     approvalRequest = try? container.decodeIfPresent(ApprovalRequest.self, forKey: .approvalRequest)
     trace = (try? container.decode(RunTrace.self, forKey: .trace)) ?? RunTrace()
     messages = (try? container.decode([Message].self, forKey: .messages)) ?? []
+    draft = (try? container.decode(String.self, forKey: .draft)) ?? ""
   }
 }
 
