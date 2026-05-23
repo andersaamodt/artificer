@@ -303,6 +303,11 @@ run_builtin_action() {
     output=$(sed -n '1p' "$output_file")
     rm -f "$output_file"
     [ -n "$output" ] || output="Ran built-in voice command."
+    if [ "$output" = "Dictation text." ]; then
+      log_event "dictated phrase='$phrase'"
+      write_status listening "Dictated text." "$phrase" "dictation"
+      return 0
+    fi
     play_recognition_sound
     log_event "recognized phrase='$phrase' action='builtin'"
     write_status triggered "$output" "$phrase" "builtin"

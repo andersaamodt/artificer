@@ -384,6 +384,10 @@ handle_dictation_phrase() {
       message "Dictation mode already on."
       return 0
       ;;
+    "dictate")
+      message "Dictation mode already on."
+      return 0
+      ;;
     "new line")
       type_text "$(printf '\n')"
       message "Typed newline."
@@ -404,6 +408,48 @@ handle_dictation_phrase() {
       message "Deleted line."
       return 0
       ;;
+    "show numbers"|"show names")
+      show_numbered_targets
+      return 0
+      ;;
+    "hide numbers"|"hide grid")
+      rm -f "$numbers_file"
+      message "Hid voice targets."
+      return 0
+      ;;
+    "show grid")
+      show_grid_targets screen
+      return 0
+      ;;
+    "show window grid")
+      show_grid_targets window
+      return 0
+      ;;
+    "click "[0-9]*)
+      click_number "${phrase#click }" click
+      return 0
+      ;;
+    "double click "[0-9]*)
+      click_number "${phrase#double click }" double
+      return 0
+      ;;
+    "right click "[0-9]*)
+      click_number "${phrase#right click }" right
+      return 0
+      ;;
+    "drag "*)
+      parsed=$(python3 - "$phrase" <<'PY'
+import re
+import sys
+m = re.match(r"drag ([0-9]+) to ([0-9]+)$", sys.argv[1])
+if m:
+    print(m.group(1), m.group(2))
+PY
+)
+      [ -n "$parsed" ] || return 2
+      drag_number_to_number $(printf '%s\n' "$parsed")
+      return 0
+      ;;
   esac
   case "$phrase" in
     "dictate "*) text_phrase=${phrase#dictate } ;;
@@ -411,7 +457,7 @@ handle_dictation_phrase() {
   esac
   text=$(dictation_text_from_phrase "$text_phrase")
   type_text "$text"
-  message "Dictated text."
+  message "Dictation text."
 }
 
 notification_text_now() {
@@ -715,9 +761,17 @@ handle_phrase() {
       read_notification
       return 0
       ;;
-    "start dictation"|"start listening"|"dictation mode"|"begin dictation")
+    "start dictation"|"start listening"|"dictation mode"|"begin dictation"|"dictate")
       dictation_allowed || return 2
       start_dictation
+      return 0
+      ;;
+    "start listening "*)
+      dictation_allowed || return 2
+      start_dictation >/dev/null
+      text=$(dictation_text_from_phrase "${phrase#start listening }")
+      type_text "$text"
+      message "Dictation mode on. Dictated text."
       return 0
       ;;
     "stop dictation"|"stop dictating"|"stop listening"|"end dictation"|"command mode")

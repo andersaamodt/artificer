@@ -141,12 +141,24 @@ grep -q 'pbcopy hello, world' "$log_file" || {
 
 run_voice "start listening" >/dev/null
 run_voice "listening phrase period" >/dev/null
+run_voice "show grid" >/dev/null
+run_voice "click 5" >/dev/null
 run_voice "stop listening" >/dev/null
 grep -q 'pbcopy listening phrase.' "$log_file" || {
   printf '%s\n' "start listening should enter dictation mode until stop listening" >&2
   exit 1
 }
+grep -q 'cliclick c:450,450' "$log_file" || {
+  printf '%s\n' "show grid and click should still work while dictation mode is active" >&2
+  exit 1
+}
 
+run_voice "dictate" >/dev/null
+dictation_active || {
+  printf '%s\n' "bare dictate should start dictation mode" >&2
+  exit 1
+}
+run_voice "stop listening" >/dev/null
 run_voice "dictate here is a sentence" >/dev/null
 dictation_active || {
   printf '%s\n' "dictate with inline text should leave dictation mode active" >&2
@@ -166,6 +178,25 @@ grep -q 'pbcopy and it continues.' "$log_file" || {
   printf '%s\n' "dictate with inline text should keep dictating follow-on phrases" >&2
   exit 1
 }
+
+cat > "$home_dir/.config/artificer/ui-prefs.env" <<'EOF'
+voice_automations=1
+voice_automation_sound=1
+voice_builtin_commands=1
+voice_dictation_commands=1
+voice_automation_llm_prompts=0
+voice_automation_llm_actions=0
+EOF
+: > "$log_file"
+run_voice "start listening" >/dev/null
+: > "$log_file"
+run_voice "background fan word" >/dev/null
+sleep 0.1
+if grep -q '^afplay ' "$log_file"; then
+  printf '%s\n' "ordinary dictated text should not play the recognized-command sound" >&2
+  exit 1
+fi
+run_voice "stop listening" >/dev/null
 
 unmatched_json=$(run_voice "you")
 printf '%s\n' "$unmatched_json" | grep -q '"status":"listening"' || {

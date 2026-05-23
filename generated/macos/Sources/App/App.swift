@@ -3115,7 +3115,6 @@ private final class ArtificerModel: ObservableObject {
       voiceAutomationLoopTask = Task.detached { [weak self] in
         while !Task.isCancelled {
           guard let self else { return }
-          self.appendVoiceAutomationLog("native loop tick")
           await self.runVoiceAutomationLoopTickDetached()
           try? await Task.sleep(nanoseconds: voiceAutomationLoopPauseNanoseconds)
         }
@@ -3177,17 +3176,22 @@ private final class ArtificerModel: ObservableObject {
     guard voiceAutomationEnabledFromDisk() else {
       return
     }
+    guard let processingLockURL = acquireVoiceAutomationProcessingLock() else {
+      return
+    }
     guard let audioURL = await captureVoiceAutomationAudioDetached(seconds: voiceAutomationCaptureSeconds) else {
+      releaseVoiceAutomationProcessingLock(processingLockURL)
       return
     }
     Task.detached { [weak self] in
-      await self?.processVoiceAutomationAudioDetached(audioURL)
+      await self?.processVoiceAutomationAudioDetached(audioURL, processingLockURL: processingLockURL)
     }
   }
 
-  nonisolated func processVoiceAutomationAudioDetached(_ audioURL: URL) async {
+  nonisolated func processVoiceAutomationAudioDetached(_ audioURL: URL, processingLockURL: URL) async {
     defer {
       try? FileManager.default.removeItem(at: audioURL)
+      releaseVoiceAutomationProcessingLock(processingLockURL)
     }
     let transcribeResult = await Backend.run(action: "dictation-transcribe-file", arguments: [audioURL.path, "auto"])
     guard
@@ -3247,6 +3251,30 @@ private final class ArtificerModel: ObservableObject {
       return ["1", "true", "yes", "on", "enabled"].contains(value)
     }
     return false
+  }
+
+  nonisolated func voiceAutomationProcessingLockURL() -> URL {
+    FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent(".local", isDirectory: true)
+      .appendingPathComponent("state", isDirectory: true)
+      .appendingPathComponent("artificer-native", isDirectory: true)
+      .appendingPathComponent("voice-automations", isDirectory: true)
+      .appendingPathComponent("native-transcription.lock", isDirectory: true)
+  }
+
+  nonisolated func acquireVoiceAutomationProcessingLock() -> URL? {
+    let lockURL = voiceAutomationProcessingLockURL()
+    do {
+      try FileManager.default.createDirectory(at: lockURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try FileManager.default.createDirectory(at: lockURL, withIntermediateDirectories: false)
+      return lockURL
+    } catch {
+      return nil
+    }
+  }
+
+  nonisolated func releaseVoiceAutomationProcessingLock(_ lockURL: URL) {
+    try? FileManager.default.removeItem(at: lockURL)
   }
 
   nonisolated func captureVoiceAutomationAudioDetached(seconds: TimeInterval) async -> URL? {
