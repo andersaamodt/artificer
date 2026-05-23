@@ -126,6 +126,7 @@ params = {
     "run_mode": str(item.get("run_mode", "")),
     "assistant_mode_id": str(item.get("assistant_mode_id", "")),
     "compute_budget": str(item.get("compute_budget", "")),
+    "reasoning_effort": str(item.get("reasoning_effort", "")),
     "command_exec_mode": str(item.get("command_exec_mode", "")),
     "permission_mode": str(item.get("permission_mode", "")),
     "programmer_review": str(item.get("programmer_review", "")),

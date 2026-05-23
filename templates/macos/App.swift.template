@@ -1118,54 +1118,122 @@ private struct SessionAttentionStrip: View {
   var body: some View {
     VStack(spacing: 8) {
       if let request = session.approvalRequest {
-        AttentionPanel(title: "Command approval", systemImage: "terminal", tone: .orange) {
-          VStack(alignment: .leading, spacing: 7) {
-            if !request.reason.isEmpty {
-              Text(request.reason)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-            Text(request.command)
-              .font(.system(.footnote, design: .monospaced))
-              .textSelection(.enabled)
-              .padding(8)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .background(Color(nsColor: .textBackgroundColor))
-              .clipShape(RoundedRectangle(cornerRadius: 7))
-            HStack(spacing: 8) {
-              Button("Allow once") {
-                Task { await model.answerApproval(decision: "allow", scope: "once", command: request.command) }
-              }
-              Button("Remember allow") {
-                Task { await model.answerApproval(decision: "allow", scope: "remember", command: request.command) }
-              }
-              Button("Deny") {
-                Task { await model.answerApproval(decision: "deny", scope: "once", command: request.command) }
-              }
-            }
-            .buttonStyle(.bordered)
-          }
-        }
+        CommandApprovalCard(model: model, request: request)
       }
       if let request = session.decisionRequest {
-        AttentionPanel(title: "Decision needed", systemImage: "questionmark.bubble", tone: .blue) {
-          VStack(alignment: .leading, spacing: 8) {
-            Text(request.question)
-              .font(.callout)
-              .textSelection(.enabled)
-            FlowHStack(items: request.options) { option in
-              Button(option) {
-                Task { await model.answerDecision(option) }
-              }
-              .buttonStyle(.borderedProminent)
-              .fixedSize(horizontal: true, vertical: true)
-            }
-          }
-        }
+        DecisionRequestCard(model: model, request: request)
       }
     }
     .padding(.horizontal, 12)
     .padding(.top, session.hasAttention ? 10 : 0)
+  }
+}
+
+private struct CommandApprovalCard: View {
+  @ObservedObject var model: ArtificerModel
+  let request: ApprovalRequest
+
+  @State private var matchMode = "exact"
+  @State private var pattern = ""
+
+  var body: some View {
+    AttentionPanel(title: "Command approval", systemImage: "terminal", tone: .orange) {
+      VStack(alignment: .leading, spacing: 8) {
+        if !request.reason.isEmpty {
+          Text(request.reason)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        Text(request.command)
+          .font(.system(.footnote, design: .monospaced))
+          .textSelection(.enabled)
+          .padding(8)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .background(Color(nsColor: .textBackgroundColor))
+          .clipShape(RoundedRectangle(cornerRadius: 7))
+
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+          Picker("Rule type", selection: $matchMode) {
+            Text("Exact command").tag("exact")
+            Text("Regex pattern").tag("regex")
+          }
+          .pickerStyle(.menu)
+          .frame(width: 154, alignment: .leading)
+          TextField("Remember pattern", text: $pattern)
+            .textFieldStyle(.roundedBorder)
+            .font(.system(.footnote, design: .monospaced))
+            .disabled(matchMode == "exact")
+        }
+        .font(.footnote)
+
+        HStack(spacing: 8) {
+          Button("Allow once") {
+            Task { await model.answerApproval(decision: "allow", scope: "once", command: request.command) }
+          }
+          Button("Deny once") {
+            Task { await model.answerApproval(decision: "deny", scope: "once", command: request.command) }
+          }
+          Button("Allow + remember") {
+            Task { await model.answerApproval(decision: "allow", scope: "remember", matchMode: matchMode, pattern: pattern, command: request.command) }
+          }
+          Button("Deny + remember") {
+            Task { await model.answerApproval(decision: "deny", scope: "remember", matchMode: matchMode, pattern: pattern, command: request.command) }
+          }
+        }
+        .buttonStyle(.bordered)
+        .fixedSize(horizontal: false, vertical: true)
+      }
+      .onAppear {
+        resetPatternIfNeeded(force: true)
+      }
+      .onChange(of: request.command) { _ in
+        resetPatternIfNeeded(force: true)
+      }
+      .onChange(of: matchMode) { _ in
+        resetPatternIfNeeded(force: false)
+      }
+    }
+  }
+
+  private func resetPatternIfNeeded(force: Bool) {
+    if force || matchMode == "exact" || pattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      pattern = request.command
+    }
+  }
+}
+
+private struct DecisionRequestCard: View {
+  @ObservedObject var model: ArtificerModel
+  let request: DecisionRequest
+
+  @State private var otherAnswer = ""
+
+  var body: some View {
+    AttentionPanel(title: "Decision needed", systemImage: "questionmark.bubble", tone: .blue) {
+      VStack(alignment: .leading, spacing: 9) {
+        Text(request.question)
+          .font(.callout)
+          .textSelection(.enabled)
+        FlowHStack(items: request.options) { option in
+          Button(option) {
+            Task { await model.answerDecision(option) }
+          }
+          .buttonStyle(.borderedProminent)
+          .fixedSize(horizontal: true, vertical: true)
+        }
+        HStack(spacing: 8) {
+          TextField("Other", text: $otherAnswer)
+            .textFieldStyle(.roundedBorder)
+          Button {
+            Task { await model.answerDecision(otherAnswer) }
+          } label: {
+            Label("Submit decision", systemImage: "arrow.up.circle")
+          }
+          .buttonStyle(.bordered)
+          .disabled(otherAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+      }
+    }
   }
 }
 
@@ -1248,6 +1316,9 @@ private struct RunTraceSummaryView: View {
             .lineLimit(4)
             .textSelection(.enabled)
         }
+        if let taskStatus = event.taskStatus, taskStatus.total > 0 {
+          RunTaskStatusView(taskStatus: taskStatus, isRunning: event.status == "running")
+        }
         if event.hasGitChanges {
           RunChangesMiniCard(summary: event.changeSummary)
         }
@@ -1259,6 +1330,45 @@ private struct RunTraceSummaryView: View {
       .padding(.horizontal, 12)
       .padding(.top, 8)
     }
+  }
+}
+
+private struct RunTaskStatusView: View {
+  let taskStatus: RunTaskStatus
+  let isRunning: Bool
+
+  var body: some View {
+    DisclosureGroup {
+      VStack(alignment: .leading, spacing: 6) {
+        ForEach(taskStatus.tasks.prefix(18)) { task in
+          HStack(alignment: .top, spacing: 7) {
+            Image(systemName: task.done ? "checkmark.circle.fill" : task.status == "active" ? "arrow.triangle.2.circlepath.circle" : "circle")
+              .font(.system(size: 12, weight: .semibold))
+              .foregroundStyle(task.done ? Color.green : task.status == "active" ? Color.accentColor : Color.secondary)
+              .frame(width: 14)
+            Text(task.text)
+              .font(.caption)
+              .foregroundStyle(task.done ? .secondary : .primary)
+              .strikethrough(task.done, color: .secondary)
+              .lineLimit(2)
+          }
+        }
+      }
+      .padding(.top, 6)
+    } label: {
+      HStack(spacing: 8) {
+        Label(taskStatus.summaryText, systemImage: "checklist")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        if isRunning {
+          ProgressView()
+            .controlSize(.mini)
+        }
+      }
+    }
+    .padding(8)
+    .background(Color(nsColor: .textBackgroundColor))
+    .clipShape(RoundedRectangle(cornerRadius: 7))
   }
 }
 
@@ -2185,6 +2295,7 @@ private struct ComposerOptionsBar: View {
       HStack(spacing: 7) {
         ComposerModelMenu(model: model)
         ComposerOptionMenu(systemImage: "slider.horizontal.3", title: "Run mode", selection: $model.runMode, values: model.runModes)
+        ComposerOptionMenu(systemImage: "brain.head.profile", title: "Reasoning depth", selection: $model.reasoningEffort, values: model.reasoningEfforts)
         ComposerOptionMenu(systemImage: "clock", title: "Compute budget", selection: $model.computeBudget, values: model.computeBudgets)
         ComposerOptionMenu(systemImage: "terminal", title: "Command execution", selection: $model.commandExecMode, values: model.commandExecModes)
         ComposerOptionMenu(systemImage: "shield", title: "Permission mode", selection: $model.permissionMode, values: model.permissionModes)
@@ -2357,6 +2468,17 @@ private func runStatusIcon(_ status: String) -> String {
   case "awaiting_decision": return "questionmark.bubble"
   case "awaiting_approval": return "terminal"
   default: return "list.bullet.rectangle"
+  }
+}
+
+private func normalizedTaskStatus(_ status: String) -> String {
+  switch status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+  case "done", "completed", "complete", "finished":
+    return "done"
+  case "active", "in-progress", "in_progress", "working":
+    return "active"
+  default:
+    return "pending"
   }
 }
 
@@ -3461,6 +3583,7 @@ private final class ArtificerModel: ObservableObject {
   @Published var automationDraftProgrammerReviewRounds = 2
 
   @Published var runMode = "auto"
+  @Published var reasoningEffort = "medium"
   @Published var computeBudget = "auto"
   @Published var commandExecMode = "ask-some"
   @Published var permissionMode = "default"
@@ -3472,6 +3595,7 @@ private final class ArtificerModel: ObservableObject {
   private var voiceAutomationRecorder: AVAudioRecorder?
 
   let runModes = ["instant", "auto", "programming", "pentest", "security-audit", "chat", "teacher", "report", "text-perfecter", "gui-testing", "assistant"]
+  let reasoningEfforts = ["low", "medium", "high", "extra-high"]
   let computeBudgets = ["auto", "quick", "standard", "long", "until-complete"]
   let commandExecModes = ["ask-some", "all", "none"]
   let permissionModes = ["default", "ask", "never"]
@@ -3760,9 +3884,12 @@ private final class ArtificerModel: ObservableObject {
     }
   }
 
-  func answerApproval(decision: String, scope: String, command: String) async {
+  func answerApproval(decision: String, scope: String, matchMode: String = "exact", pattern: String = "", command: String) async {
     guard let projectID = selectedProjectID, let sessionID = selectedSessionID else { return }
-    let result = await runBackend("approval-answer", projectID, sessionID, decision, scope, "exact", command, command)
+    let normalizedMatchMode = matchMode == "regex" ? "regex" : "exact"
+    let trimmedPattern = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
+    let rulePattern = normalizedMatchMode == "regex" && !trimmedPattern.isEmpty ? trimmedPattern : command
+    let result = await runBackend("approval-answer", projectID, sessionID, decision, scope, normalizedMatchMode, rulePattern, command)
     if let response = decode(GenericSuccessResponse.self, from: result), response.success {
       statusMessage = decision == "allow" ? "Command approved." : "Command denied."
       await loadSelectedSession(status: nil, trackBusy: false)
@@ -4318,7 +4445,8 @@ private final class ArtificerModel: ObservableObject {
         decisionRequest: detail.decisionRequest,
         approvalRequest: detail.approvalRequest,
         trace: detail.trace,
-        messages: detail.messages
+        messages: detail.messages,
+        draft: detail.draft
       )
     }
     if var list = sessionsByProject[projectID], let index = list.firstIndex(where: { $0.id == sessionID }) {
@@ -4378,7 +4506,8 @@ private final class ArtificerModel: ObservableObject {
       "\(programmerReviewRounds)",
       reflexiveKnowledge ? "1" : "0",
       selfActuation ? "1" : "0",
-      attachmentIDs
+      attachmentIDs,
+      reasoningEffort
     )
     guard decode(SessionResponse.self, from: result) != nil else { return }
     clearPromptDraft(projectID: projectID, sessionID: sessionID)
@@ -6239,6 +6368,7 @@ private struct RunEvent: Identifiable, Decodable, Hashable {
   let sessionLog: String
   let state: String
   let commands: [RunCommand]
+  let taskStatus: RunTaskStatus?
 
   enum CodingKeys: String, CodingKey {
     case id, status, plan, assistant, failures, state, commands
@@ -6246,6 +6376,7 @@ private struct RunEvent: Identifiable, Decodable, Hashable {
     case gitStatus = "git_status"
     case gitDiff = "git_diff"
     case sessionLog = "session_log"
+    case taskStatus = "task_status"
   }
 
   init(from decoder: Decoder) throws {
@@ -6261,10 +6392,11 @@ private struct RunEvent: Identifiable, Decodable, Hashable {
     sessionLog = (try? container.decode(String.self, forKey: .sessionLog)) ?? ""
     state = (try? container.decode(String.self, forKey: .state)) ?? ""
     commands = (try? container.decode([RunCommand].self, forKey: .commands)) ?? []
+    taskStatus = try? container.decodeIfPresent(RunTaskStatus.self, forKey: .taskStatus)
   }
 
   var hasDisplayContent: Bool {
-    !status.isEmpty || !streamText.isEmpty || !plan.isEmpty || !assistant.isEmpty || hasGitChanges || !commands.isEmpty || !failures.isEmpty
+    !status.isEmpty || !streamText.isEmpty || !plan.isEmpty || !assistant.isEmpty || hasGitChanges || !commands.isEmpty || !failures.isEmpty || (taskStatus?.total ?? 0) > 0
   }
 
   var hasGitChanges: Bool {
@@ -6279,6 +6411,55 @@ private struct RunEvent: Identifiable, Decodable, Hashable {
 
   var changeSummary: RunChangeSummary {
     RunChangeSummary(statusText: gitStatus, diffText: gitDiff)
+  }
+}
+
+private struct RunTaskStatus: Decodable, Hashable {
+  let tasks: [RunTask]
+  let completed: Int
+  let total: Int
+  let source: String
+
+  enum CodingKeys: String, CodingKey {
+    case tasks, completed, total, source
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let decodedTasks = (try? container.decode([RunTask].self, forKey: .tasks)) ?? []
+    tasks = decodedTasks.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    let decodedCompleted = container.decodeFlexibleInt(forKey: .completed)
+    completed = decodedCompleted > 0 ? decodedCompleted : tasks.filter(\.done).count
+    let decodedTotal = container.decodeFlexibleInt(forKey: .total)
+    total = decodedTotal > 0 ? decodedTotal : tasks.count
+    source = (try? container.decode(String.self, forKey: .source)) ?? "backend"
+  }
+
+  var summaryText: String {
+    "\(completed) out of \(total) task\(total == 1 ? "" : "s") completed"
+  }
+}
+
+private struct RunTask: Identifiable, Decodable, Hashable {
+  let id: String
+  let text: String
+  let status: String
+  let done: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case id, text, title, label, status, done
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let decodedID = (try? container.decode(String.self, forKey: .id)) ?? ""
+    let decodedText = container.decodeFlexibleString(forKey: .text)
+    let fallbackTitle = container.decodeFlexibleString(forKey: .title)
+    let fallbackLabel = container.decodeFlexibleString(forKey: .label)
+    text = !decodedText.isEmpty ? decodedText : (!fallbackTitle.isEmpty ? fallbackTitle : fallbackLabel)
+    status = normalizedTaskStatus((try? container.decode(String.self, forKey: .status)) ?? "")
+    done = container.decodeFlexibleBool(forKey: .done) || status == "done"
+    id = decodedID.isEmpty ? text : decodedID
   }
 }
 

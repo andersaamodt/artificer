@@ -1359,6 +1359,7 @@ queue_meta_write() {
   automation_id_value=${12:-}
   reflexive_knowledge_value=${13:-}
   self_actuation_value=${14:-}
+  reasoning_effort_value=${15:-}
   temp_meta=$(mktemp)
   : > "$temp_meta"
 
@@ -1375,6 +1376,11 @@ queue_meta_write() {
   normalized_compute_budget=$(normalize_compute_budget "$compute_budget_value")
   if [ -n "$normalized_compute_budget" ]; then
     printf 'compute_budget=%s\n' "$normalized_compute_budget" >> "$temp_meta"
+  fi
+
+  normalized_reasoning_effort=$(queue_normalize_reasoning_effort "$reasoning_effort_value")
+  if [ -n "$normalized_reasoning_effort" ]; then
+    printf 'reasoning_effort=%s\n' "$normalized_reasoning_effort" >> "$temp_meta"
   fi
 
   normalized_command_exec_mode=$(normalize_command_exec_mode_value "$command_exec_mode_value")
@@ -1457,6 +1463,8 @@ queue_meta_attachment_ids_to_file() {
         ;;
       compute_budget=*)
         ;;
+      reasoning_effort=*)
+        ;;
       command_exec_mode=*)
         ;;
       permission_mode=*)
@@ -1515,6 +1523,15 @@ queue_meta_explicit_skills_to_file() {
   dedup_file=$(mktemp)
   awk '!seen[$0]++' "$out_file" > "$dedup_file"
   mv "$dedup_file" "$out_file"
+}
+
+queue_normalize_reasoning_effort() {
+  value=$(printf '%s' "${1-}" | tr '[:upper:]' '[:lower:]')
+  case "$value" in
+    low|medium|high|extra-high)
+      printf '%s' "$value"
+      ;;
+  esac
 }
 
 queue_meta_run_mode_from_file() {
@@ -1584,6 +1601,25 @@ queue_meta_compute_budget_from_file() {
     esac
   done < "$meta_file"
   printf '%s' "auto"
+}
+
+queue_meta_reasoning_effort_from_file() {
+  meta_file=$1
+  [ -f "$meta_file" ] || return 0
+  while IFS= read -r meta_line || [ -n "$meta_line" ]; do
+    line_trimmed=$(trim "$meta_line")
+    [ -n "$line_trimmed" ] || continue
+    case "$line_trimmed" in
+      reasoning_effort=*)
+        effort_value=${line_trimmed#reasoning_effort=}
+        effort_value=$(queue_normalize_reasoning_effort "$effort_value")
+        if [ -n "$effort_value" ]; then
+          printf '%s' "$effort_value"
+          return 0
+        fi
+        ;;
+    esac
+  done < "$meta_file"
 }
 
 queue_meta_command_exec_mode_from_file() {

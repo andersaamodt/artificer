@@ -29,7 +29,7 @@ Actions:
   session-create WORKSPACE_ID TITLE [MODEL]
   session-archive WORKSPACE_ID CONVERSATION_ID
   session-set-model WORKSPACE_ID CONVERSATION_ID MODEL
-  session-message WORKSPACE_ID CONVERSATION_ID PROMPT RUN_MODE COMPUTE_BUDGET COMMAND_EXEC_MODE PERMISSION_MODE PROGRAMMER_REVIEW PROGRAMMER_REVIEW_ROUNDS REFLEXIVE_KNOWLEDGE SELF_ACTUATION [ATTACHMENT_IDS]
+  session-message WORKSPACE_ID CONVERSATION_ID PROMPT RUN_MODE COMPUTE_BUDGET COMMAND_EXEC_MODE PERMISSION_MODE PROGRAMMER_REVIEW PROGRAMMER_REVIEW_ROUNDS REFLEXIVE_KNOWLEDGE SELF_ACTUATION [ATTACHMENT_IDS] [REASONING_EFFORT]
   attachment-upload WORKSPACE_ID CONVERSATION_ID FILE_PATH [MIME]
   session-run-next WORKSPACE_ID CONVERSATION_ID
   session-events WORKSPACE_ID CONVERSATION_ID [STREAM_SESSION] [OFFSET]
@@ -777,6 +777,7 @@ case "$action" in
     reflexive_knowledge=${10:-0}
     self_actuation=${11:-0}
     attachments=${12:-}
+    reasoning_effort=${13:-}
     runtime_client session message \
       --workspace-id "$workspace_id" \
       --conversation-id "$conversation_id" \
@@ -784,6 +785,7 @@ case "$action" in
       --attachments "$attachments" \
       --run-mode "$run_mode" \
       --compute-budget "$compute_budget" \
+      --reasoning-effort "$reasoning_effort" \
       --command-exec-mode "$command_exec_mode" \
       --permission-mode "$permission_mode" \
       --programmer-review "$programmer_review" \

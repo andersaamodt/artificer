@@ -7,6 +7,7 @@
     run_mode_raw=$(trim "$(param "run_mode")")
     assistant_mode_raw=$(trim "$(param "assistant_mode_id")")
     compute_budget_raw=$(trim "$(param "compute_budget")")
+    reasoning_effort_raw=$(trim "$(param "reasoning_effort")")
     command_exec_mode_raw=$(trim "$(param "command_exec_mode")")
     permission_mode_raw=$(trim "$(param "permission_mode")")
     reflexive_knowledge_raw=$(trim "$(param "reflexive_knowledge")")
@@ -83,7 +84,7 @@
         printf '%s\n' "$skill_id" >> "$validated_skill_ids_file"
       fi
     done < "$incoming_skill_ids_file"
-    queue_meta_write "$queue_item_meta" "$queue_item_mode" "$queue_item_assistant_mode" "$queue_item_compute_budget" "$queue_item_command_exec_mode" "$queue_item_permission_mode" "$queue_item_programmer_review" "$queue_item_programmer_review_rounds" "$validated_skill_ids_file" "$validated_ids_file" "$queue_item_assay_task_id" "" "$queue_item_reflexive_knowledge" "$queue_item_self_actuation"
+    queue_meta_write "$queue_item_meta" "$queue_item_mode" "$queue_item_assistant_mode" "$queue_item_compute_budget" "$queue_item_command_exec_mode" "$queue_item_permission_mode" "$queue_item_programmer_review" "$queue_item_programmer_review_rounds" "$validated_skill_ids_file" "$validated_ids_file" "$queue_item_assay_task_id" "" "$queue_item_reflexive_knowledge" "$queue_item_self_actuation" "$reasoning_effort_raw"
 
     # Persist user intent at enqueue time so threads are never blank even if queue execution is interrupted.
     user_message_prompt=$prompt_text

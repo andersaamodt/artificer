@@ -39,6 +39,7 @@ Common options:
   --run-mode <mode>
   --assistant-mode-id <id>
   --compute-budget <budget>
+  --reasoning-effort <low|medium|high|extra-high>
   --programmer-review <0|1>
   --programmer-review-rounds <n>
   --enabled <0|1>
@@ -165,6 +166,7 @@ permission_mode=""
 run_mode=""
 assistant_mode_id=""
 compute_budget=""
+reasoning_effort=""
 programmer_review=""
 programmer_review_rounds=""
 enabled_value=""
@@ -206,6 +208,7 @@ while [ "$#" -gt 0 ]; do
     --run-mode) run_mode=$2; shift 2 ;;
     --assistant-mode-id) assistant_mode_id=$2; shift 2 ;;
     --compute-budget) compute_budget=$2; shift 2 ;;
+    --reasoning-effort) reasoning_effort=$2; shift 2 ;;
     --programmer-review) programmer_review=$2; shift 2 ;;
     --programmer-review-rounds) programmer_review_rounds=$2; shift 2 ;;
     --enabled) enabled_value=$2; shift 2 ;;
@@ -281,6 +284,7 @@ case "$resource" in
           "run_mode" "$run_mode" \
           "assistant_mode_id" "$assistant_mode_id" \
           "compute_budget" "$compute_budget" \
+          "reasoning_effort" "$reasoning_effort" \
           "command_exec_mode" "$command_exec_mode" \
           "permission_mode" "$permission_mode" \
           "reflexive_knowledge" "$reflexive_knowledge" \

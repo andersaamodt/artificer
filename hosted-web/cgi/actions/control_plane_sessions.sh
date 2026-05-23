@@ -10,6 +10,7 @@
     run_mode=$(trim "$(param "run_mode")")
     assistant_mode_id=$(trim "$(param "assistant_mode_id")")
     compute_budget=$(trim "$(param "compute_budget")")
+    reasoning_effort=$(trim "$(param "reasoning_effort")")
     command_exec_mode=$(trim "$(param "command_exec_mode")")
     permission_mode=$(trim "$(param "permission_mode")")
     reflexive_knowledge=$(trim "$(param "reflexive_knowledge")")
@@ -61,6 +62,7 @@
           "run_mode" "$run_mode" \
           "assistant_mode_id" "$assistant_mode_id" \
           "compute_budget" "$compute_budget" \
+          "reasoning_effort" "$reasoning_effort" \
           "command_exec_mode" "$command_exec_mode" \
           "permission_mode" "$permission_mode" \
           "reflexive_knowledge" "$reflexive_knowledge" \

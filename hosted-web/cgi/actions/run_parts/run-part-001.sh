@@ -129,6 +129,7 @@
     queue_mode_override=""
     queue_assistant_mode_override=""
     queue_compute_budget_override=""
+    queue_reasoning_effort_override=""
     queue_command_exec_mode_override=""
     queue_permission_mode_override=""
     queue_reflexive_knowledge_override=""
@@ -148,6 +149,7 @@
         queue_mode_override=$(queue_meta_run_mode_from_file "$running_meta_for_mode")
         queue_assistant_mode_override=$(queue_meta_assistant_mode_from_file "$running_meta_for_mode")
         queue_compute_budget_override=$(queue_meta_compute_budget_from_file "$running_meta_for_mode")
+        queue_reasoning_effort_override=$(queue_meta_reasoning_effort_from_file "$running_meta_for_mode")
         queue_command_exec_mode_override=$(queue_meta_command_exec_mode_from_file "$running_meta_for_mode")
         queue_permission_mode_override=$(queue_meta_permission_mode_from_file "$running_meta_for_mode")
         queue_reflexive_knowledge_override=$(queue_meta_reflexive_knowledge_from_file "$running_meta_for_mode")
@@ -165,6 +167,9 @@
       fi
       if [ -n "$queue_compute_budget_override" ]; then
         compute_budget=$queue_compute_budget_override
+      fi
+      if [ -n "$queue_reasoning_effort_override" ]; then
+        reasoning_effort=$queue_reasoning_effort_override
       fi
       if [ -n "$queue_programmer_review_override" ]; then
         programmer_review_enabled=$(normalize_programmer_review_enabled_value "$queue_programmer_review_override")
