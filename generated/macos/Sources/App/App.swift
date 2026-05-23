@@ -41,6 +41,35 @@ private func waitForVoiceAutomationCaptureWindow(_ recorder: AVAudioRecorder, ma
   return Date().timeIntervalSince(startedAt)
 }
 
+private func plainText(from item: Any?) -> String? {
+  if let string = item as? String {
+    return string
+  }
+  if let string = item as? NSString {
+    return string as String
+  }
+  if let data = item as? Data {
+    return String(data: data, encoding: .utf8)
+  }
+  return nil
+}
+
+private func jsonString<T: Encodable>(_ value: T) -> String {
+  guard let data = try? JSONEncoder().encode(value),
+        let string = String(data: data, encoding: .utf8) else {
+    return ""
+  }
+  return string
+}
+
+private func decodeJSONString<T: Decodable>(_ type: T.Type, from string: String, fallback: T) -> T {
+  guard let data = string.data(using: .utf8),
+        let decoded = try? JSONDecoder().decode(type, from: data) else {
+    return fallback
+  }
+  return decoded
+}
+
 @main
 struct ArtificerNativeApp: App {
   @StateObject private var model: ArtificerModel
@@ -67,7 +96,7 @@ struct ArtificerNativeApp: App {
     .commands {
       CommandGroup(replacing: .newItem) {
         Button("New Session") {
-          Task { await model.createSession() }
+          Task { await model.startWorkspaceDraft(in: model.selectedProjectID) }
         }
         .keyboardShortcut("n")
         Button("Add Workspace...") {
@@ -327,7 +356,7 @@ private struct RootView: View {
           Task { await model.refreshAll() }
         }
         FloatingIconButton(title: "New thread", systemImage: "plus.message", disabled: model.selectedProjectID == nil || model.isBusy) {
-          Task { await model.createSession() }
+          Task { await model.startWorkspaceDraft(in: model.selectedProjectID) }
         }
         FloatingIconButton(title: "Add project", systemImage: "folder.badge.plus", disabled: model.isBusy) {
           model.chooseWorkspaceFolder()
@@ -1067,7 +1096,7 @@ private struct WorkspaceTreeGroup: View {
         WorkspaceProjectMenu(model: model, project: project)
           .opacity(isHovering || project.id == model.selectedProjectID ? 1 : 0.68)
         Button {
-          Task { await model.createSession(in: project.id) }
+          Task { await model.startWorkspaceDraft(in: project.id) }
         } label: {
           Image(systemName: "square.and.pencil")
             .font(.system(size: 12))
@@ -1088,10 +1117,17 @@ private struct WorkspaceTreeGroup: View {
         Task { await model.toggleProject(project.id) }
       }
       .onHover { isHovering = $0 }
+      .onDrag {
+        model.sidebarDragProvider(kind: "project", projectID: project.id)
+      }
+      .onDrop(of: [UTType.plainText], delegate: SidebarProjectDropDelegate(model: model, projectID: project.id))
 
       if model.isProjectExpanded(project.id) {
         let sessions = model.visibleSessionsForSidebar(project)
-        if sessions.isEmpty {
+        if model.hasWorkspaceDraft(project) {
+          WorkspaceDraftRow(model: model, project: project)
+        }
+        if sessions.isEmpty && !model.hasWorkspaceDraft(project) {
           Text(model.organizeShow == "all" ? "No threads" : "No matching threads")
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
@@ -1105,6 +1141,40 @@ private struct WorkspaceTreeGroup: View {
         }
       }
     }
+  }
+}
+
+private struct WorkspaceDraftRow: View {
+  @ObservedObject var model: ArtificerModel
+  let project: Project
+
+  var body: some View {
+    HStack(spacing: 7) {
+      Image(systemName: "square.and.pencil")
+        .foregroundStyle(Color.accentColor)
+        .frame(width: 14)
+      Text("Draft (unsent)")
+        .font(.system(size: 13, weight: model.activeDraftProjectID == project.id ? .semibold : .regular))
+        .lineLimit(1)
+      Spacer(minLength: 6)
+      if let text = model.workspaceDraftsByProject[project.id],
+         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        Text("saved")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    }
+    .frame(height: 28)
+    .padding(.leading, 34)
+    .padding(.trailing, 6)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .contentShape(Rectangle())
+    .background(model.activeDraftProjectID == project.id ? Color.accentColor.opacity(0.13) : Color.clear)
+    .clipShape(RoundedRectangle(cornerRadius: 7))
+    .onTapGesture {
+      Task { await model.selectWorkspaceDraft(projectID: project.id) }
+    }
+    .help("Open unsent draft")
   }
 }
 
@@ -1158,6 +1228,10 @@ private struct SessionTreeRow: View {
       Task { await model.selectSession(projectID: project.id, sessionID: session.id) }
     }
     .onHover { isHovering = $0 }
+    .onDrag {
+      model.sidebarDragProvider(kind: "session", projectID: project.id, sessionID: session.id)
+    }
+    .onDrop(of: [UTType.plainText], delegate: SidebarSessionDropDelegate(model: model, projectID: project.id, sessionID: session.id))
   }
 
   private var indicatorColor: Color {
@@ -1198,6 +1272,41 @@ private struct SessionStatusPill: View {
     if session.queue.pending > 0 { return .orange }
     if session.queue.lastStatus == "awaiting_approval" || session.queue.lastStatus == "awaiting_decision" { return .purple }
     return .secondary
+  }
+}
+
+private struct SidebarProjectDropDelegate: DropDelegate {
+  let model: ArtificerModel
+  let projectID: String
+
+  func validateDrop(info: DropInfo) -> Bool {
+    info.hasItemsConforming(to: [UTType.plainText])
+  }
+
+  func performDrop(info: DropInfo) -> Bool {
+    let providers = info.itemProviders(for: [UTType.plainText])
+    Task { @MainActor in
+      _ = model.handleSidebarDrop(providers: providers, targetProjectID: projectID, targetSessionID: nil)
+    }
+    return true
+  }
+}
+
+private struct SidebarSessionDropDelegate: DropDelegate {
+  let model: ArtificerModel
+  let projectID: String
+  let sessionID: String
+
+  func validateDrop(info: DropInfo) -> Bool {
+    info.hasItemsConforming(to: [UTType.plainText])
+  }
+
+  func performDrop(info: DropInfo) -> Bool {
+    let providers = info.itemProviders(for: [UTType.plainText])
+    Task { @MainActor in
+      _ = model.handleSidebarDrop(providers: providers, targetProjectID: projectID, targetSessionID: sessionID)
+    }
+    return true
   }
 }
 
@@ -1246,7 +1355,7 @@ private struct SessionDetailView: View {
       DetailHeader(model: model)
       Divider()
 
-      if model.selectedSession == nil {
+      if model.selectedSession == nil && model.activeDraftProjectID == nil {
         EmptyStateView(title: "No Session Selected", systemImage: "message", detail: "Select or create a session.")
       } else {
         if let session = model.selectedSession {
@@ -1263,7 +1372,11 @@ private struct SessionDetailView: View {
                     .id(message.id)
                 }
                 if (model.selectedSession?.messages ?? []).isEmpty {
-                  EmptyStateView(title: "Empty Session", systemImage: "text.bubble", detail: "Send a prompt to start the transcript.")
+                  EmptyStateView(
+                    title: model.activeDraftProjectID == nil ? "Empty Session" : "Draft (unsent)",
+                    systemImage: model.activeDraftProjectID == nil ? "text.bubble" : "square.and.pencil",
+                    detail: model.activeDraftProjectID == nil ? "Send a prompt to start the transcript." : "Send a message to create the thread."
+                  )
                   .padding(.top, 80)
                 }
                 Color.clear
@@ -1304,7 +1417,7 @@ private struct DetailHeader: View {
     HStack(alignment: .center, spacing: 12) {
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 8) {
-          Text(model.selectedSession?.title ?? "Artificer")
+          Text(model.detailTitle)
             .font(.title3)
             .lineLimit(1)
           if model.isSelectedSessionLoading {
@@ -1317,6 +1430,11 @@ private struct DetailHeader: View {
             Label(session.model, systemImage: "cpu")
             Label("pending \(session.queue.pending)", systemImage: "tray")
             Label("running \(session.queue.running)", systemImage: "play.circle")
+          } else if model.activeDraftProjectID != nil {
+            Label("unsent draft", systemImage: "square.and.pencil")
+            if let project = model.activeDraftProject {
+              Label(project.name, systemImage: "folder")
+            }
           } else {
             Text("Native runtime console")
           }
@@ -2499,7 +2617,7 @@ private struct ComposerView: View {
           .padding(.vertical, 6)
 
         if model.prompt.isEmpty {
-          Text("Ask Artificer, attach files, or queue work for the selected session.")
+          Text(model.activeDraftProjectID == nil ? "Ask Artificer, attach files, or queue work for the selected session." : "Write the first message for this new thread.")
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 16)
             .padding(.vertical, 15)
@@ -2544,7 +2662,7 @@ private struct ComposerView: View {
         FloatingIconButton(
           title: model.isDictating ? "Stop dictation" : "Dictate prompt",
           systemImage: model.isDictating ? "stop.fill" : "mic.fill",
-          disabled: model.selectedSessionID == nil || (model.isBusy && !model.isDictating)
+          disabled: (model.selectedSessionID == nil && model.activeDraftProjectID == nil) || (model.isBusy && !model.isDictating)
         ) {
           Task { await model.toggleDictation() }
         }
@@ -3924,6 +4042,10 @@ private final class ArtificerModel: ObservableObject {
   @Published var loadingSessionKey = ""
   @Published var prompt = ""
   @Published var promptDraftsBySessionKey: [String: String] = [:]
+  @Published var workspaceDraftsByProject: [String: String] = [:]
+  @Published var activeDraftProjectID: String?
+  @Published var workspaceOrderIDs: [String] = []
+  @Published var conversationOrderIDsByWorkspace: [String: [String]] = [:]
   @Published var statusMessage = "Ready"
   @Published var lastError = ""
   @Published var isBusy = false
@@ -4051,6 +4173,8 @@ private final class ArtificerModel: ObservableObject {
   @Published var reflexiveKnowledge = false
   private var voiceAutomationLoopTask: Task<Void, Never>?
   private var voiceAutomationRecorder: AVAudioRecorder?
+  private var draftSaveTask: Task<Void, Never>?
+  private var sidebarOrderSaveTask: Task<Void, Never>?
 
   let runModes = ["instant", "auto", "programming", "pentest", "security-audit", "chat", "teacher", "report", "text-perfecter", "gui-testing", "assistant"]
   let reasoningEfforts = ["low", "medium", "high", "extra-high"]
@@ -4067,6 +4191,18 @@ private final class ArtificerModel: ObservableObject {
 
   var selectedProject: Project? {
     projects.first { $0.id == selectedProjectID }
+  }
+
+  var activeDraftProject: Project? {
+    guard let activeDraftProjectID else { return nil }
+    return projects.first { $0.id == activeDraftProjectID }
+  }
+
+  var detailTitle: String {
+    if activeDraftProjectID != nil {
+      return "Draft (unsent)"
+    }
+    return selectedSession?.title ?? "Artificer"
   }
 
   var projectActionProject: Project? {
@@ -4121,6 +4257,10 @@ private final class ArtificerModel: ObservableObject {
 
   var requiresAllSessionsForOrganization: Bool {
     organizeMode == "chrono" || organizeShow != "all"
+  }
+
+  var manualSidebarOrderingEnabled: Bool {
+    organizeMode == "project" && organizeShow == "all"
   }
 
   var visibleProjectsForSidebar: [Project] {
@@ -4242,9 +4382,22 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func visibleSessionsForSidebar(_ project: Project) -> [SessionSummary] {
-    sortedSessionsForSidebar(sessionsByProject[project.id] ?? []).filter { session in
+    sortedSessionsForSidebar(sessionsByProject[project.id] ?? [], projectID: project.id).filter { session in
       sessionMatchesOrganizeShow(projectID: project.id, session)
     }
+  }
+
+  func hasWorkspaceDraft(_ project: Project) -> Bool {
+    if activeDraftProjectID == project.id {
+      return true
+    }
+    if project.draftExists {
+      if let localDraft = workspaceDraftsByProject[project.id] {
+        return !localDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      }
+      return true
+    }
+    return !(workspaceDraftsByProject[project.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
   func sidebarIndicatorColor(for session: SessionSummary) -> Color {
@@ -4328,6 +4481,13 @@ private final class ArtificerModel: ObservableObject {
   }
 
   private func sortedProjectsForSidebar(_ source: [Project]) -> [Project] {
+    if manualSidebarOrderingEnabled {
+      return orderedProjectsForSidebar(source)
+    }
+    return defaultSortedProjectsForSidebar(source)
+  }
+
+  private func defaultSortedProjectsForSidebar(_ source: [Project]) -> [Project] {
     source.sorted { left, right in
       if left.id == selectedProjectID { return true }
       if right.id == selectedProjectID { return false }
@@ -4343,7 +4503,14 @@ private final class ArtificerModel: ObservableObject {
     }
   }
 
-  private func sortedSessionsForSidebar(_ source: [SessionSummary]) -> [SessionSummary] {
+  private func sortedSessionsForSidebar(_ source: [SessionSummary], projectID: String) -> [SessionSummary] {
+    if manualSidebarOrderingEnabled {
+      return orderedSessionsForSidebar(source, projectID: projectID)
+    }
+    return defaultSortedSessionsForSidebar(source)
+  }
+
+  private func defaultSortedSessionsForSidebar(_ source: [SessionSummary]) -> [SessionSummary] {
     source.sorted { left, right in
       let leftScore = sidebarSessionSortScore(left)
       let rightScore = sidebarSessionSortScore(right)
@@ -4352,6 +4519,141 @@ private final class ArtificerModel: ObservableObject {
       }
       return left.title.localizedCaseInsensitiveCompare(right.title) == .orderedAscending
     }
+  }
+
+  private func orderedProjectsForSidebar(_ source: [Project]) -> [Project] {
+    let byID = Dictionary(uniqueKeysWithValues: source.map { ($0.id, $0) })
+    var seen = Set<String>()
+    var ordered: [Project] = []
+    for projectID in workspaceOrderIDs {
+      if let project = byID[projectID], !seen.contains(projectID) {
+        ordered.append(project)
+        seen.insert(projectID)
+      }
+    }
+    for project in defaultSortedProjectsForSidebar(source) where !seen.contains(project.id) {
+      ordered.append(project)
+      seen.insert(project.id)
+    }
+    return ordered
+  }
+
+  private func orderedSessionsForSidebar(_ source: [SessionSummary], projectID: String) -> [SessionSummary] {
+    let byID = Dictionary(uniqueKeysWithValues: source.map { ($0.id, $0) })
+    var seen = Set<String>()
+    var ordered: [SessionSummary] = []
+    for sessionID in conversationOrderIDsByWorkspace[projectID] ?? [] {
+      if let session = byID[sessionID], !seen.contains(sessionID) {
+        ordered.append(session)
+        seen.insert(sessionID)
+      }
+    }
+    for session in defaultSortedSessionsForSidebar(source) where !seen.contains(session.id) {
+      ordered.append(session)
+      seen.insert(session.id)
+    }
+    return ordered
+  }
+
+  func sidebarDragProvider(kind: String, projectID: String, sessionID: String? = nil) -> NSItemProvider {
+    guard manualSidebarOrderingEnabled else {
+      return NSItemProvider(object: "" as NSString)
+    }
+    let payload = ["artificer-sidebar", kind, projectID, sessionID ?? ""].joined(separator: ":")
+    return NSItemProvider(object: payload as NSString)
+  }
+
+  func handleSidebarDrop(providers: [NSItemProvider], targetProjectID: String, targetSessionID: String?) -> Bool {
+    guard manualSidebarOrderingEnabled else { return false }
+    guard let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) }) else {
+      return false
+    }
+    provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { item, _ in
+      guard let text = plainText(from: item) else { return }
+      Task { @MainActor in
+        self.applySidebarDropPayload(text, targetProjectID: targetProjectID, targetSessionID: targetSessionID)
+      }
+    }
+    return true
+  }
+
+  private func applySidebarDropPayload(_ payload: String, targetProjectID: String, targetSessionID: String?) {
+    guard manualSidebarOrderingEnabled else { return }
+    let parts = payload.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+    guard parts.count >= 4, parts[0] == "artificer-sidebar" else { return }
+    switch parts[1] {
+    case "project":
+      let draggedProjectID = parts[2]
+      guard !draggedProjectID.isEmpty, draggedProjectID != targetProjectID else { return }
+      moveProjectBefore(draggedProjectID: draggedProjectID, targetProjectID: targetProjectID)
+    case "session":
+      let draggedProjectID = parts[2]
+      let draggedSessionID = parts[3]
+      guard draggedProjectID == targetProjectID,
+            let targetSessionID,
+            !draggedSessionID.isEmpty,
+            draggedSessionID != targetSessionID else { return }
+      moveConversationBefore(projectID: targetProjectID, draggedSessionID: draggedSessionID, targetSessionID: targetSessionID)
+    default:
+      return
+    }
+  }
+
+  private func moveProjectBefore(draggedProjectID: String, targetProjectID: String) {
+    var orderedIDs = orderedProjectsForSidebar(projects).map(\.id)
+    orderedIDs.removeAll { $0 == draggedProjectID }
+    let insertionIndex = orderedIDs.firstIndex(of: targetProjectID) ?? orderedIDs.count
+    orderedIDs.insert(draggedProjectID, at: insertionIndex)
+    workspaceOrderIDs = orderedIDs
+    scheduleSidebarOrderSave()
+    statusMessage = "Project order saved."
+  }
+
+  private func moveConversationBefore(projectID: String, draggedSessionID: String, targetSessionID: String) {
+    var orderedIDs = orderedSessionsForSidebar(sessionsByProject[projectID] ?? [], projectID: projectID).map(\.id)
+    orderedIDs.removeAll { $0 == draggedSessionID }
+    let insertionIndex = orderedIDs.firstIndex(of: targetSessionID) ?? orderedIDs.count
+    orderedIDs.insert(draggedSessionID, at: insertionIndex)
+    conversationOrderIDsByWorkspace[projectID] = orderedIDs
+    scheduleSidebarOrderSave()
+    statusMessage = "Thread order saved."
+  }
+
+  private func moveConversationToFront(projectID: String, sessionID: String) {
+    var orderedIDs = orderedSessionsForSidebar(sessionsByProject[projectID] ?? [], projectID: projectID).map(\.id)
+    orderedIDs.removeAll { $0 == sessionID }
+    orderedIDs.insert(sessionID, at: 0)
+    conversationOrderIDsByWorkspace[projectID] = orderedIDs
+    scheduleSidebarOrderSave()
+  }
+
+  private func pruneSidebarOrdering() {
+    guard !projects.isEmpty else { return }
+    let validProjectIDs = Set(projects.map(\.id))
+    workspaceOrderIDs = workspaceOrderIDs.filter { validProjectIDs.contains($0) }
+    var nextConversationOrder: [String: [String]] = [:]
+    for project in projects {
+      let validSessionIDs = Set((sessionsByProject[project.id] ?? []).map(\.id))
+      let orderedIDs = (conversationOrderIDsByWorkspace[project.id] ?? []).filter { validSessionIDs.isEmpty || validSessionIDs.contains($0) }
+      if !orderedIDs.isEmpty {
+        nextConversationOrder[project.id] = orderedIDs
+      }
+    }
+    conversationOrderIDsByWorkspace = nextConversationOrder
+  }
+
+  private func scheduleSidebarOrderSave() {
+    sidebarOrderSaveTask?.cancel()
+    sidebarOrderSaveTask = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 350_000_000)
+      guard !Task.isCancelled else { return }
+      await self?.persistSidebarOrdering()
+    }
+  }
+
+  private func persistSidebarOrdering() async {
+    _ = await runBackend("desktop-value-set", "workspace_order", jsonString(workspaceOrderIDs), trackBusy: false)
+    _ = await runBackend("desktop-value-set", "conversation_order_by_workspace", jsonString(conversationOrderIDsByWorkspace), trackBusy: false)
   }
 
   private func projectSidebarSortScore(_ project: Project) -> Int {
@@ -4777,13 +5079,25 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func updateActivePromptDraft(_ text: String) {
-    guard let key = activePromptDraftKey else { return }
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let activeDraftProjectID {
+      if trimmed.isEmpty {
+        workspaceDraftsByProject[activeDraftProjectID] = ""
+      } else {
+        workspaceDraftsByProject[activeDraftProjectID] = text
+      }
+      scheduleComposerDraftSave(projectID: activeDraftProjectID, sessionID: nil, draftProjectID: activeDraftProjectID, text: text)
+      return
+    }
+    guard let key = activePromptDraftKey,
+          let selectedProjectID,
+          let selectedSessionID else { return }
     if trimmed.isEmpty {
       promptDraftsBySessionKey.removeValue(forKey: key)
     } else {
       promptDraftsBySessionKey[key] = text
     }
+    scheduleComposerDraftSave(projectID: selectedProjectID, sessionID: selectedSessionID, draftProjectID: nil, text: text)
   }
 
   func preserveCurrentPromptDraft() {
@@ -4791,6 +5105,7 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func restorePromptDraft(for session: SessionDetail) {
+    activeDraftProjectID = nil
     let key = archiveKey(projectID: session.workspaceID, sessionID: session.id)
     if let localDraft = promptDraftsBySessionKey[key] {
       prompt = localDraft
@@ -4801,7 +5116,37 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func clearPromptDraft(projectID: String, sessionID: String) {
+    draftSaveTask?.cancel()
     promptDraftsBySessionKey.removeValue(forKey: archiveKey(projectID: projectID, sessionID: sessionID))
+    Task { await persistComposerDraft(projectID: projectID, sessionID: sessionID, draftProjectID: nil, text: "") }
+  }
+
+  func clearWorkspaceDraft(projectID: String) {
+    draftSaveTask?.cancel()
+    workspaceDraftsByProject[projectID] = ""
+    if activeDraftProjectID == projectID {
+      activeDraftProjectID = nil
+    }
+    Task { await persistComposerDraft(projectID: projectID, sessionID: nil, draftProjectID: projectID, text: "") }
+  }
+
+  private func scheduleComposerDraftSave(projectID: String, sessionID: String?, draftProjectID: String?, text: String) {
+    draftSaveTask?.cancel()
+    draftSaveTask = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 550_000_000)
+      guard !Task.isCancelled else { return }
+      await self?.persistComposerDraft(projectID: projectID, sessionID: sessionID, draftProjectID: draftProjectID, text: text)
+    }
+  }
+
+  private func persistComposerDraft(projectID: String, sessionID: String?, draftProjectID: String?, text: String) async {
+    if let draftProjectID {
+      _ = await runBackend("draft-save", draftProjectID, text, trackBusy: false)
+      return
+    }
+    if let sessionID {
+      _ = await runBackend("conversation-draft-save", projectID, sessionID, text, trackBusy: false)
+    }
   }
 
   func dictationShortcutLabel(_ value: String) -> String {
@@ -4819,7 +5164,7 @@ private final class ArtificerModel: ObservableObject {
   }
 
   var canSendPrompt: Bool {
-    selectedSessionID != nil && !isBusy && !isDictating && (!prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingAttachments.isEmpty)
+    (selectedSessionID != nil || activeDraftProjectID != nil) && !isBusy && !isDictating && (!prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingAttachments.isEmpty)
   }
 
   var dictationElapsedText: String {
@@ -5005,6 +5350,8 @@ private final class ArtificerModel: ObservableObject {
     projects = response.projects.filter { $0.pathExists }.sorted { left, right in
       left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
     }
+    pruneSidebarOrdering()
+    await loadWorkspaceDraftSummaries(for: projects)
     if let prior, projects.contains(where: { $0.id == prior }) {
       selectedProjectID = prior
     } else {
@@ -5062,6 +5409,11 @@ private final class ArtificerModel: ObservableObject {
       return
     }
     sessions = sessionsByProject[projectID] ?? []
+    if activeDraftProjectID == projectID {
+      selectedSessionID = nil
+      selectedSession = nil
+      return
+    }
     if sessionsByProject[projectID] == nil {
       guard let loadedSessions = await loadProjectSessions(projectID) else { return }
       sessions = loadedSessions
@@ -5103,6 +5455,51 @@ private final class ArtificerModel: ObservableObject {
     }
   }
 
+  func startWorkspaceDraft(in projectID: String?) async {
+    guard let projectID else { return }
+    preserveCurrentPromptDraft()
+    showingAutomations = false
+    activeDraftProjectID = nil
+    selectedProjectID = projectID
+    selectedSessionID = nil
+    selectedSession = nil
+    activeDraftProjectID = projectID
+    pendingArchiveSessionKey = ""
+    pendingAttachments.removeAll()
+    expandedProjectIDs.insert(projectID)
+    statusMessage = "Opening draft..."
+    if let loadedDraft = await loadWorkspaceDraft(projectID) {
+      prompt = loadedDraft
+    } else {
+      prompt = workspaceDraftsByProject[projectID] ?? ""
+    }
+    await saveSelectedVoiceTarget(projectID: projectID, sessionID: "")
+    await loadGitStatusAndBranches()
+    statusMessage = "Draft ready."
+  }
+
+  func selectWorkspaceDraft(projectID: String) async {
+    await startWorkspaceDraft(in: projectID)
+  }
+
+  private func loadWorkspaceDraft(_ projectID: String) async -> String? {
+    let result = await runBackend("draft-get", projectID, trackBusy: false)
+    guard let response = decode(DraftResponse.self, from: result) else { return nil }
+    let draft = response.draft
+    if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      workspaceDraftsByProject[projectID] = ""
+    } else {
+      workspaceDraftsByProject[projectID] = draft
+    }
+    return draft
+  }
+
+  private func loadWorkspaceDraftSummaries(for projects: [Project]) async {
+    for project in projects where activeDraftProjectID != project.id {
+      _ = await loadWorkspaceDraft(project.id)
+    }
+  }
+
   func createSession() async {
     await createSession(in: selectedProjectID)
   }
@@ -5112,6 +5509,7 @@ private final class ArtificerModel: ObservableObject {
     guard !creatingSessionProjectIDs.contains(projectID) else { return }
     preserveCurrentPromptDraft()
     showingAutomations = false
+    activeDraftProjectID = nil
     selectedProjectID = projectID
     expandedProjectIDs.insert(projectID)
     let title = "Native session \(DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .short))"
@@ -5154,6 +5552,66 @@ private final class ArtificerModel: ObservableObject {
     statusMessage = "Session created."
   }
 
+  private func createSessionForDraft(projectID: String, prompt draftPrompt: String) async -> String? {
+    guard !creatingSessionProjectIDs.contains(projectID) else { return nil }
+    showingAutomations = false
+    selectedProjectID = projectID
+    selectedSessionID = nil
+    selectedSession = nil
+    expandedProjectIDs.insert(projectID)
+    let title = draftTitle(from: draftPrompt)
+    let modelName = activeComposerModel
+    let temporarySession = SessionSummary(
+      id: "creating-\(UUID().uuidString)",
+      workspaceID: projectID,
+      title: title,
+      model: modelName,
+      created: Int(Date().timeIntervalSince1970),
+      updated: Int(Date().timeIntervalSince1970),
+      queue: QueueState()
+    )
+    creatingSessionProjectIDs.insert(projectID)
+    upsertSession(temporarySession, in: projectID, replacing: nil)
+    sessions = sessionsByProject[projectID] ?? []
+    selectedSessionID = temporarySession.id
+    selectedSession = SessionDetail(summary: temporarySession)
+    statusMessage = "Creating thread..."
+    let result = await runBackend("session-create", [projectID, title, modelName], trackBusy: false)
+    creatingSessionProjectIDs.remove(projectID)
+    guard let response = decode(SessionResponse.self, from: result) else {
+      removeSession(temporarySession.id, from: projectID)
+      selectedSessionID = nil
+      selectedSession = nil
+      activeDraftProjectID = projectID
+      statusMessage = "Thread creation failed."
+      return nil
+    }
+    let createdSummary = response.session.summary
+    upsertSession(createdSummary, in: projectID, replacing: temporarySession.id)
+    moveConversationToFront(projectID: projectID, sessionID: response.session.id)
+    sessions = sessionsByProject[projectID] ?? []
+    selectedSessionID = response.session.id
+    selectedSession = response.session
+    activeDraftProjectID = nil
+    await saveSelectedVoiceTarget(projectID: projectID, sessionID: response.session.id)
+    return response.session.id
+  }
+
+  private func draftTitle(from prompt: String) -> String {
+    let compact = prompt
+      .split(whereSeparator: { $0.isWhitespace })
+      .prefix(9)
+      .joined(separator: " ")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    if compact.isEmpty {
+      return "New Conversation"
+    }
+    if compact.count > 80 {
+      return String(compact.prefix(77)) + "..."
+    }
+    return compact
+  }
+
   private func upsertSession(_ session: SessionSummary, in projectID: String, replacing oldSessionID: String?) {
     var list = sessionsByProject[projectID] ?? []
     if let oldSessionID {
@@ -5178,10 +5636,12 @@ private final class ArtificerModel: ObservableObject {
   func selectProject(_ projectID: String) async {
     preserveCurrentPromptDraft()
     showingAutomations = false
+    activeDraftProjectID = nil
     selectedProjectID = projectID
     selectedSessionID = nil
     selectedSession = nil
     prompt = ""
+    pendingAttachments.removeAll()
     pendingArchiveSessionKey = ""
     if let loadedSessions = await loadProjectSessions(projectID, trackBusy: false) {
       sessions = loadedSessions
@@ -5219,9 +5679,11 @@ private final class ArtificerModel: ObservableObject {
   func selectSession(projectID: String, sessionID: String) async {
     preserveCurrentPromptDraft()
     showingAutomations = false
+    activeDraftProjectID = nil
     selectedProjectID = projectID
     selectedSessionID = sessionID
     pendingArchiveSessionKey = ""
+    pendingAttachments.removeAll()
     if let summary = (sessionsByProject[projectID] ?? []).first(where: { $0.id == sessionID }) {
       selectedSession = SessionDetail(summary: summary)
     }
@@ -5292,7 +5754,14 @@ private final class ArtificerModel: ObservableObject {
 
   func sendPrompt(runAfterQueue: Bool) async {
     var text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let projectID = selectedProjectID, let sessionID = selectedSessionID, !text.isEmpty || !pendingAttachments.isEmpty else { return }
+    guard let projectID = selectedProjectID, !text.isEmpty || !pendingAttachments.isEmpty else { return }
+    var sessionID = selectedSessionID
+    let draftProjectID = activeDraftProjectID
+    if sessionID == nil {
+      guard let draftProjectID, !text.isEmpty else { return }
+      sessionID = await createSessionForDraft(projectID: draftProjectID, prompt: text)
+    }
+    guard let sessionID else { return }
     if text.isEmpty {
       text = "Please review the attached file(s)."
     }
@@ -5314,6 +5783,9 @@ private final class ArtificerModel: ObservableObject {
       reasoningEffort
     )
     guard decode(SessionResponse.self, from: result) != nil else { return }
+    if let draftProjectID {
+      clearWorkspaceDraft(projectID: draftProjectID)
+    }
     clearPromptDraft(projectID: projectID, sessionID: sessionID)
     prompt = ""
     pendingAttachments.removeAll()
@@ -5346,7 +5818,9 @@ private final class ArtificerModel: ObservableObject {
   }
 
   func selectAutomationsPanel() async {
+    preserveCurrentPromptDraft()
     showingAutomations = true
+    activeDraftProjectID = nil
     if automationDraftProjectID.isEmpty, let selectedProjectID {
       automationDraftProjectID = selectedProjectID
     }
@@ -5497,6 +5971,8 @@ private final class ArtificerModel: ObservableObject {
     organizeMode = canonicalOrganizeMode(prefs["organize_mode"] ?? organizeMode)
     organizeSort = canonicalOrganizeSort(prefs["organize_sort"] ?? organizeSort)
     organizeShow = canonicalOrganizeShow(prefs["organize_show"] ?? organizeShow)
+    workspaceOrderIDs = decodeJSONString([String].self, from: prefs["workspace_order"] ?? "[]", fallback: [])
+    conversationOrderIDsByWorkspace = decodeJSONString([String: [String]].self, from: prefs["conversation_order_by_workspace"] ?? "{}", fallback: [:])
   }
 
   func setDesktopPref(_ key: String, enabled: Bool) async {
@@ -5933,6 +6409,9 @@ private final class ArtificerModel: ObservableObject {
     organizeMode = canonicalOrganizeMode(prefs.organizeMode)
     organizeSort = canonicalOrganizeSort(prefs.organizeSort)
     organizeShow = canonicalOrganizeShow(prefs.organizeShow)
+    workspaceOrderIDs = decodeJSONString([String].self, from: prefs.workspaceOrder, fallback: [])
+    conversationOrderIDsByWorkspace = decodeJSONString([String: [String]].self, from: prefs.conversationOrderByWorkspace, fallback: [:])
+    pruneSidebarOrdering()
     mobileBridgeEnabled = prefs.mobileBridge
     mobileTorEnabled = prefs.mobileTor
     mobileLanEnabled = prefs.mobileLan
@@ -6707,6 +7186,11 @@ private struct GenericSuccessResponse: Decodable {
   let success: Bool
 }
 
+private struct DraftResponse: Decodable {
+  let success: Bool
+  let draft: String
+}
+
 private struct GitStatusResponse: Decodable {
   let success: Bool
   let isRepo: Bool
@@ -6997,11 +7481,13 @@ private struct Project: Identifiable, Decodable, Hashable {
   let name: String
   let path: String
   let pathExists: Bool
+  let draftExists: Bool
   let sessionCount: Int
 
   enum CodingKeys: String, CodingKey {
     case id, name, path
     case pathExists = "path_exists"
+    case draftExists = "draft_exists"
     case sessionCount = "session_count"
   }
 
@@ -7011,6 +7497,7 @@ private struct Project: Identifiable, Decodable, Hashable {
     name = (try? container.decode(String.self, forKey: .name)) ?? id
     path = (try? container.decode(String.self, forKey: .path)) ?? ""
     pathExists = container.decodeFlexibleBool(forKey: .pathExists)
+    draftExists = container.decodeFlexibleBool(forKey: .draftExists)
     sessionCount = container.decodeFlexibleInt(forKey: .sessionCount)
   }
 }
@@ -7537,6 +8024,8 @@ private struct DesktopPrefsResponse: Decodable {
   let organizeMode: String
   let organizeSort: String
   let organizeShow: String
+  let workspaceOrder: String
+  let conversationOrderByWorkspace: String
   let mobileBridge: Bool
   let mobileTor: Bool
   let mobileLan: Bool
@@ -7563,6 +8052,8 @@ private struct DesktopPrefsResponse: Decodable {
     case organizeMode = "organize_mode"
     case organizeSort = "organize_sort"
     case organizeShow = "organize_show"
+    case workspaceOrder = "workspace_order"
+    case conversationOrderByWorkspace = "conversation_order_by_workspace"
     case mobileBridge = "mobile_bridge"
     case mobileTor = "mobile_tor"
     case mobileLan = "mobile_lan"
@@ -7591,6 +8082,8 @@ private struct DesktopPrefsResponse: Decodable {
     organizeMode = (try? container.decode(String.self, forKey: .organizeMode)) ?? "project"
     organizeSort = (try? container.decode(String.self, forKey: .organizeSort)) ?? "updated"
     organizeShow = (try? container.decode(String.self, forKey: .organizeShow)) ?? "all"
+    workspaceOrder = (try? container.decode(String.self, forKey: .workspaceOrder)) ?? "[]"
+    conversationOrderByWorkspace = (try? container.decode(String.self, forKey: .conversationOrderByWorkspace)) ?? "{}"
     mobileBridge = container.decodeFlexibleBool(forKey: .mobileBridge)
     mobileTor = container.decodeFlexibleBool(forKey: .mobileTor)
     mobileLan = container.decodeFlexibleBool(forKey: .mobileLan)

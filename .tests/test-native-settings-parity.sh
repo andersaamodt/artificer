@@ -200,6 +200,30 @@ assert payload.get("success") is True, payload
 assert not any(rule.get("pattern") == "printf contract-smoke" for rule in (payload.get("remembered") or [])), payload
 PY
 
+rules_backend draft-save "$rules_workspace_id" "native workspace draft contract" > "$rules_tmp/draft-save.json"
+rules_backend draft-get "$rules_workspace_id" > "$rules_tmp/draft-get.json"
+python3 - "$rules_tmp/draft-save.json" "$rules_tmp/draft-get.json" <<'PY'
+import json
+import sys
+save_payload = json.load(open(sys.argv[1]))
+get_payload = json.load(open(sys.argv[2]))
+assert save_payload.get("success") is True, save_payload
+assert get_payload.get("success") is True, get_payload
+assert get_payload.get("draft") == "native workspace draft contract", get_payload
+PY
+
+rules_backend conversation-draft-save "$rules_workspace_id" "$rules_conversation_id" "native conversation draft contract" > "$rules_tmp/conversation-draft-save.json"
+rules_backend session "$rules_workspace_id" "$rules_conversation_id" > "$rules_tmp/conversation-draft-get.json"
+python3 - "$rules_tmp/conversation-draft-save.json" "$rules_tmp/conversation-draft-get.json" <<'PY'
+import json
+import sys
+save_payload = json.load(open(sys.argv[1]))
+session_payload = json.load(open(sys.argv[2]))
+assert save_payload.get("success") is True, save_payload
+session = session_payload.get("session") or {}
+assert session.get("draft") == "native conversation draft contract", session_payload
+PY
+
 grep -q 'XDG_STATE_HOME:-"$home/.local/state"}/wizardry/voice-recognition' "$backend" || {
   printf '%s\n' "Native backend should reuse the Wizardry voice-recognition install root" >&2
   exit 1
@@ -259,6 +283,24 @@ import sys
 payload = json.load(open(sys.argv[1]))
 assert payload.get("success") is True, payload
 assert payload.get("organize_show") == "running", payload
+PY
+
+rules_backend desktop-value-set workspace_order '["workspace-b","workspace-a"]' > "$rules_tmp/workspace-order.json"
+python3 - "$rules_tmp/workspace-order.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+assert payload.get("success") is True, payload
+assert payload.get("workspace_order") == '["workspace-b","workspace-a"]', payload
+PY
+
+rules_backend desktop-value-set conversation_order_by_workspace '{"workspace-a":["conversation-b","conversation-a"]}' > "$rules_tmp/conversation-order.json"
+python3 - "$rules_tmp/conversation-order.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+assert payload.get("success") is True, payload
+assert payload.get("conversation_order_by_workspace") == '{"workspace-a":["conversation-b","conversation-a"]}', payload
 PY
 
 rules_backend desktop-value-set organize_mode impossible > "$rules_tmp/organize-invalid-write.json"

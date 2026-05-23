@@ -32,6 +32,9 @@ Actions:
   session-archive WORKSPACE_ID CONVERSATION_ID
   session-set-model WORKSPACE_ID CONVERSATION_ID MODEL
   session-message WORKSPACE_ID CONVERSATION_ID PROMPT RUN_MODE COMPUTE_BUDGET COMMAND_EXEC_MODE PERMISSION_MODE PROGRAMMER_REVIEW PROGRAMMER_REVIEW_ROUNDS REFLEXIVE_KNOWLEDGE SELF_ACTUATION [ATTACHMENT_IDS] [REASONING_EFFORT]
+  draft-get WORKSPACE_ID
+  draft-save WORKSPACE_ID DRAFT
+  conversation-draft-save WORKSPACE_ID CONVERSATION_ID DRAFT
   attachment-upload WORKSPACE_ID CONVERSATION_ID FILE_PATH [MIME]
   session-run-next WORKSPACE_ID CONVERSATION_ID
   session-events WORKSPACE_ID CONVERSATION_ID [STREAM_SESSION] [OFFSET]
@@ -215,7 +218,7 @@ canonical_desktop_value_key() {
   key=$1
   reject_line_breaks "$key" "desktop preference key"
   case "$key" in
-    selected_workspace_id|selected_conversation_id|theme_id|organize_mode|organize_sort|organize_show|voice_local_action_1_name|voice_local_action_1_command|voice_local_action_1_phrases|voice_local_action_2_name|voice_local_action_2_command|voice_local_action_2_phrases)
+    selected_workspace_id|selected_conversation_id|theme_id|organize_mode|organize_sort|organize_show|workspace_order|conversation_order_by_workspace|voice_local_action_1_name|voice_local_action_1_command|voice_local_action_1_phrases|voice_local_action_2_name|voice_local_action_2_command|voice_local_action_2_phrases)
       printf '%s\n' "$key"
       ;;
     *)
@@ -298,6 +301,8 @@ desktop_prefs_json() {
   organize_mode=$(read_desktop_value organize_mode 2>/dev/null || printf 'project')
   organize_sort=$(read_desktop_value organize_sort 2>/dev/null || printf 'updated')
   organize_show=$(read_desktop_value organize_show 2>/dev/null || printf 'all')
+  workspace_order=$(read_desktop_value workspace_order 2>/dev/null || printf '[]')
+  conversation_order_by_workspace=$(read_desktop_value conversation_order_by_workspace 2>/dev/null || printf '{}')
   mobile_bridge=$(read_desktop_pref mobile_bridge 2>/dev/null || printf '%s\n' 0)
   mobile_tor=$(read_desktop_pref mobile_tor 2>/dev/null || printf '%s\n' 0)
   mobile_lan=$(read_desktop_pref mobile_lan 2>/dev/null || printf '%s\n' 0)
@@ -319,7 +324,7 @@ desktop_prefs_json() {
   mobile_lan=$(bool_pref_value "$mobile_lan" 2>/dev/null || printf '%s\n' 0)
   mobile_allow_execute=$(bool_pref_value "$mobile_allow_execute" 2>/dev/null || printf '%s\n' 0)
   mobile_allow_self_actuation=$(bool_pref_value "$mobile_allow_self_actuation" 2>/dev/null || printf '%s\n' 0)
-  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_sound":%s,"voice_builtin_commands":%s,"voice_dictation_commands":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s,"voice_local_action_1_name":%s,"voice_local_action_1_command":%s,"voice_local_action_1_phrases":%s,"voice_local_action_2_name":%s,"voice_local_action_2_command":%s,"voice_local_action_2_phrases":%s,"theme_id":%s,"organize_mode":%s,"organize_sort":%s,"organize_show":%s,"mobile_bridge":%s,"mobile_tor":%s,"mobile_lan":%s,"mobile_allow_execute":%s,"mobile_allow_self_actuation":%s}\n' \
+  printf '{"success":true,"background_mode":%s,"menu_bar_icon":%s,"voice_automations":%s,"voice_automation_sound":%s,"voice_builtin_commands":%s,"voice_dictation_commands":%s,"voice_automation_llm_prompts":%s,"voice_automation_llm_actions":%s,"voice_local_action_1_name":%s,"voice_local_action_1_command":%s,"voice_local_action_1_phrases":%s,"voice_local_action_2_name":%s,"voice_local_action_2_command":%s,"voice_local_action_2_phrases":%s,"theme_id":%s,"organize_mode":%s,"organize_sort":%s,"organize_show":%s,"workspace_order":%s,"conversation_order_by_workspace":%s,"mobile_bridge":%s,"mobile_tor":%s,"mobile_lan":%s,"mobile_allow_execute":%s,"mobile_allow_self_actuation":%s}\n' \
     "$([ "$background_mode" = 1 ] && printf true || printf false)" \
     "$([ "$menu_bar_icon" = 1 ] && printf true || printf false)" \
     "$([ "$voice_automations" = 1 ] && printf true || printf false)" \
@@ -338,6 +343,8 @@ desktop_prefs_json() {
     "$(json_escape "$organize_mode")" \
     "$(json_escape "$organize_sort")" \
     "$(json_escape "$organize_show")" \
+    "$(json_escape "$workspace_order")" \
+    "$(json_escape "$conversation_order_by_workspace")" \
     "$([ "$mobile_bridge" = 1 ] && printf true || printf false)" \
     "$([ "$mobile_tor" = 1 ] && printf true || printf false)" \
     "$([ "$mobile_lan" = 1 ] && printf true || printf false)" \
@@ -818,6 +825,25 @@ case "$action" in
       --programmer-review-rounds "$programmer_review_rounds" \
       --reflexive-knowledge "$reflexive_knowledge" \
       --self-actuation "$self_actuation"
+    ;;
+  draft-get)
+    workspace_id=${1-}
+    reject_line_breaks "$workspace_id" "workspace id"
+    api_get get_draft workspace_id "$workspace_id"
+    ;;
+  draft-save)
+    workspace_id=${1-}
+    draft_text=${2-}
+    reject_line_breaks "$workspace_id" "workspace id"
+    api_post save_draft workspace_id "$workspace_id" draft "$draft_text"
+    ;;
+  conversation-draft-save)
+    workspace_id=${1-}
+    conversation_id=${2-}
+    draft_text=${3-}
+    reject_line_breaks "$workspace_id" "workspace id"
+    reject_line_breaks "$conversation_id" "conversation id"
+    api_post save_conversation_draft workspace_id "$workspace_id" conversation_id "$conversation_id" draft "$draft_text"
     ;;
   attachment-upload)
     workspace_id=${1-}
