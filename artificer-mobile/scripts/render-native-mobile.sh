@@ -81,10 +81,6 @@ android {
         }
     }
 }
-
-dependencies {
-    implementation 'androidx.core:core:1.13.1'
-}
 GRADLE
 
 cat >"$android_dir/app/src/main/AndroidManifest.xml" <<XML
@@ -92,13 +88,6 @@ cat >"$android_dir/app/src/main/AndroidManifest.xml" <<XML
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application android:theme="@style/AppTheme" android:label="$app_name" android:allowBackup="false" android:supportsRtl="true" android:usesCleartextTraffic="true">
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="\${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/update_file_paths" />
-        </provider>
         <receiver android:name=".MainActivity\$SelfUpdateReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
@@ -112,14 +101,6 @@ cat >"$android_dir/app/src/main/AndroidManifest.xml" <<XML
         </activity>
     </application>
 </manifest>
-XML
-
-mkdir -p "$android_dir/app/src/main/res/xml"
-cat >"$android_dir/app/src/main/res/xml/update_file_paths.xml" <<'XML'
-<paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-files-path name="updates" path="Download/" />
-    <cache-path name="cache_updates" path="updates/" />
-</paths>
 XML
 
 cat >"$android_dir/app/src/main/res/values/styles.xml" <<'XML'
@@ -138,6 +119,7 @@ cat >"$android_dir/app/src/main/java/app/wizardry/artificer/mobile/MainActivity.
 package app.wizardry.artificer.mobile;
 
 import android.app.Activity;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -150,7 +132,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
-import android.net.Uri;
+import android.content.pm.PackageInstaller;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -166,6 +148,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -177,7 +160,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
-import androidx.core.content.FileProvider;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -545,13 +527,37 @@ public final class MainActivity extends Activity {
             setStatus("Enable this source, then tap Update again.");
             return;
         }
-        File apk = new File(updateApkPath);
-        Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apk);
-        Intent install = new Intent(Intent.ACTION_INSTALL_PACKAGE);
-        install.setData(uri);
-        install.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        install.putExtra(Intent.EXTRA_RETURN_RESULT, true);
-        startActivity(install);
+        try {
+            installWithPackageInstaller(new File(updateApkPath));
+        } catch (Exception ex) {
+            setStatus(ex.getMessage());
+        }
+    }
+
+    private void installWithPackageInstaller(File apk) throws Exception {
+        PackageInstaller installer = getPackageManager().getPackageInstaller();
+        PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+        params.setAppPackageName(getPackageName());
+        int sessionId = installer.createSession(params);
+        PackageInstaller.Session session = installer.openSession(sessionId);
+        FileInputStream input = new FileInputStream(apk);
+        OutputStream output = session.openWrite("artificer-mobile-update", 0, apk.length());
+        byte[] buffer = new byte[65536];
+        int read;
+        while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+        session.fsync(output);
+        output.close();
+        input.close();
+        Intent callback = new Intent(this, SelfUpdateReceiver.class);
+        callback.setAction("app.wizardry.artificer.mobile.UPDATE_COMMITTED");
+        PendingIntent pending = PendingIntent.getBroadcast(
+            this,
+            sessionId,
+            callback,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+        session.commit(pending.getIntentSender());
+        session.close();
     }
 
     private void showConnect() {
@@ -1761,7 +1767,7 @@ cat >"$generated_root/README.md" <<README
 
 Generated from \`app-blueprint/mobile.ir.yaml\`.
 
-- Android output is a plain Gradle Android project with no Play Services dependency.
+- Android output is a plain Gradle Android project with no app-store SDK dependency.
 - iOS output is a SwiftUI project generated through XcodeGen.
 - The app is a thin client for the Artificer Mobile bridge exposed by desktop Preferences.
 - Android direct builds check GitHub Releases, auto-download newer APK assets, and expose an Update pill that launches Android's package installer.

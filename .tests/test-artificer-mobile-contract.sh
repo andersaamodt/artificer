@@ -122,10 +122,15 @@ grep -q 'REQUEST_INSTALL_PACKAGES' "$renderer" || {
   exit 1
 }
 
-grep -q 'ACTION_INSTALL_PACKAGE' "$renderer" || {
-  printf '%s\n' "Android mobile app should launch the platform package installer for downloaded updates" >&2
+grep -q 'PackageInstaller.SessionParams.MODE_FULL_INSTALL' "$renderer" || {
+  printf '%s\n' "Android mobile app should use the platform package installer for downloaded updates" >&2
   exit 1
 }
+
+if grep -q 'androidx' "$renderer"; then
+  printf '%s\n' "Android mobile app should not depend on AndroidX or app-store SDKs for updates" >&2
+  exit 1
+fi
 
 grep -q 'MY_PACKAGE_REPLACED' "$renderer" || {
   printf '%s\n' "Android mobile app should relaunch after package replacement" >&2
