@@ -43,6 +43,8 @@ require_text "$template" "draft: detail.draft" "native draft retention across mo
 require_text "$template" "moveQueueItem" "native queue reorder controls"
 require_text "$template" "sendTerminalInput" "native terminal input controls"
 require_text "$template" "handleDroppedAttachments" "native composer file drop handling"
+require_text "$template" "handleDroppedWorkspaceFolders" "native sidebar workspace drop handling"
+require_text "$template" "isWorkspaceDropTargeted" "native sidebar workspace drop highlight"
 require_text "$template" "copyToPasteboard(message.content)" "native message copy affordance"
 require_text "$template" "Jump to latest message" "native transcript jump-to-latest affordance"
 require_text "$template" "ScrollViewReader { proxy in" "native transcript scroll reader"
@@ -85,6 +87,8 @@ require_text "$generated" "Deny + remember" "rendered remembered command deny co
 require_text "$generated" "DecisionRequestCard" "rendered hosted-style decision card"
 require_text "$generated" "RunTaskStatusView" "rendered run task progress monitor"
 require_text "$generated" "onDrop(of: [UTType.fileURL]" "rendered composer file drop handling"
+require_text "$generated" "handleDroppedWorkspaceFolders" "rendered sidebar workspace drop handling"
+require_text "$generated" "isWorkspaceDropTargeted" "rendered sidebar workspace drop highlight"
 
 require_text "$backend" "git-status WORKSPACE_ID" "native git status bridge usage"
 require_text "$backend" "queue-list WORKSPACE_ID CONVERSATION_ID" "native queue bridge usage"

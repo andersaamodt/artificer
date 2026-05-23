@@ -682,6 +682,22 @@ private func copyToPasteboard(_ text: String) {
   NSPasteboard.general.setString(text, forType: .string)
 }
 
+private func providerFileURL(from item: Any?) -> URL? {
+  if let data = item as? Data {
+    return URL(dataRepresentation: data, relativeTo: nil)
+  }
+  if let droppedURL = item as? URL {
+    return droppedURL
+  }
+  if let droppedURL = item as? NSURL {
+    return droppedURL as URL
+  }
+  if let string = item as? String, let parsedURL = URL(string: string), parsedURL.isFileURL {
+    return parsedURL
+  }
+  return nil
+}
+
 private struct AppTheme: Identifiable {
   let id: String
   let name: String
@@ -807,6 +823,16 @@ private struct WorkspaceSidebar: View {
       }
       .padding(12)
       .padding(.bottom, 28)
+    }
+    .background(model.isWorkspaceDropTargeted ? Color.accentColor.opacity(0.05) : Color.clear)
+    .overlay {
+      RoundedRectangle(cornerRadius: 10)
+        .stroke(model.isWorkspaceDropTargeted ? Color.accentColor.opacity(0.70) : Color.clear, lineWidth: model.isWorkspaceDropTargeted ? 2 : 0)
+        .padding(4)
+        .allowsHitTesting(false)
+    }
+    .onDrop(of: [UTType.fileURL], isTargeted: $model.isWorkspaceDropTargeted) { providers in
+      model.handleDroppedWorkspaceFolders(providers)
     }
   }
 }
@@ -3904,6 +3930,7 @@ private final class ArtificerModel: ObservableObject {
   @Published var coreRootDraft = ""
   @Published var resolvedCoreRoot = ""
   @Published var coreReady = false
+  @Published var isWorkspaceDropTargeted = false
   @Published var isComposerDropTargeted = false
   @Published var pendingAttachments: [PendingAttachment] = []
   @Published var dictationStatus: DictationStatus?
@@ -6289,21 +6316,35 @@ private final class ArtificerModel: ObservableObject {
 
     for provider in fileProviders {
       provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-        let url: URL?
-        if let data = item as? Data {
-          url = URL(dataRepresentation: data, relativeTo: nil)
-        } else if let droppedURL = item as? URL {
-          url = droppedURL
-        } else if let droppedURL = item as? NSURL {
-          url = droppedURL as URL
-        } else if let string = item as? String, let parsedURL = URL(string: string), parsedURL.isFileURL {
-          url = parsedURL
-        } else {
-          url = nil
-        }
+        let url = providerFileURL(from: item)
         guard let url else { return }
         Task {
           await self.uploadAttachment(url)
+        }
+      }
+    }
+    return true
+  }
+
+  func handleDroppedWorkspaceFolders(_ providers: [NSItemProvider]) -> Bool {
+    let fileProviders = providers.filter { provider in
+      provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+    }
+    guard !fileProviders.isEmpty else { return false }
+
+    for provider in fileProviders {
+      provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+        guard let url = providerFileURL(from: item) else { return }
+        var isDirectory: ObjCBool = false
+        let path = url.path
+        let folderURL: URL
+        if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
+          folderURL = url
+        } else {
+          folderURL = url.deletingLastPathComponent()
+        }
+        Task {
+          await self.addWorkspace(path: folderURL.path, name: folderURL.lastPathComponent)
         }
       }
     }
