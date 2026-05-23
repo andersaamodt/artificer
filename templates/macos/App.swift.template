@@ -3615,8 +3615,8 @@ private struct SettingsView: View {
   @ObservedObject var model: ArtificerModel
 
   var body: some View {
-    VStack(spacing: 0) {
-      PreferencesTabStrip(selection: $model.preferencesTab)
+    HStack(spacing: 0) {
+      PreferencesSidebar(selection: $model.preferencesTab)
       Divider()
       selectedPane
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -3672,26 +3672,27 @@ private let preferencesTabs = [
   PreferencesTabDescriptor(id: "git", title: "Git", systemImage: "arrow.triangle.branch")
 ]
 
-private struct PreferencesTabStrip: View {
+private struct PreferencesSidebar: View {
   @Binding var selection: String
 
   var body: some View {
-    HStack(alignment: .center, spacing: 6) {
+    VStack(alignment: .leading, spacing: 4) {
       ForEach(preferencesTabs) { tab in
         Button {
           selection = tab.id
         } label: {
-          VStack(spacing: 4) {
+          HStack(spacing: 8) {
             Image(systemName: tab.systemImage)
-              .font(.system(size: 17, weight: .medium))
-              .frame(height: 20)
+              .font(.system(size: 13, weight: .medium))
+              .frame(width: 18, height: 18)
             Text(tab.title)
-              .font(.caption)
+              .font(.body)
               .lineLimit(1)
+            Spacer(minLength: 0)
           }
           .foregroundStyle(selection == tab.id ? Color.accentColor : Color.primary)
-          .frame(minWidth: 74)
-          .padding(.horizontal, 6)
+          .frame(width: 154, alignment: .leading)
+          .padding(.horizontal, 9)
           .padding(.vertical, 7)
           .background(
             RoundedRectangle(cornerRadius: 8)
@@ -3702,11 +3703,12 @@ private struct PreferencesTabStrip: View {
         .buttonStyle(.plain)
         .help(tab.title)
       }
-      Spacer(minLength: 0)
+      Spacer()
     }
-    .padding(.horizontal, 14)
-    .padding(.top, 10)
-    .padding(.bottom, 8)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 12)
+    .frame(width: 190, alignment: .topLeading)
+    .frame(maxHeight: .infinity, alignment: .topLeading)
     .background(.bar)
   }
 }
