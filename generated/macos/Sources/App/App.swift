@@ -315,6 +315,19 @@ private struct RootView: View {
         ProjectPathToolbarItem(model: model)
       }
       ToolbarItemGroup(placement: .primaryAction) {
+        OpenProjectToolbarMenu(model: model)
+        GitBranchToolbarMenu(model: model)
+        GitChangesToolbarButton(model: model)
+        CommitToolbarMenu(model: model)
+        FloatingIconButton(title: "Terminal panel", systemImage: "terminal", disabled: model.selectedProjectID == nil || model.isBusy) {
+          model.showingTerminalPanel = true
+          Task { await model.startTerminalSession() }
+        }
+        ThemeToolbarMenu(model: model)
+        FloatingIconButton(title: "Models", systemImage: "shippingbox", disabled: model.isBusy) {
+          model.showingModelsPanel = true
+          Task { await model.loadModelData() }
+        }
         FloatingIconButton(title: "Refresh", systemImage: "arrow.clockwise", disabled: model.isBusy) {
           Task { await model.refreshAll() }
         }
@@ -334,6 +347,32 @@ private struct RootView: View {
           openWindow(id: "preferences")
         }
       }
+    }
+    .tint(model.themeAccentColor)
+    .accentColor(model.themeAccentColor)
+    .sheet(isPresented: $model.showingGitDiff) {
+      GitDiffSheet(model: model)
+        .frame(minWidth: 720, minHeight: 520)
+    }
+    .sheet(isPresented: $model.showingCommitDialog) {
+      CommitSheet(model: model)
+        .frame(minWidth: 440, minHeight: 310)
+    }
+    .sheet(isPresented: $model.showingBranchDialog) {
+      BranchSheet(model: model)
+        .frame(minWidth: 380, minHeight: 180)
+    }
+    .sheet(isPresented: $model.showingQueueTray) {
+      QueueTraySheet(model: model)
+        .frame(minWidth: 620, minHeight: 430)
+    }
+    .sheet(isPresented: $model.showingTerminalPanel) {
+      TerminalPanelSheet(model: model)
+        .frame(minWidth: 720, minHeight: 460)
+    }
+    .sheet(isPresented: $model.showingModelsPanel) {
+      ModelQuickPanel(model: model)
+        .frame(minWidth: 620, minHeight: 460)
     }
     .safeAreaInset(edge: .bottom) {
       StatusBar(model: model)
@@ -368,16 +407,209 @@ private struct ProjectPathToolbarItem: View {
         .help("Click to copy path: \(project.path)")
         .accessibilityLabel(Text("Project path \(project.path)"))
 
-        FloatingIconButton(
-          title: "Open project folder",
-          systemImage: "arrow.up.forward.app",
-          disabled: !project.pathExists
-        ) {
-          model.openSelectedProjectFolder()
-        }
+        OpenProjectToolbarMenu(model: model, compact: true)
       }
     }
     .frame(minWidth: 1, maxWidth: 330, minHeight: 30, idealHeight: 30, maxHeight: 30, alignment: .leading)
+  }
+}
+
+private struct OpenProjectToolbarMenu: View {
+  @ObservedObject var model: ArtificerModel
+  var compact = false
+
+  var body: some View {
+    Menu {
+      Button {
+        Task { await model.openProjectTarget("finder") }
+      } label: {
+        Label("Finder", systemImage: "folder")
+      }
+      Button {
+        Task { await model.openProjectTarget("terminal") }
+      } label: {
+        Label("Terminal", systemImage: "terminal")
+      }
+      Button {
+        Task { await model.openProjectTarget("textmate") }
+      } label: {
+        Label("TextMate", systemImage: "doc.text")
+      }
+    } label: {
+      FloatingIconMenuLabel(title: compact ? "Open project" : "Open", systemImage: compact ? "arrow.up.forward.app" : "square.and.arrow.up")
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize(horizontal: true, vertical: true)
+    .help("Open project")
+    .disabled(model.selectedProject?.pathExists != true || model.isBusy)
+  }
+}
+
+private struct GitBranchToolbarMenu: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    Menu {
+      if model.gitStatus.isRepo {
+        if model.gitBranches.isEmpty {
+          Button {
+            Task { await model.loadGitStatusAndBranches() }
+          } label: {
+            Label("Refresh branches", systemImage: "arrow.clockwise")
+          }
+        } else {
+          ForEach(model.gitBranches) { branch in
+            Button {
+              Task { await model.checkoutBranch(branch.name) }
+            } label: {
+              HStack {
+                Text(branch.name)
+                if branch.current {
+                  Image(systemName: "checkmark")
+                }
+              }
+            }
+          }
+          Divider()
+        }
+        Button {
+          model.branchNameDraft = ""
+          model.showingBranchDialog = true
+        } label: {
+          Label("Create branch", systemImage: "plus")
+        }
+      } else {
+        Text("No Git repository")
+        Button {
+          Task { await model.loadGitStatusAndBranches() }
+        } label: {
+          Label("Refresh", systemImage: "arrow.clockwise")
+        }
+      }
+    } label: {
+      FloatingIconMenuLabel(title: model.gitBranchTitle, systemImage: "arrow.triangle.branch")
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize(horizontal: true, vertical: true)
+    .help(model.gitBranchTitle)
+    .disabled(model.selectedProjectID == nil || model.isBusy)
+    .task(id: model.selectedProjectID) {
+      await model.loadGitStatusAndBranches()
+    }
+  }
+}
+
+private struct GitChangesToolbarButton: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    Button {
+      Task {
+        await model.loadGitDiff()
+        model.showingGitDiff = true
+      }
+    } label: {
+      ZStack(alignment: .topTrailing) {
+        Image(systemName: "plusminus")
+          .font(.system(size: 14, weight: .semibold))
+          .frame(width: 30, height: 30)
+          .contentShape(Circle())
+        if model.gitStatus.changes > 0 {
+          Text("\(model.gitStatus.changes)")
+            .font(.system(size: 9, weight: .bold))
+            .monospacedDigit()
+            .foregroundStyle(model.themeContrastColor)
+            .padding(.horizontal, 4)
+            .frame(minWidth: 16, minHeight: 16)
+            .background(model.themeAccentColor)
+            .clipShape(Capsule())
+            .offset(x: 4, y: -3)
+        }
+      }
+    }
+    .buttonStyle(.plain)
+    .foregroundStyle(model.gitStatus.changes > 0 ? model.themeAccentColor : Color.secondary)
+    .shadow(color: Color.black.opacity(model.gitStatus.changes > 0 ? 0.13 : 0), radius: 7, x: 0, y: 3)
+    .frame(width: 34, height: 30)
+    .help(model.gitChangesTitle)
+    .accessibilityLabel(Text(model.gitChangesTitle))
+    .disabled(model.selectedProjectID == nil || !model.gitStatus.isRepo || model.isBusy)
+  }
+}
+
+private struct CommitToolbarMenu: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    Menu {
+      Button {
+        model.prepareCommit(pushAfter: false)
+      } label: {
+        Label("Commit", systemImage: "checkmark.seal")
+      }
+      Button {
+        Task { await model.pushGitChanges() }
+      } label: {
+        Label("Push", systemImage: "arrow.up.circle")
+      }
+      Button {
+        model.prepareCommit(pushAfter: true)
+      } label: {
+        Label("Commit and push", systemImage: "arrow.up.doc")
+      }
+    } label: {
+      FloatingIconMenuLabel(title: "Commit actions", systemImage: "arrow.up.doc")
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize(horizontal: true, vertical: true)
+    .help("Commit actions")
+    .disabled(model.selectedProjectID == nil || !model.gitStatus.isRepo || model.isBusy)
+  }
+}
+
+private struct ThemeToolbarMenu: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    Menu {
+      ForEach(AppTheme.available) { theme in
+        Button {
+          Task { await model.setTheme(theme.id) }
+        } label: {
+          HStack {
+            ThemeSwatch(theme: theme)
+            Text(theme.name)
+            if theme.id == model.selectedThemeID {
+              Image(systemName: "checkmark")
+            }
+          }
+        }
+      }
+    } label: {
+      FloatingIconMenuLabel(title: "Theme", systemImage: "paintpalette")
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize(horizontal: true, vertical: true)
+    .help("Theme")
+  }
+}
+
+private struct FloatingIconMenuLabel: View {
+  let title: String
+  let systemImage: String
+  @State private var isHovering = false
+
+  var body: some View {
+    Image(systemName: systemImage)
+      .font(.system(size: 14, weight: .semibold))
+      .foregroundStyle(isHovering ? Color.primary : Color.secondary)
+      .frame(width: 30, height: 30)
+      .contentShape(Circle())
+      .background(isHovering ? Color(nsColor: .controlBackgroundColor).opacity(0.92) : Color.clear)
+      .clipShape(Circle())
+      .shadow(color: isHovering ? Color.black.opacity(0.18) : Color.clear, radius: 8, x: 0, y: 4)
+      .onHover { isHovering = $0 }
+      .accessibilityLabel(Text(title))
   }
 }
 
@@ -443,6 +675,39 @@ private func accentContrastColor() -> Color {
     + 0.7152 * Double(nsColor.greenComponent)
     + 0.0722 * Double(nsColor.blueComponent)
   return luminance > 0.58 ? .black : .white
+}
+
+private struct AppTheme: Identifiable {
+  let id: String
+  let name: String
+  let accent: Color
+  let contrast: Color
+
+  static let available: [AppTheme] = [
+    AppTheme(id: "system", name: "System", accent: Color.accentColor, contrast: accentContrastColor()),
+    AppTheme(id: "artificer", name: "Artificer", accent: Color(red: 0.19, green: 0.41, blue: 0.86), contrast: .white),
+    AppTheme(id: "ink", name: "Ink", accent: Color(red: 0.08, green: 0.09, blue: 0.11), contrast: .white),
+    AppTheme(id: "moss", name: "Moss", accent: Color(red: 0.18, green: 0.48, blue: 0.36), contrast: .white),
+    AppTheme(id: "ember", name: "Ember", accent: Color(red: 0.76, green: 0.24, blue: 0.16), contrast: .white)
+  ]
+
+  static func resolved(_ id: String) -> AppTheme {
+    available.first { $0.id == id } ?? available[0]
+  }
+}
+
+private struct ThemeSwatch: View {
+  let theme: AppTheme
+
+  var body: some View {
+    Circle()
+      .fill(theme.accent)
+      .frame(width: 12, height: 12)
+      .overlay(
+        Circle()
+          .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+      )
+  }
 }
 
 private struct WorkspaceSidebar: View {
@@ -751,6 +1016,11 @@ private struct SessionDetailView: View {
       if model.selectedSession == nil {
         EmptyStateView(title: "No Session Selected", systemImage: "message", detail: "Select or create a session.")
       } else {
+        if let session = model.selectedSession {
+          SessionAttentionStrip(model: model, session: session)
+          RunTraceSummaryView(model: model, session: session)
+          QueueInlineBar(model: model, session: session)
+        }
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 12) {
             ForEach(model.selectedSession?.messages ?? []) { message in
@@ -798,11 +1068,239 @@ private struct DetailHeader: View {
         .foregroundStyle(.secondary)
       }
       Spacer()
+      FloatingIconButton(title: "Queue tray", systemImage: "tray.full", disabled: model.selectedSessionID == nil || model.isBusy) {
+        model.showingQueueTray = true
+        Task { await model.loadQueueItems() }
+      }
       FloatingIconButton(title: "Refresh thread", systemImage: "arrow.clockwise", disabled: model.selectedSessionID == nil || model.isBusy) {
         Task { await model.loadSelectedSession() }
       }
     }
     .padding(12)
+  }
+}
+
+private struct SessionAttentionStrip: View {
+  @ObservedObject var model: ArtificerModel
+  let session: SessionDetail
+
+  var body: some View {
+    VStack(spacing: 8) {
+      if let request = session.approvalRequest {
+        AttentionPanel(title: "Command approval", systemImage: "terminal", tone: .orange) {
+          VStack(alignment: .leading, spacing: 7) {
+            if !request.reason.isEmpty {
+              Text(request.reason)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+            Text(request.command)
+              .font(.system(.footnote, design: .monospaced))
+              .textSelection(.enabled)
+              .padding(8)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .background(Color(nsColor: .textBackgroundColor))
+              .clipShape(RoundedRectangle(cornerRadius: 7))
+            HStack(spacing: 8) {
+              Button("Allow once") {
+                Task { await model.answerApproval(decision: "allow", scope: "once", command: request.command) }
+              }
+              Button("Remember allow") {
+                Task { await model.answerApproval(decision: "allow", scope: "remember", command: request.command) }
+              }
+              Button("Deny") {
+                Task { await model.answerApproval(decision: "deny", scope: "once", command: request.command) }
+              }
+            }
+            .buttonStyle(.bordered)
+          }
+        }
+      }
+      if let request = session.decisionRequest {
+        AttentionPanel(title: "Decision needed", systemImage: "questionmark.bubble", tone: .blue) {
+          VStack(alignment: .leading, spacing: 8) {
+            Text(request.question)
+              .font(.callout)
+              .textSelection(.enabled)
+            FlowHStack(items: request.options) { option in
+              Button(option) {
+                Task { await model.answerDecision(option) }
+              }
+              .buttonStyle(.borderedProminent)
+              .fixedSize(horizontal: true, vertical: true)
+            }
+          }
+        }
+      }
+    }
+    .padding(.horizontal, 12)
+    .padding(.top, session.hasAttention ? 10 : 0)
+  }
+}
+
+private struct AttentionPanel<Content: View>: View {
+  enum Tone {
+    case orange
+    case blue
+
+    var color: Color {
+      switch self {
+      case .orange: return .orange
+      case .blue: return .blue
+      }
+    }
+  }
+
+  let title: String
+  let systemImage: String
+  let tone: Tone
+  let content: Content
+
+  init(title: String, systemImage: String, tone: Tone, @ViewBuilder content: () -> Content) {
+    self.title = title
+    self.systemImage = systemImage
+    self.tone = tone
+    self.content = content()
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Label(title, systemImage: systemImage)
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(tone.color)
+      content
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(tone.color.opacity(0.10))
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+}
+
+private struct RunTraceSummaryView: View {
+  @ObservedObject var model: ArtificerModel
+  let session: SessionDetail
+
+  var body: some View {
+    if let event = session.latestRunEvent {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 8) {
+          Label(runStatusLabel(event.status), systemImage: runStatusIcon(event.status))
+            .font(.system(size: 13, weight: .semibold))
+          if let started = session.trace.runningStartedAt, !started.isEmpty {
+            Text(started)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+          }
+          Spacer()
+          if event.hasGitChanges {
+            Button {
+              model.gitDiff = GitDiffResponse(success: true, isRepo: true, added: event.changeSummary.added, deleted: event.changeSummary.deleted, diff: event.gitDiff)
+              model.showingGitDiff = true
+            } label: {
+              Label("\(event.changeSummary.files.count) files", systemImage: "plusminus")
+            }
+            .buttonStyle(.borderless)
+          }
+        }
+        if !event.streamTextPreview.isEmpty {
+          Text(event.streamTextPreview)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .lineLimit(3)
+            .textSelection(.enabled)
+        }
+        if !event.plan.isEmpty {
+          Text(event.plan)
+            .font(.footnote)
+            .lineLimit(4)
+            .textSelection(.enabled)
+        }
+        if event.hasGitChanges {
+          RunChangesMiniCard(summary: event.changeSummary)
+        }
+      }
+      .padding(10)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(Color(nsColor: .controlBackgroundColor).opacity(0.58))
+      .clipShape(RoundedRectangle(cornerRadius: 8))
+      .padding(.horizontal, 12)
+      .padding(.top, 8)
+    }
+  }
+}
+
+private struct RunChangesMiniCard: View {
+  let summary: RunChangeSummary
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 5) {
+      HStack(spacing: 8) {
+        Text("Changes made this run")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        Text("+\(summary.added)")
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.green)
+        Text("-\(summary.deleted)")
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.red)
+      }
+      ForEach(summary.files.prefix(5), id: \.self) { path in
+        Text(path)
+          .font(.system(size: 11, design: .monospaced))
+          .lineLimit(1)
+          .truncationMode(.middle)
+      }
+    }
+    .padding(8)
+    .background(Color(nsColor: .textBackgroundColor))
+    .clipShape(RoundedRectangle(cornerRadius: 7))
+  }
+}
+
+private struct QueueInlineBar: View {
+  @ObservedObject var model: ArtificerModel
+  let session: SessionDetail
+
+  var body: some View {
+    if session.queue.pending > 0 || session.queue.running > 0 || session.queue.lastStatus == "awaiting_approval" || session.queue.lastStatus == "awaiting_decision" {
+      HStack(spacing: 8) {
+        Label(queueLabel, systemImage: session.queue.running > 0 ? "play.circle" : "tray")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+        Spacer()
+        if session.queue.running > 0 {
+          Button {
+            Task { await model.stopQueueRun() }
+          } label: {
+            Label("Stop", systemImage: "stop.fill")
+          }
+          .buttonStyle(.bordered)
+          .fixedSize()
+        }
+        Button {
+          model.showingQueueTray = true
+          Task { await model.loadQueueItems() }
+        } label: {
+          Label("Queue", systemImage: "tray.full")
+        }
+        .buttonStyle(.bordered)
+        .fixedSize()
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 8)
+      .background(Color(nsColor: .controlBackgroundColor).opacity(0.42))
+    }
+  }
+
+  private var queueLabel: String {
+    var parts: [String] = []
+    if session.queue.pending > 0 { parts.append("\(session.queue.pending) queued") }
+    if session.queue.running > 0 { parts.append("\(session.queue.running) running") }
+    if !session.queue.lastStatus.isEmpty { parts.append(session.queue.lastStatus.replacingOccurrences(of: "_", with: " ")) }
+    return parts.isEmpty ? "Queue" : parts.joined(separator: " · ")
   }
 }
 
@@ -842,6 +1340,418 @@ private struct EmptyStateView: View {
         .foregroundStyle(.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+}
+
+private struct FlowHStack<Content: View>: View {
+  let items: [String]
+  let content: (String) -> Content
+
+  init(items: [String], @ViewBuilder content: @escaping (String) -> Content) {
+    self.items = items
+    self.content = content
+  }
+
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 8) {
+        ForEach(items, id: \.self) { item in
+          content(item)
+        }
+      }
+      .padding(.vertical, 1)
+    }
+  }
+}
+
+private struct GitDiffSheet: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(spacing: 10) {
+        Label(model.gitStatus.branch.isEmpty ? "Git changes" : model.gitStatus.branch, systemImage: "plusminus")
+          .font(.headline)
+        Spacer()
+        Text("+\(model.gitDiff.added) -\(model.gitDiff.deleted)")
+          .font(.system(.callout, design: .monospaced))
+          .foregroundStyle(.secondary)
+        Button {
+          Task { await model.loadGitDiff() }
+        } label: {
+          Label("Refresh", systemImage: "arrow.clockwise")
+        }
+        .buttonStyle(.bordered)
+        .fixedSize()
+      }
+      if !model.gitDiff.diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        ScrollView {
+          Text(model.gitDiff.diff)
+            .font(.system(size: 12, design: .monospaced))
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+      } else {
+        EmptyStateView(title: "No Changes", systemImage: "checkmark.circle", detail: "The working tree has no diff to show.")
+      }
+      HStack {
+        Spacer()
+        Button {
+          model.prepareCommit(pushAfter: false)
+        } label: {
+          Label("Commit", systemImage: "checkmark.seal")
+        }
+        .buttonStyle(.borderedProminent)
+        .fixedSize()
+        .disabled(model.gitStatus.changes == 0)
+      }
+    }
+    .padding(16)
+    .task {
+      await model.loadGitDiff()
+    }
+  }
+}
+
+private struct CommitSheet: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Label(model.commitPushAfter ? "Commit and push" : "Commit", systemImage: model.commitPushAfter ? "arrow.up.doc" : "checkmark.seal")
+        .font(.headline)
+      HStack(spacing: 10) {
+        Text(model.gitStatus.branch.isEmpty ? "No branch" : model.gitStatus.branch)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+        Text("+\(model.gitStatus.added) -\(model.gitStatus.deleted)")
+          .font(.footnote.monospacedDigit())
+          .foregroundStyle(.secondary)
+      }
+      Toggle("Include unstaged changes", isOn: $model.commitIncludeUnstaged)
+        .fixedSize()
+      TextEditor(text: $model.commitMessage)
+        .font(.body)
+        .frame(minHeight: 90)
+        .overlay(
+          RoundedRectangle(cornerRadius: 8)
+            .stroke(Color.secondary.opacity(0.18))
+        )
+      HStack {
+        Spacer()
+        Button("Cancel") {
+          model.showingCommitDialog = false
+        }
+        .fixedSize()
+        Button {
+          Task { await model.commitGitChanges() }
+        } label: {
+          Label(model.commitPushAfter ? "Commit and push" : "Commit", systemImage: model.commitPushAfter ? "arrow.up.doc" : "checkmark")
+        }
+        .buttonStyle(.borderedProminent)
+        .fixedSize()
+        .disabled(model.isBusy)
+      }
+    }
+    .padding(16)
+  }
+}
+
+private struct BranchSheet: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Label("Create branch", systemImage: "arrow.triangle.branch")
+        .font(.headline)
+      TextField("codex/native-parity", text: $model.branchNameDraft)
+        .textFieldStyle(.roundedBorder)
+      HStack {
+        Spacer()
+        Button("Cancel") {
+          model.showingBranchDialog = false
+        }
+        .fixedSize()
+        Button {
+          Task { await model.createBranch() }
+        } label: {
+          Label("Create", systemImage: "plus")
+        }
+        .buttonStyle(.borderedProminent)
+        .fixedSize()
+        .disabled(model.branchNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isBusy)
+      }
+    }
+    .padding(16)
+  }
+}
+
+private struct QueueTraySheet: View {
+  @ObservedObject var model: ArtificerModel
+  @State private var drafts: [String: String] = [:]
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        Label("Queue", systemImage: "tray.full")
+          .font(.headline)
+        Spacer()
+        Button {
+          Task { await model.loadQueueItems() }
+        } label: {
+          Label("Refresh", systemImage: "arrow.clockwise")
+        }
+        .buttonStyle(.bordered)
+        .fixedSize()
+        if (model.selectedSession?.queue.running ?? 0) > 0 {
+          Button {
+            Task { await model.stopQueueRun() }
+          } label: {
+            Label("Stop", systemImage: "stop.fill")
+          }
+          .buttonStyle(.bordered)
+          .fixedSize()
+        }
+      }
+      if model.queueItems.isEmpty {
+        EmptyStateView(title: "Queue Empty", systemImage: "tray", detail: "No pending items for this thread.")
+      } else {
+        ScrollView {
+          LazyVStack(alignment: .leading, spacing: 10) {
+            ForEach(model.queueItems) { item in
+              QueueItemEditor(model: model, item: item, text: Binding(
+                get: { drafts[item.id] ?? item.prompt },
+                set: { drafts[item.id] = $0 }
+              ))
+            }
+          }
+        }
+      }
+    }
+    .padding(16)
+    .task {
+      await model.loadQueueItems()
+    }
+  }
+}
+
+private struct QueueItemEditor: View {
+  @ObservedObject var model: ArtificerModel
+  let item: QueueItem
+  @Binding var text: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        Text(item.order.isEmpty ? item.id : item.order)
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+        Spacer()
+        Text([item.runMode, item.computeBudget, item.commandExecMode].filter { !$0.isEmpty }.joined(separator: " · "))
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
+      TextEditor(text: $text)
+        .font(.body)
+        .frame(minHeight: 72)
+        .overlay(
+          RoundedRectangle(cornerRadius: 7)
+            .stroke(Color.secondary.opacity(0.14))
+        )
+      HStack {
+        Spacer()
+        Button {
+          Task { await model.updateQueueItem(item.id, prompt: text) }
+        } label: {
+          Label("Save", systemImage: "checkmark")
+        }
+        .buttonStyle(.bordered)
+        .fixedSize()
+        Button {
+          Task { await model.cancelQueueItem(item.id) }
+        } label: {
+          Label("Cancel item", systemImage: "xmark")
+        }
+        .buttonStyle(.bordered)
+        .fixedSize()
+      }
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color(nsColor: .controlBackgroundColor).opacity(0.56))
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+}
+
+private struct TerminalPanelSheet: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        Label(model.terminalRunning ? "Terminal running" : "Terminal", systemImage: "terminal")
+          .font(.headline)
+        Spacer()
+        Button {
+          Task { await model.startTerminalSession() }
+        } label: {
+          Label("Start", systemImage: "play.fill")
+        }
+        .buttonStyle(.bordered)
+        .fixedSize()
+        Button {
+          Task { await model.pollTerminalSession() }
+        } label: {
+          Label("Poll", systemImage: "arrow.clockwise")
+        }
+        .buttonStyle(.bordered)
+        .fixedSize()
+        Button {
+          Task { await model.stopTerminalSession() }
+        } label: {
+          Label("Stop", systemImage: "stop.fill")
+        }
+        .buttonStyle(.bordered)
+        .fixedSize()
+        .disabled(model.terminalSessionID.isEmpty)
+      }
+      ScrollView {
+        Text(model.terminalOutput.isEmpty ? "No terminal output yet." : model.terminalOutput)
+          .font(.system(size: 12, design: .monospaced))
+          .foregroundStyle(model.terminalOutput.isEmpty ? .secondary : .primary)
+          .textSelection(.enabled)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(10)
+      }
+      .background(Color(nsColor: .textBackgroundColor))
+      .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+    .padding(16)
+    .task {
+      if model.terminalSessionID.isEmpty {
+        await model.startTerminalSession()
+      }
+    }
+  }
+}
+
+private struct ModelQuickPanel: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        Label("Models", systemImage: "shippingbox")
+          .font(.headline)
+        Spacer()
+        Button {
+          Task { await model.loadModelData() }
+        } label: {
+          Label("Refresh", systemImage: "arrow.clockwise")
+        }
+        .buttonStyle(.bordered)
+        .fixedSize()
+      }
+      HStack(alignment: .top, spacing: 14) {
+        ModelColumn(title: "Installed", entries: model.installedModels) { name in
+          Button {
+            Task { await model.setSelectedSessionModel(name) }
+          } label: {
+            Label(modelDisplayName(name), systemImage: name == model.activeComposerModel ? "checkmark.circle.fill" : "cpu")
+          }
+          .buttonStyle(.borderless)
+          .fixedSize(horizontal: true, vertical: true)
+        }
+        ModelCatalogColumn(model: model)
+      }
+      if !model.modelInstallMessage.isEmpty {
+        Text(model.modelInstallMessage)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .lineLimit(2)
+      }
+    }
+    .padding(16)
+    .task {
+      await model.loadModelData()
+    }
+  }
+}
+
+private struct ModelColumn<RowContent: View>: View {
+  let title: String
+  let entries: [String]
+  let row: (String) -> RowContent
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(title)
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 6) {
+          if entries.isEmpty {
+            Text("None")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          } else {
+            ForEach(entries, id: \.self) { entry in
+              row(entry)
+            }
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .topLeading)
+  }
+}
+
+private struct ModelCatalogColumn: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Available")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 8) {
+          if model.installableCatalogEntries.isEmpty {
+            Text("Catalog is current")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          } else {
+            ForEach(model.installableCatalogEntries) { entry in
+              HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(modelDisplayName(entry.name))
+                    .font(.footnote)
+                  Text(entry.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                }
+                Spacer()
+                Button {
+                  Task { await model.installModel(entry.name) }
+                } label: {
+                  Text(model.installLabel(for: entry.name))
+                }
+                .buttonStyle(.bordered)
+                .fixedSize()
+                .disabled(model.isInstallingModel(entry.name))
+              }
+            }
+          }
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .topLeading)
   }
 }
 
@@ -1171,13 +2081,34 @@ private struct ComposerOptionsBar: View {
         ComposerOptionMenu(systemImage: "clock", title: "Compute budget", selection: $model.computeBudget, values: model.computeBudgets)
         ComposerOptionMenu(systemImage: "terminal", title: "Command execution", selection: $model.commandExecMode, values: model.commandExecModes)
         ComposerOptionMenu(systemImage: "shield", title: "Permission mode", selection: $model.permissionMode, values: model.permissionModes)
+        ComposerToggleIconButton(title: "Network access", systemImage: "network", isOn: $model.networkAccessEnabled)
+        ComposerToggleIconButton(title: "Web access", systemImage: "globe", isOn: $model.webAccessEnabled)
         ComposerToggleIconButton(title: "Programmer review", systemImage: "checkmark.seal", isOn: $model.programmerReview)
         ComposerToggleIconButton(title: "Reflexive knowledge", systemImage: "brain.head.profile", isOn: $model.reflexiveKnowledge)
         ComposerToggleIconButton(title: "Self-actuation", systemImage: "wand.and.stars", isOn: $model.selfActuation)
+        ComposerContextBadge(model: model)
       }
       .padding(.vertical, 2)
     }
     .frame(minHeight: 34)
+  }
+}
+
+private struct ComposerContextBadge: View {
+  @ObservedObject var model: ArtificerModel
+
+  var body: some View {
+    HStack(spacing: 5) {
+      Image(systemName: "rectangle.stack")
+        .font(.system(size: 12, weight: .semibold))
+      Text(model.activeContextWindowLabel)
+        .font(.system(size: 12))
+        .lineLimit(1)
+    }
+    .foregroundStyle(.secondary)
+    .padding(.horizontal, 6)
+    .frame(height: 28)
+    .help("Context window")
   }
 }
 
@@ -1295,6 +2226,31 @@ private func modelDisplayName(_ modelName: String) -> String {
   let parts = trimmed.split(separator: ":", maxSplits: 1).map(String.init)
   guard let first = parts.first, !first.isEmpty else { return trimmed }
   return first
+}
+
+private func runStatusLabel(_ status: String) -> String {
+  switch status {
+  case "running": return "Running"
+  case "done": return "Done"
+  case "error": return "Error"
+  case "cancelled": return "Cancelled"
+  case "awaiting_decision": return "Decision needed"
+  case "awaiting_approval": return "Approval needed"
+  default:
+    return status.isEmpty ? "Run trace" : status.replacingOccurrences(of: "_", with: " ").capitalized
+  }
+}
+
+private func runStatusIcon(_ status: String) -> String {
+  switch status {
+  case "running": return "play.circle"
+  case "done": return "checkmark.circle"
+  case "error": return "exclamationmark.triangle"
+  case "cancelled": return "stop.circle"
+  case "awaiting_decision": return "questionmark.bubble"
+  case "awaiting_approval": return "terminal"
+  default: return "list.bullet.rectangle"
+  }
 }
 
 private func composerOptionDisplayName(_ value: String) -> String {
@@ -2279,6 +3235,27 @@ private final class ArtificerModel: ObservableObject {
   @Published var dictationToggleShortcut = "none"
   @Published var gitWorkflowPolicy = "managed"
   @Published var gitAmbiguityPolicy = "preserve"
+  @Published var selectedThemeID = "system"
+  @Published var showingGitDiff = false
+  @Published var showingCommitDialog = false
+  @Published var showingBranchDialog = false
+  @Published var showingQueueTray = false
+  @Published var showingTerminalPanel = false
+  @Published var showingModelsPanel = false
+  @Published var gitStatus = GitStatus()
+  @Published var gitBranches: [GitBranch] = []
+  @Published var gitDiff = GitDiffResponse()
+  @Published var commitMessage = ""
+  @Published var commitIncludeUnstaged = true
+  @Published var commitPushAfter = false
+  @Published var branchNameDraft = ""
+  @Published var queueItems: [QueueItem] = []
+  @Published var terminalSessionID = ""
+  @Published var terminalOutput = ""
+  @Published var terminalOffset = 0
+  @Published var terminalRunning = false
+  @Published var networkAccessEnabled = false
+  @Published var webAccessEnabled = false
   @Published var automationDraftName = ""
   @Published var automationDraftPrompt = ""
   @Published var automationDraftScheduleKind = "interval"
@@ -2323,6 +3300,33 @@ private final class ArtificerModel: ObservableObject {
     projects.first { $0.id == selectedProjectID }
   }
 
+  var selectedTheme: AppTheme {
+    AppTheme.resolved(selectedThemeID)
+  }
+
+  var themeAccentColor: Color {
+    selectedTheme.accent
+  }
+
+  var themeContrastColor: Color {
+    selectedTheme.contrast
+  }
+
+  var gitBranchTitle: String {
+    if !gitStatus.isRepo { return "No repo" }
+    if gitStatus.branch.isEmpty { return "Git branch" }
+    var parts = [gitStatus.branch]
+    if gitStatus.ahead > 0 { parts.append("ahead \(gitStatus.ahead)") }
+    if gitStatus.behind > 0 { parts.append("behind \(gitStatus.behind)") }
+    return parts.joined(separator: " · ")
+  }
+
+  var gitChangesTitle: String {
+    guard gitStatus.isRepo else { return "No Git repository" }
+    if gitStatus.changes == 0 { return "No uncommitted changes" }
+    return "\(gitStatus.changes) changed files, +\(gitStatus.added) -\(gitStatus.deleted)"
+  }
+
   var activeComposerModel: String {
     if let sessionModel = selectedSession?.model.trimmingCharacters(in: .whitespacesAndNewlines), !sessionModel.isEmpty {
       return sessionModel
@@ -2334,6 +3338,14 @@ private final class ArtificerModel: ObservableObject {
       return defaultModel
     }
     return installedModels.first ?? ""
+  }
+
+  var activeContextWindowLabel: String {
+    let active = activeComposerModel
+    if let entry = catalogEntry(named: active), !entry.contextK.isEmpty {
+      return "\(entry.contextK)k"
+    }
+    return "Context"
   }
 
   var automationDraftSessions: [SessionSummary] {
@@ -2409,6 +3421,206 @@ private final class ArtificerModel: ObservableObject {
     statusMessage = "Opening project folder."
   }
 
+  func openProjectTarget(_ target: String) async {
+    guard let projectID = selectedProjectID else { return }
+    let result = await runBackend("open-project-target", projectID, target)
+    if let response = decode(GenericSuccessResponse.self, from: result), response.success {
+      statusMessage = "Opening \(target)."
+    }
+  }
+
+  func loadGitStatusAndBranches() async {
+    guard let projectID = selectedProjectID else {
+      gitStatus = GitStatus()
+      gitBranches = []
+      return
+    }
+    let statusResult = await runBackend("git-status", [projectID], trackBusy: false)
+    if let response = decode(GitStatusResponse.self, from: statusResult) {
+      gitStatus = response.status
+    }
+    let branchesResult = await runBackend("git-branches", [projectID], trackBusy: false)
+    if let response = decode(GitBranchesResponse.self, from: branchesResult) {
+      gitBranches = response.branches
+    }
+  }
+
+  func loadGitDiff() async {
+    guard let projectID = selectedProjectID else {
+      gitDiff = GitDiffResponse()
+      return
+    }
+    let result = await runBackend("git-diff", [projectID], trackBusy: false)
+    if let response = decode(GitDiffResponse.self, from: result) {
+      gitDiff = response
+    }
+    await loadGitStatusAndBranches()
+  }
+
+  func checkoutBranch(_ branch: String) async {
+    guard let projectID = selectedProjectID else { return }
+    let result = await runBackend("git-checkout-branch", projectID, branch, "0")
+    if let response = decode(GitBranchMutationResponse.self, from: result), response.success {
+      statusMessage = response.output.isEmpty ? "Checked out \(response.branch)." : response.output
+      await loadGitStatusAndBranches()
+    }
+  }
+
+  func createBranch() async {
+    let branch = branchNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let projectID = selectedProjectID, !branch.isEmpty else { return }
+    let result = await runBackend("git-checkout-branch", projectID, branch, "1")
+    if let response = decode(GitBranchMutationResponse.self, from: result), response.success {
+      showingBranchDialog = false
+      branchNameDraft = ""
+      statusMessage = response.output.isEmpty ? "Created \(response.branch)." : response.output
+      await loadGitStatusAndBranches()
+    }
+  }
+
+  func prepareCommit(pushAfter: Bool) {
+    commitPushAfter = pushAfter
+    commitIncludeUnstaged = true
+    commitMessage = ""
+    showingCommitDialog = true
+  }
+
+  func commitGitChanges() async {
+    guard let projectID = selectedProjectID else { return }
+    let result = await runBackend(
+      "git-commit",
+      projectID,
+      commitIncludeUnstaged ? "1" : "0",
+      commitMessage,
+      commitPushAfter ? "1" : "0"
+    )
+    if let response = decode(GitOutputResponse.self, from: result), response.success {
+      showingCommitDialog = false
+      commitMessage = ""
+      statusMessage = response.output.isEmpty ? "Git commit completed." : response.output
+      await loadGitDiff()
+    }
+  }
+
+  func pushGitChanges() async {
+    guard let projectID = selectedProjectID else { return }
+    let result = await runBackend("git-push", projectID)
+    if let response = decode(GitOutputResponse.self, from: result), response.success {
+      statusMessage = response.output.isEmpty ? "Git push completed." : response.output
+      await loadGitStatusAndBranches()
+    }
+  }
+
+  func loadQueueItems() async {
+    guard let projectID = selectedProjectID, let sessionID = selectedSessionID else {
+      queueItems = []
+      return
+    }
+    let result = await runBackend("queue-list", [projectID, sessionID, "40"], trackBusy: false)
+    if let response = decode(QueueItemsResponse.self, from: result) {
+      queueItems = response.items
+    }
+  }
+
+  func updateQueueItem(_ itemID: String, prompt: String) async {
+    guard let projectID = selectedProjectID, let sessionID = selectedSessionID else { return }
+    let result = await runBackend("queue-update", projectID, sessionID, itemID, prompt)
+    if let response = decode(GenericSuccessResponse.self, from: result), response.success {
+      statusMessage = "Queued item updated."
+      await loadQueueItems()
+      await loadSelectedSession(status: nil, trackBusy: false)
+    }
+  }
+
+  func cancelQueueItem(_ itemID: String) async {
+    guard let projectID = selectedProjectID, let sessionID = selectedSessionID else { return }
+    let result = await runBackend("queue-cancel", projectID, sessionID, itemID)
+    if let response = decode(QueueCancelResponse.self, from: result), response.success {
+      statusMessage = response.cancelled ? "Queued item cancelled." : "Queued item was already gone."
+      await loadQueueItems()
+      await loadSelectedSession(status: nil, trackBusy: false)
+    }
+  }
+
+  func stopQueueRun() async {
+    guard let projectID = selectedProjectID, let sessionID = selectedSessionID else { return }
+    let result = await runBackend("queue-stop", projectID, sessionID)
+    if let response = decode(QueueStopResponse.self, from: result), response.success {
+      statusMessage = response.stopped ? "Run stopped." : "No active run to stop."
+      await loadQueueItems()
+      await loadSelectedSession(status: nil, trackBusy: false)
+    }
+  }
+
+  func answerApproval(decision: String, scope: String, command: String) async {
+    guard let projectID = selectedProjectID, let sessionID = selectedSessionID else { return }
+    let result = await runBackend("approval-answer", projectID, sessionID, decision, scope, "exact", command, command)
+    if let response = decode(GenericSuccessResponse.self, from: result), response.success {
+      statusMessage = decision == "allow" ? "Command approved." : "Command denied."
+      await loadSelectedSession(status: nil, trackBusy: false)
+      await loadQueueItems()
+    }
+  }
+
+  func answerDecision(_ answer: String) async {
+    guard let projectID = selectedProjectID, let sessionID = selectedSessionID else { return }
+    let result = await runBackend("decision-answer", projectID, sessionID, answer)
+    if let response = decode(GenericSuccessResponse.self, from: result), response.success {
+      statusMessage = "Decision queued."
+      await loadSelectedSession(status: nil, trackBusy: false)
+      await loadQueueItems()
+    }
+  }
+
+  func startTerminalSession() async {
+    guard let projectID = selectedProjectID else { return }
+    let result = await runBackend("terminal-session-start", projectID)
+    if let response = decode(TerminalSessionResponse.self, from: result), response.success {
+      terminalSessionID = response.sessionID
+      terminalRunning = response.running
+      terminalOffset = response.offset
+      if !response.delta.isEmpty {
+        terminalOutput += response.delta
+      }
+      statusMessage = "Terminal session ready."
+    }
+  }
+
+  func pollTerminalSession() async {
+    guard let projectID = selectedProjectID, !terminalSessionID.isEmpty else { return }
+    let result = await runBackend("terminal-session-poll", [projectID, terminalSessionID, "\(terminalOffset)"], trackBusy: false)
+    if let response = decode(TerminalSessionResponse.self, from: result), response.success {
+      if response.sessionChanged {
+        terminalSessionID = ""
+        terminalRunning = false
+        terminalOffset = 0
+        return
+      }
+      terminalRunning = response.running
+      terminalOffset = response.offset
+      if !response.delta.isEmpty {
+        terminalOutput += response.delta
+      }
+    }
+  }
+
+  func stopTerminalSession() async {
+    guard let projectID = selectedProjectID else { return }
+    let result = await runBackend("terminal-session-stop", projectID)
+    if let response = decode(GenericSuccessResponse.self, from: result), response.success {
+      terminalRunning = false
+      statusMessage = "Terminal stopped."
+    }
+  }
+
+  func setTheme(_ themeID: String) async {
+    selectedThemeID = AppTheme.resolved(themeID).id
+    let result = await runBackend("desktop-value-set", "theme_id", selectedThemeID)
+    if decode(DesktopPrefsResponse.self, from: result) != nil {
+      statusMessage = "Theme updated."
+    }
+  }
+
   func archiveKey(projectID: String, sessionID: String) -> String {
     "\(projectID):\(sessionID)"
   }
@@ -2458,6 +3670,7 @@ private final class ArtificerModel: ObservableObject {
     await loadDictationPreferences()
     await loadSelfImproveSettings()
     await loadGitRuntimeSettings()
+    await loadGitStatusAndBranches()
   }
 
   func loadPreferences() async {
@@ -2472,6 +3685,7 @@ private final class ArtificerModel: ObservableObject {
     await loadDictationPreferences()
     await loadSelfImproveSettings()
     await loadGitRuntimeSettings()
+    await loadGitStatusAndBranches()
   }
 
   func refreshDoctor() async {
@@ -2621,6 +3835,7 @@ private final class ArtificerModel: ObservableObject {
       expandedProjectIDs.insert(selectedProjectID)
     }
     await loadAllSessions(status: "Threads loaded.")
+    await loadGitStatusAndBranches()
   }
 
   func loadAllSessions(status nextStatus: String? = "Session loaded.") async {
@@ -2697,6 +3912,7 @@ private final class ArtificerModel: ObservableObject {
     guard selectedProjectID == projectID, selectedSessionID == sessionID else { return }
     selectedSession = response.session
     await saveSelectedVoiceTarget(projectID: projectID, sessionID: sessionID)
+    await loadQueueItems()
     if let nextStatus {
       statusMessage = nextStatus
     }
@@ -2782,6 +3998,7 @@ private final class ArtificerModel: ObservableObject {
     } else {
       sessions = sessionsByProject[projectID] ?? []
     }
+    await loadGitStatusAndBranches()
   }
 
   func toggleProject(_ projectID: String) async {
@@ -2804,6 +4021,7 @@ private final class ArtificerModel: ObservableObject {
     } else {
       sessions = sessionsByProject[projectID] ?? []
     }
+    await loadGitStatusAndBranches()
   }
 
   func selectSession(projectID: String, sessionID: String) async {
@@ -2817,6 +4035,7 @@ private final class ArtificerModel: ObservableObject {
     statusMessage = "Opening thread..."
     await loadSelectedSession(status: "Thread opened.", trackBusy: false)
     await saveSelectedVoiceTarget(projectID: projectID, sessionID: sessionID)
+    await loadGitStatusAndBranches()
   }
 
   func setSelectedSessionModel(_ modelName: String) async {
@@ -2832,6 +4051,9 @@ private final class ArtificerModel: ObservableObject {
         model: trimmedModel,
         updated: Int(Date().timeIntervalSince1970),
         queue: detail.queue,
+        decisionRequest: detail.decisionRequest,
+        approvalRequest: detail.approvalRequest,
+        trace: detail.trace,
         messages: detail.messages
       )
     }
@@ -2902,6 +4124,7 @@ private final class ArtificerModel: ObservableObject {
       await runNext(statusWhileRunning: "Prompt queued; running next item.", statusWhenDone: "Prompt queued; run-next completed.")
     } else {
       await loadAllSessions(status: nil)
+      await loadQueueItems()
       statusMessage = "Prompt queued."
     }
   }
@@ -2912,6 +4135,8 @@ private final class ArtificerModel: ObservableObject {
     let result = await runBackend("session-run-next", projectID, sessionID)
     if decode(SessionResponse.self, from: result) != nil {
       await loadAllSessions(status: nil)
+      await loadQueueItems()
+      await loadGitStatusAndBranches()
       statusMessage = statusWhenDone
     }
   }
@@ -3016,6 +4241,7 @@ private final class ArtificerModel: ObservableObject {
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
       loadVoiceLocalActions(from: prefs)
+      selectedThemeID = AppTheme.resolved(prefs.themeID).id
       mobileBridgeEnabled = prefs.mobileBridge
       mobileTorEnabled = prefs.mobileTor
       mobileLanEnabled = prefs.mobileLan
@@ -3068,6 +4294,7 @@ private final class ArtificerModel: ObservableObject {
     voiceLocalAction2Name = prefs["voice_local_action_2_name"] ?? voiceLocalAction2Name
     voiceLocalAction2Command = prefs["voice_local_action_2_command"] ?? voiceLocalAction2Command
     voiceLocalAction2Phrases = prefs["voice_local_action_2_phrases"] ?? voiceLocalAction2Phrases
+    selectedThemeID = AppTheme.resolved(prefs["theme_id"] ?? selectedThemeID).id
     if let value = prefs["mobile_bridge"] {
       mobileBridgeEnabled = desktopLaunchBool(value)
     }
@@ -3096,6 +4323,7 @@ private final class ArtificerModel: ObservableObject {
       voiceLlmPromptsEnabled = prefs.voiceLlmPrompts
       voiceLlmActionsEnabled = prefs.voiceLlmActions
       loadVoiceLocalActions(from: prefs)
+      selectedThemeID = AppTheme.resolved(prefs.themeID).id
       mobileBridgeEnabled = prefs.mobileBridge
       mobileTorEnabled = prefs.mobileTor
       mobileLanEnabled = prefs.mobileLan
@@ -4239,6 +5467,223 @@ private struct GenericSuccessResponse: Decodable {
   let success: Bool
 }
 
+private struct GitStatusResponse: Decodable {
+  let success: Bool
+  let isRepo: Bool
+  let branch: String
+  let ahead: Int
+  let behind: Int
+  let added: Int
+  let deleted: Int
+  let changes: Int
+  let stagedChanges: Int
+  let unstagedChanges: Int
+
+  enum CodingKeys: String, CodingKey {
+    case success, branch, ahead, behind, added, deleted, changes
+    case isRepo = "is_repo"
+    case stagedChanges = "staged_changes"
+    case unstagedChanges = "unstaged_changes"
+  }
+
+  var status: GitStatus {
+    GitStatus(
+      isRepo: isRepo,
+      branch: branch,
+      ahead: ahead,
+      behind: behind,
+      added: added,
+      deleted: deleted,
+      changes: changes,
+      stagedChanges: stagedChanges,
+      unstagedChanges: unstagedChanges
+    )
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    isRepo = container.decodeFlexibleBool(forKey: .isRepo)
+    branch = (try? container.decode(String.self, forKey: .branch)) ?? ""
+    ahead = container.decodeFlexibleInt(forKey: .ahead)
+    behind = container.decodeFlexibleInt(forKey: .behind)
+    added = container.decodeFlexibleInt(forKey: .added)
+    deleted = container.decodeFlexibleInt(forKey: .deleted)
+    changes = container.decodeFlexibleInt(forKey: .changes)
+    stagedChanges = container.decodeFlexibleInt(forKey: .stagedChanges)
+    unstagedChanges = container.decodeFlexibleInt(forKey: .unstagedChanges)
+  }
+}
+
+private struct GitStatus: Hashable {
+  let isRepo: Bool
+  let branch: String
+  let ahead: Int
+  let behind: Int
+  let added: Int
+  let deleted: Int
+  let changes: Int
+  let stagedChanges: Int
+  let unstagedChanges: Int
+
+  init(isRepo: Bool = false, branch: String = "", ahead: Int = 0, behind: Int = 0, added: Int = 0, deleted: Int = 0, changes: Int = 0, stagedChanges: Int = 0, unstagedChanges: Int = 0) {
+    self.isRepo = isRepo
+    self.branch = branch
+    self.ahead = ahead
+    self.behind = behind
+    self.added = added
+    self.deleted = deleted
+    self.changes = changes
+    self.stagedChanges = stagedChanges
+    self.unstagedChanges = unstagedChanges
+  }
+}
+
+private struct GitBranchesResponse: Decodable {
+  let success: Bool
+  let isRepo: Bool
+  let branches: [GitBranch]
+
+  enum CodingKeys: String, CodingKey {
+    case success, branches
+    case isRepo = "is_repo"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    isRepo = container.decodeFlexibleBool(forKey: .isRepo)
+    branches = (try? container.decode([GitBranch].self, forKey: .branches)) ?? []
+  }
+}
+
+private struct GitBranch: Identifiable, Decodable, Hashable {
+  var id: String { name }
+  let name: String
+  let current: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case name, current
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    name = (try? container.decode(String.self, forKey: .name)) ?? ""
+    current = container.decodeFlexibleBool(forKey: .current)
+  }
+}
+
+private struct GitDiffResponse: Decodable {
+  let success: Bool
+  let isRepo: Bool
+  let added: Int
+  let deleted: Int
+  let diff: String
+
+  enum CodingKeys: String, CodingKey {
+    case success, added, deleted, diff
+    case isRepo = "is_repo"
+  }
+
+  init(success: Bool = true, isRepo: Bool = false, added: Int = 0, deleted: Int = 0, diff: String = "") {
+    self.success = success
+    self.isRepo = isRepo
+    self.added = added
+    self.deleted = deleted
+    self.diff = diff
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    isRepo = container.decodeFlexibleBool(forKey: .isRepo)
+    added = container.decodeFlexibleInt(forKey: .added)
+    deleted = container.decodeFlexibleInt(forKey: .deleted)
+    diff = (try? container.decode(String.self, forKey: .diff)) ?? ""
+  }
+}
+
+private struct GitOutputResponse: Decodable {
+  let success: Bool
+  let output: String
+}
+
+private struct GitBranchMutationResponse: Decodable {
+  let success: Bool
+  let branch: String
+  let output: String
+}
+
+private struct QueueItemsResponse: Decodable {
+  let success: Bool
+  let items: [QueueItem]
+}
+
+private struct QueueItem: Identifiable, Decodable, Hashable {
+  let id: String
+  let order: String
+  let prompt: String
+  let runMode: String
+  let computeBudget: String
+  let commandExecMode: String
+  let permissionMode: String
+
+  enum CodingKeys: String, CodingKey {
+    case id, order, prompt
+    case runMode = "run_mode"
+    case computeBudget = "compute_budget"
+    case commandExecMode = "command_exec_mode"
+    case permissionMode = "permission_mode"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    order = (try? container.decode(String.self, forKey: .order)) ?? ""
+    prompt = (try? container.decode(String.self, forKey: .prompt)) ?? ""
+    runMode = (try? container.decode(String.self, forKey: .runMode)) ?? ""
+    computeBudget = (try? container.decode(String.self, forKey: .computeBudget)) ?? ""
+    commandExecMode = (try? container.decode(String.self, forKey: .commandExecMode)) ?? ""
+    permissionMode = (try? container.decode(String.self, forKey: .permissionMode)) ?? ""
+  }
+}
+
+private struct QueueCancelResponse: Decodable {
+  let success: Bool
+  let cancelled: Bool
+}
+
+private struct QueueStopResponse: Decodable {
+  let success: Bool
+  let stopped: Bool
+  let forced: Bool
+}
+
+private struct TerminalSessionResponse: Decodable {
+  let success: Bool
+  let sessionID: String
+  let sessionChanged: Bool
+  let running: Bool
+  let delta: String
+  let offset: Int
+
+  enum CodingKeys: String, CodingKey {
+    case success, running, delta, offset
+    case sessionID = "session_id"
+    case sessionChanged = "session_changed"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? container.decode(Bool.self, forKey: .success)) ?? true
+    sessionID = (try? container.decode(String.self, forKey: .sessionID)) ?? ""
+    sessionChanged = container.decodeFlexibleBool(forKey: .sessionChanged)
+    running = container.decodeFlexibleBool(forKey: .running)
+    delta = (try? container.decode(String.self, forKey: .delta)) ?? ""
+    offset = container.decodeFlexibleInt(forKey: .offset)
+  }
+}
+
 private struct Project: Identifiable, Decodable, Hashable {
   let id: String
   let name: String
@@ -4312,20 +5757,28 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
   let model: String
   let updated: Int
   let queue: QueueState
+  let decisionRequest: DecisionRequest?
+  let approvalRequest: ApprovalRequest?
+  let trace: RunTrace
   let messages: [Message]
 
   enum CodingKeys: String, CodingKey {
-    case id, title, model, updated, queue, messages
+    case id, title, model, updated, queue, messages, trace
     case workspaceID = "workspace_id"
+    case decisionRequest = "decision_request"
+    case approvalRequest = "approval_request"
   }
 
-  init(id: String, workspaceID: String, title: String, model: String, updated: Int, queue: QueueState, messages: [Message]) {
+  init(id: String, workspaceID: String, title: String, model: String, updated: Int, queue: QueueState, decisionRequest: DecisionRequest? = nil, approvalRequest: ApprovalRequest? = nil, trace: RunTrace = RunTrace(), messages: [Message]) {
     self.id = id
     self.workspaceID = workspaceID
     self.title = title
     self.model = model
     self.updated = updated
     self.queue = queue
+    self.decisionRequest = decisionRequest
+    self.approvalRequest = approvalRequest
+    self.trace = trace
     self.messages = messages
   }
 
@@ -4337,12 +5790,25 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
       model: summary.model,
       updated: summary.updated,
       queue: summary.queue,
+      decisionRequest: nil,
+      approvalRequest: nil,
+      trace: RunTrace(),
       messages: messages
     )
   }
 
   var summary: SessionSummary {
     SessionSummary(id: id, workspaceID: workspaceID, title: title, model: model, updated: updated, queue: queue)
+  }
+
+  var hasAttention: Bool {
+    decisionRequest != nil || approvalRequest != nil
+  }
+
+  var latestRunEvent: RunEvent? {
+    trace.events.reversed().first { event in
+      event.hasDisplayContent
+    }
   }
 
   init(from decoder: Decoder) throws {
@@ -4353,6 +5819,9 @@ private struct SessionDetail: Identifiable, Decodable, Hashable {
     model = (try? container.decode(String.self, forKey: .model)) ?? ""
     updated = container.decodeFlexibleInt(forKey: .updated)
     queue = (try? container.decode(QueueState.self, forKey: .queue)) ?? QueueState()
+    decisionRequest = try? container.decodeIfPresent(DecisionRequest.self, forKey: .decisionRequest)
+    approvalRequest = try? container.decodeIfPresent(ApprovalRequest.self, forKey: .approvalRequest)
+    trace = (try? container.decode(RunTrace.self, forKey: .trace)) ?? RunTrace()
     messages = (try? container.decode([Message].self, forKey: .messages)) ?? []
   }
 }
@@ -4397,6 +5866,179 @@ private struct Message: Identifiable, Decodable, Hashable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     role = (try? container.decode(String.self, forKey: .role)) ?? "assistant"
     content = (try? container.decode(String.self, forKey: .content)) ?? ""
+  }
+}
+
+private struct ApprovalRequest: Decodable, Hashable {
+  let command: String
+  let reason: String
+
+  enum CodingKeys: String, CodingKey {
+    case command, reason
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    command = (try? container.decode(String.self, forKey: .command)) ?? ""
+    reason = (try? container.decode(String.self, forKey: .reason)) ?? ""
+  }
+}
+
+private struct DecisionRequest: Decodable, Hashable {
+  let question: String
+  let options: [String]
+
+  enum CodingKeys: String, CodingKey {
+    case question, options
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    question = (try? container.decode(String.self, forKey: .question)) ?? ""
+    options = (try? container.decode([String].self, forKey: .options)) ?? []
+  }
+}
+
+private struct RunTrace: Decodable, Hashable {
+  let activeStreamSession: String
+  let runningEventID: String
+  let runningStartedAt: String?
+  let events: [RunEvent]
+
+  enum CodingKeys: String, CodingKey {
+    case activeStreamSession = "active_stream_session"
+    case runningEventID = "running_event_id"
+    case runningStartedAt = "running_started_at"
+    case events
+  }
+
+  init(activeStreamSession: String = "", runningEventID: String = "", runningStartedAt: String? = nil, events: [RunEvent] = []) {
+    self.activeStreamSession = activeStreamSession
+    self.runningEventID = runningEventID
+    self.runningStartedAt = runningStartedAt
+    self.events = events
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    activeStreamSession = (try? container.decode(String.self, forKey: .activeStreamSession)) ?? ""
+    runningEventID = (try? container.decode(String.self, forKey: .runningEventID)) ?? ""
+    runningStartedAt = try? container.decodeIfPresent(String.self, forKey: .runningStartedAt)
+    events = (try? container.decode([RunEvent].self, forKey: .events)) ?? []
+  }
+}
+
+private struct RunEvent: Identifiable, Decodable, Hashable {
+  let id: String
+  let status: String
+  let streamText: String
+  let plan: String
+  let assistant: String
+  let gitStatus: String
+  let gitDiff: String
+  let failures: String
+  let sessionLog: String
+  let state: String
+  let commands: [RunCommand]
+
+  enum CodingKeys: String, CodingKey {
+    case id, status, plan, assistant, failures, state, commands
+    case streamText = "stream_text"
+    case gitStatus = "git_status"
+    case gitDiff = "git_diff"
+    case sessionLog = "session_log"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+    status = (try? container.decode(String.self, forKey: .status)) ?? ""
+    streamText = (try? container.decode(String.self, forKey: .streamText)) ?? ""
+    plan = (try? container.decode(String.self, forKey: .plan)) ?? ""
+    assistant = (try? container.decode(String.self, forKey: .assistant)) ?? ""
+    gitStatus = (try? container.decode(String.self, forKey: .gitStatus)) ?? ""
+    gitDiff = (try? container.decode(String.self, forKey: .gitDiff)) ?? ""
+    failures = (try? container.decode(String.self, forKey: .failures)) ?? ""
+    sessionLog = (try? container.decode(String.self, forKey: .sessionLog)) ?? ""
+    state = (try? container.decode(String.self, forKey: .state)) ?? ""
+    commands = (try? container.decode([RunCommand].self, forKey: .commands)) ?? []
+  }
+
+  var hasDisplayContent: Bool {
+    !status.isEmpty || !streamText.isEmpty || !plan.isEmpty || !assistant.isEmpty || hasGitChanges || !commands.isEmpty || !failures.isEmpty
+  }
+
+  var hasGitChanges: Bool {
+    !gitDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !gitStatus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  var streamTextPreview: String {
+    let trimmed = streamText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return assistant.trimmingCharacters(in: .whitespacesAndNewlines) }
+    return trimmed
+  }
+
+  var changeSummary: RunChangeSummary {
+    RunChangeSummary(statusText: gitStatus, diffText: gitDiff)
+  }
+}
+
+private struct RunCommand: Decodable, Hashable {
+  let command: String
+  let status: String
+
+  enum CodingKeys: String, CodingKey {
+    case command, status
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    command = (try? container.decode(String.self, forKey: .command)) ?? ""
+    status = (try? container.decode(String.self, forKey: .status)) ?? ""
+  }
+}
+
+private struct RunChangeSummary: Hashable {
+  let added: Int
+  let deleted: Int
+  let files: [String]
+
+  init(statusText: String, diffText: String) {
+    var nextAdded = 0
+    var nextDeleted = 0
+    var seen = Set<String>()
+    var nextFiles: [String] = []
+    for rawLine in diffText.split(separator: "\n", omittingEmptySubsequences: false) {
+      let line = String(rawLine)
+      if line.hasPrefix("diff --git ") {
+        let parts = line.split(separator: " ")
+        if let last = parts.last {
+          let path = String(last).replacingOccurrences(of: "b/", with: "")
+          if !path.isEmpty && !seen.contains(path) {
+            seen.insert(path)
+            nextFiles.append(path)
+          }
+        }
+      } else if line.hasPrefix("+") && !line.hasPrefix("+++") {
+        nextAdded += 1
+      } else if line.hasPrefix("-") && !line.hasPrefix("---") {
+        nextDeleted += 1
+      }
+    }
+    if nextFiles.isEmpty {
+      for rawLine in statusText.split(separator: "\n") {
+        let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count > 3 else { continue }
+        let path = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+        if !path.isEmpty && !seen.contains(path) {
+          seen.insert(path)
+          nextFiles.append(path)
+        }
+      }
+    }
+    added = nextAdded
+    deleted = nextDeleted
+    files = nextFiles
   }
 }
 
@@ -4520,6 +6162,7 @@ private struct DesktopPrefsResponse: Decodable {
   let voiceLocalAction2Name: String
   let voiceLocalAction2Command: String
   let voiceLocalAction2Phrases: String
+  let themeID: String
   let mobileBridge: Bool
   let mobileTor: Bool
   let mobileLan: Bool
@@ -4542,6 +6185,7 @@ private struct DesktopPrefsResponse: Decodable {
     case voiceLocalAction2Name = "voice_local_action_2_name"
     case voiceLocalAction2Command = "voice_local_action_2_command"
     case voiceLocalAction2Phrases = "voice_local_action_2_phrases"
+    case themeID = "theme_id"
     case mobileBridge = "mobile_bridge"
     case mobileTor = "mobile_tor"
     case mobileLan = "mobile_lan"
@@ -4566,6 +6210,7 @@ private struct DesktopPrefsResponse: Decodable {
     voiceLocalAction2Name = (try? container.decode(String.self, forKey: .voiceLocalAction2Name)) ?? ""
     voiceLocalAction2Command = (try? container.decode(String.self, forKey: .voiceLocalAction2Command)) ?? ""
     voiceLocalAction2Phrases = (try? container.decode(String.self, forKey: .voiceLocalAction2Phrases)) ?? ""
+    themeID = (try? container.decode(String.self, forKey: .themeID)) ?? "system"
     mobileBridge = container.decodeFlexibleBool(forKey: .mobileBridge)
     mobileTor = container.decodeFlexibleBool(forKey: .mobileTor)
     mobileLan = container.decodeFlexibleBool(forKey: .mobileLan)
