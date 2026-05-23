@@ -298,6 +298,7 @@ run_builtin_action() {
   [ -x "$builtins_script" ] || return 2
   output_file=$(mktemp "${TMPDIR:-/tmp}/artificer-voice-builtins.XXXXXX")
   dictation_enabled=$(pref_bool_default voice_dictation_commands 1)
+  builtin_rc=0
   if ARTIFICER_VOICE_DICTATION_ENABLED="$dictation_enabled" "$builtins_script" handle "$phrase" > "$output_file" 2>&1; then
     output=$(sed -n '1p' "$output_file")
     rm -f "$output_file"
@@ -306,8 +307,9 @@ run_builtin_action() {
     log_event "recognized phrase='$phrase' action='builtin'"
     write_status triggered "$output" "$phrase" "builtin"
     return 0
+  else
+    builtin_rc=$?
   fi
-  builtin_rc=$?
   output=$(sed -n '1p' "$output_file")
   rm -f "$output_file"
   if [ "$builtin_rc" = 2 ]; then
@@ -477,7 +479,7 @@ handle_phrase() {
     return 0
   fi
 
-  write_status listening "No voice automation phrase matched." "$phrase" ""
+  write_status listening "No voice automation phrase matched." "$phrase" "unmatched"
 }
 
 handle_text() {

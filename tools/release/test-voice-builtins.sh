@@ -118,6 +118,20 @@ grep -q 'pbcopy hello, world' "$log_file" || {
   exit 1
 }
 
+unmatched_json=$(run_voice "you")
+printf '%s\n' "$unmatched_json" | grep -q '"status":"listening"' || {
+  printf '%s\n' "unmatched phrases should leave voice automations listening" >&2
+  exit 1
+}
+printf '%s\n' "$unmatched_json" | grep -q 'No voice automation phrase matched' || {
+  printf '%s\n' "unmatched phrases should not report a built-in command failure" >&2
+  exit 1
+}
+printf '%s\n' "$unmatched_json" | grep -q '"last_action":"unmatched"' || {
+  printf '%s\n' "unmatched phrases should not keep the previous built-in action label" >&2
+  exit 1
+}
+
 grep -q 'voice_builtin_commands' "$repo_root/scripts/artificer-native-backend.sh" || {
   printf '%s\n' "native backend should persist built-in voice command preference" >&2
   exit 1
