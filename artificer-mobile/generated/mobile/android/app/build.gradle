@@ -6,10 +6,15 @@ android {
 
     defaultConfig {
         applicationId 'app.wizardry.artificer.mobile'
-        minSdk 23
+        minSdk 24
         targetSdk 35
         versionCode 104521296
         versionName '0.1.0'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     signingConfigs {
@@ -30,4 +35,9 @@ android {
             signingConfig keystorePath ? signingConfigs.release : signingConfigs.debug
         }
     }
+}
+
+dependencies {
+    implementation 'info.guardianproject:tor-android:0.4.9.8'
+    implementation 'info.guardianproject:jtorctl:0.4.5.7'
 }

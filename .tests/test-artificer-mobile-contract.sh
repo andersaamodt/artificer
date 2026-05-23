@@ -176,6 +176,16 @@ grep -q 'RadioButton torMode' "$renderer" || {
   exit 1
 }
 
+grep -q "implementation 'info.guardianproject:tor-android:" "$renderer" || {
+  printf '%s\n' "Android mobile app should bundle Tor instead of requiring a separate Tor install" >&2
+  exit 1
+}
+
+grep -q 'openBridgeConnection' "$renderer" || {
+  printf '%s\n' "Android mobile app should route Tor bridge requests through its built-in Tor transport" >&2
+  exit 1
+}
+
 grep -q 'http://your-address.onion' "$renderer" || {
   printf '%s\n' "mobile app should treat Tor onion URLs as first-class bridge endpoints" >&2
   exit 1

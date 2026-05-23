@@ -36,7 +36,14 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
-dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://raw.githubusercontent.com/guardianproject/gpmaven/master" }
+    }
+}
 rootProject.name = "$app_id-native-mobile"
 include ':app'
 GRADLE
@@ -56,10 +63,15 @@ android {
 
     defaultConfig {
         applicationId '$android_package'
-        minSdk 23
+        minSdk 24
         targetSdk 35
         versionCode $version_code
         versionName '$app_version'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     signingConfigs {
@@ -80,6 +92,11 @@ android {
             signingConfig keystorePath ? signingConfigs.release : signingConfigs.debug
         }
     }
+}
+
+dependencies {
+    implementation 'info.guardianproject:tor-android:0.4.9.8'
+    implementation 'info.guardianproject:jtorctl:0.4.5.7'
 }
 GRADLE
 
@@ -121,11 +138,15 @@ package app.wizardry.artificer.mobile;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.Build;
 import android.os.Environment;
+import android.os.IBinder;
 import android.provider.Settings;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -156,6 +177,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -164,6 +187,7 @@ import java.util.HashSet;
 import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.torproject.jni.TorService;
 
 public final class MainActivity extends Activity {
     private LinearLayout root;
@@ -171,6 +195,12 @@ public final class MainActivity extends Activity {
     private String endpoint = "";
     private String token = "";
     private String connectionMode = "ip";
+    private TorService torService;
+    private boolean torReady = false;
+    private boolean torStarting = false;
+    private boolean pendingTorLoad = false;
+    private boolean torBound = false;
+    private boolean torReceiverRegistered = false;
     private JSONArray projects = new JSONArray();
     private HashMap<String, JSONArray> sessionsByProject = new HashMap<>();
     private HashMap<String, String> folderErrors = new HashMap<>();
@@ -203,6 +233,48 @@ public final class MainActivity extends Activity {
     private int rootPadX;
     private int rootPadTop;
     private int rootPadBottom;
+    private final BroadcastReceiver torStatusReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String torStatus = intent.getStringExtra(TorService.EXTRA_STATUS);
+            if (TorService.STATUS_ON.equals(torStatus)) {
+                torReady = true;
+                torStarting = false;
+                setStatus("Tor ready. Connecting...");
+                if (pendingTorLoad) {
+                    pendingTorLoad = false;
+                    loadProjects();
+                }
+            } else if (TorService.STATUS_STARTING.equals(torStatus)) {
+                torStarting = true;
+                setStatus("Starting built-in Tor...");
+            } else if (TorService.STATUS_OFF.equals(torStatus)) {
+                torReady = false;
+                torStarting = false;
+                if (isTorMode()) setStatus("Tor stopped.");
+            }
+        }
+    };
+    private final ServiceConnection torConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            torService = ((TorService.LocalBinder)service).getService();
+            if (torService.getSocksPort() > 0) {
+                torReady = true;
+                torStarting = false;
+                if (pendingTorLoad) {
+                    pendingTorLoad = false;
+                    loadProjects();
+                }
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            torService = null;
+            torReady = false;
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -219,9 +291,23 @@ public final class MainActivity extends Activity {
         updateDownloaded = updateApkPath.length() > 0 && new File(updateApkPath).isFile();
         checkForUpdate(true);
         if (endpoint.trim().length() > 0 && token.trim().length() > 0) {
-            loadProjects();
+            connectWithSelectedMode();
         } else {
             showConnect();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (torReceiverRegistered) {
+            unregisterReceiver(torStatusReceiver);
+            torReceiverRegistered = false;
+        }
+        if (torBound) {
+            unbindService(torConnection);
+            torBound = false;
+            torService = null;
         }
     }
 
@@ -358,9 +444,64 @@ public final class MainActivity extends Activity {
         runOnUiThread(() -> status.setText(value));
     }
 
+    private boolean isTorMode() {
+        return "tor".equals(connectionMode) || endpoint.toLowerCase(Locale.US).contains(".onion");
+    }
+
+    private void connectWithSelectedMode() {
+        if (isTorMode()) {
+            ensureTorThenLoad();
+        } else {
+            loadProjects();
+        }
+    }
+
+    private void ensureTorThenLoad() {
+        if (torReady && torService != null && torService.getSocksPort() > 0) {
+            loadProjects();
+            return;
+        }
+        pendingTorLoad = true;
+        if (!torReceiverRegistered) {
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(TorService.ACTION_STATUS);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(torStatusReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                registerReceiver(torStatusReceiver, filter);
+            }
+            torReceiverRegistered = true;
+        }
+        if (!torBound) {
+            torStarting = true;
+            setStatus("Starting built-in Tor...");
+            torBound = bindService(new Intent(this, TorService.class), torConnection, BIND_AUTO_CREATE);
+            if (!torBound) {
+                pendingTorLoad = false;
+                torStarting = false;
+                setStatus("Could not start built-in Tor.");
+            }
+            return;
+        }
+        if (torStarting) {
+            setStatus("Starting built-in Tor...");
+        }
+    }
+
+    private HttpURLConnection openBridgeConnection(URL url) throws Exception {
+        if (!isTorMode()) {
+            return (HttpURLConnection)url.openConnection();
+        }
+        if (torService == null || torService.getSocksPort() <= 0) {
+            throw new Exception("Built-in Tor is still starting.");
+        }
+        Proxy proxy = new Proxy(Proxy.Type.SOCKS, new InetSocketAddress("127.0.0.1", torService.getSocksPort()));
+        return (HttpURLConnection)url.openConnection(proxy);
+    }
+
     private String request(String method, String path, JSONObject body) throws Exception {
         String base = endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
-        HttpURLConnection conn = (HttpURLConnection)new URL(base + path).openConnection();
+        HttpURLConnection conn = openBridgeConnection(new URL(base + path));
         conn.setRequestMethod(method);
         conn.setConnectTimeout(8000);
         conn.setReadTimeout(20000);
@@ -598,7 +739,7 @@ public final class MainActivity extends Activity {
         Runnable syncModeHelp = () -> {
             boolean torSelected = modeGroup.getCheckedRadioButtonId() == torMode.getId();
             modeHelp.setText(torSelected
-                ? "Use the Tor URL from Artificer Preferences. Route this phone through Tor before connecting."
+                ? "Use the Tor URL from Artificer Preferences. Artificer Mobile starts its built-in Tor connection."
                 : "Use the IP URL from Artificer Preferences while this phone is on the same network.");
             endpointField.setHint(torSelected ? "http://your-address.onion" : "http://192.168.1.20:8765");
         };
@@ -624,7 +765,7 @@ public final class MainActivity extends Activity {
                 return;
             }
             prefs.edit().putString("connection_mode", connectionMode).putString("endpoint", endpoint).putString("token", token).apply();
-            loadProjects();
+            connectWithSelectedMode();
         });
     }
 
